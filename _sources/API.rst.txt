@@ -1,0 +1,43 @@
+API Reference
+=======
+
+.. toctree::
+   :maxdepth: 4
+
+   registration_tools
+   registration_tools.data
+   registration_tools.registration
+   registration_tools.visualization
+
+.. registration_tools package
+.. ==========================
+
+.. automodule:: registration_tools
+   :members: Dataset, create_dataset, load_dataset, DataIterator, FileIterator
+   :undoc-members:
+   :show-inheritance:
+
+
+.. registration_tools.data module
+.. ==============================
+
+.. automodule:: registration_tools.data
+   :members: sphere
+   :undoc-members:
+   :show-inheritance:
+
+.. registration_tools.registration module
+.. ======================================
+
+.. automodule:: registration_tools.registration
+   :members: register
+   :undoc-members:
+   :show-inheritance:
+
+.. registration_tools.visualization module
+.. =======================================
+
+.. automodule:: registration_tools.visualization
+   :members: plot_images, plot_projections, plot_projections_difference, plot_vectorfield
+   :undoc-members:
+   :show-inheritance:

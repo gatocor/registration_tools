@@ -14,7 +14,7 @@
     <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Modules" href="modules.html" />
+    <link rel="next" title="API Reference" href="API.html" />
     <link rel="prev" title="Welcome to Registration Tools’s documentation!" href="index.html" />
    
   <link rel="stylesheet" href="_static/custom.css" type="text/css" />
@@ -35,108 +35,122 @@
             
   <section id="usage">
 <h1>Usage<a class="headerlink" href="#usage" title="Link to this heading">¶</a></h1>
+<div class="toctree-wrapper compound">
+</div>
 <section id="creating-a-dataset">
 <h2>Creating a Dataset<a class="headerlink" href="#creating-a-dataset" title="Link to this heading">¶</a></h2>
-<p>To create a dataset of spherical images, use the <cite>dataset_sphere</cite> function:</p>
-<p><a href="#id1"><span class="problematic" id="id2">``</span></a><a href="#id3"><span class="problematic" id="id4">`</span></a>python
-from registration_tools.data import dataset_sphere</p>
-<dl class="simple">
-<dt>dataset_sphere(</dt><dd><p>folder=’path/to/save/folder’,
-num_images=10,
-image_size=100,
-num_channels=3,
-min_radius=5,
-max_radius=20,
-jump=2,
-stride=(1, 2, 3)</p>
-</dd>
-</dl>
-<section id="id5">
-<h3>)<a class="headerlink" href="#id5" title="Link to this heading">¶</a></h3>
-</section>
+<p>For creating a dataset from a folder of images, use the <cite>create_dataset</cite> function:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">registration_tools</span> <span class="kn">import</span> <span class="n">create_dataset</span>
+
+<span class="n">dataset</span> <span class="o">=</span> <span class="n">create_dataset</span><span class="p">(</span>
+    <span class="n">data</span><span class="o">=</span><span class="p">[</span>
+        <span class="s1">&#39;path/to/dataset/channel_0/image_</span><span class="si">{:02d}</span><span class="s1">.tiff&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;path/to/dataset/channel_1/image_</span><span class="si">{:02d}</span><span class="s1">.tiff&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;path/to/dataset/channel_2/image_</span><span class="si">{:02d}</span><span class="s1">.tiff&#39;</span><span class="p">,</span>
+    <span class="p">],</span>
+    <span class="nb">format</span><span class="o">=</span><span class="s1">&#39;XYZ&#39;</span><span class="p">,</span>
+    <span class="n">numbers</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">]</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>If you already had a dataset created, you can load one using the <cite>load_dataset</cite> function.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">registration_tools</span> <span class="kn">import</span> <span class="n">load_dataset</span>
+
+<span class="n">dataset</span> <span class="o">=</span> <span class="n">load_dataset</span><span class="p">(</span><span class="s1">&#39;path/to/dataset&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>You can create some artificial datasets from the module <cite>registration_tools.data</cite>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">registration_tools.data</span> <span class="kn">import</span> <span class="n">sphere</span>
+
+<span class="n">sphere</span><span class="p">(</span>
+    <span class="n">path</span><span class="o">=</span><span class="s1">&#39;path/to/save/folder&#39;</span><span class="p">,</span>
+    <span class="n">num_images</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+    <span class="n">image_size</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+    <span class="n">num_channels</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+    <span class="n">min_radius</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+    <span class="n">max_radius</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>
+    <span class="n">jump</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+    <span class="n">stride</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+<span class="p">)</span>
+</pre></div>
+</div>
 </section>
 <section id="registering-images">
 <h2>Registering Images<a class="headerlink" href="#registering-images" title="Link to this heading">¶</a></h2>
 <p>To register images in a dataset, use the <cite>register</cite> function:</p>
-<p><a href="#id6"><span class="problematic" id="id7">``</span></a><a href="#id8"><span class="problematic" id="id9">`</span></a>python
-from registration_tools import Dataset
-from registration_tools.registration import register</p>
-<p>dataset = Dataset(‘path/to/dataset’, format=’XYZ’, numbers=[1, 2, 3, 4, 5])
-register(</p>
-<blockquote>
-<div><p>dataset=dataset,
-save_path=’path/to/save/folder’,
-use_channel=0</p>
-</div></blockquote>
-<section id="id10">
-<h3>)<a class="headerlink" href="#id10" title="Link to this heading">¶</a></h3>
-</section>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">registration_tools</span> <span class="kn">import</span> <span class="n">create_dataset</span>
+<span class="kn">from</span> <span class="nn">registration_tools.registration</span> <span class="kn">import</span> <span class="n">register</span>
+
+<span class="n">dataset</span> <span class="o">=</span> <span class="n">create_dataset</span><span class="p">(</span>
+    <span class="n">data</span><span class="o">=</span><span class="p">[</span>
+        <span class="s1">&#39;path/to/dataset/channel_0/image_</span><span class="si">{:02d}</span><span class="s1">.tiff&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;path/to/dataset/channel_1/image_</span><span class="si">{:02d}</span><span class="s1">.tiff&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;path/to/dataset/channel_2/image_</span><span class="si">{:02d}</span><span class="s1">.tiff&#39;</span><span class="p">,</span>
+    <span class="p">],</span>
+    <span class="nb">format</span><span class="o">=</span><span class="s1">&#39;XYZ&#39;</span><span class="p">,</span>
+    <span class="n">numbers</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">]</span>
+<span class="p">)</span>
+<span class="n">dataset_registered</span> <span class="o">=</span> <span class="n">register</span><span class="p">(</span>
+    <span class="n">dataset</span><span class="o">=</span><span class="n">dataset</span><span class="p">,</span>
+    <span class="n">save_path</span><span class="o">=</span><span class="s1">&#39;path/to/save/folder&#39;</span><span class="p">,</span>
+    <span class="n">pyramid_highest_level</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+    <span class="n">pyramid_lowest_level</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+    <span class="n">registration_type</span><span class="o">=</span><span class="s1">&#39;translation&#39;</span><span class="p">,</span>
+    <span class="n">registration_direction</span><span class="o">=</span><span class="s1">&#39;backward&#39;</span>
+<span class="p">)</span>
+</pre></div>
+</div>
 </section>
 <section id="visualizing-images">
 <h2>Visualizing Images<a class="headerlink" href="#visualizing-images" title="Link to this heading">¶</a></h2>
-<p>To visualize images in a dataset, use the <cite>visualize_images</cite> function:</p>
-<p><a href="#id11"><span class="problematic" id="id12">``</span></a><a href="#id13"><span class="problematic" id="id14">`</span></a>python
-from registration_tools.visualization import visualize_images
-import napari</p>
-<p>viewer = napari.Viewer()
-visualize_images(</p>
-<blockquote>
-<div><p>viewer=viewer,
-dataset=dataset,
-channels=[0, 1, 2],
-save_folder=’path/to/save/folder’</p>
-</div></blockquote>
-<section id="id15">
-<h3>)<a class="headerlink" href="#id15" title="Link to this heading">¶</a></h3>
-</section>
-</section>
-<section id="plotting-projections">
-<h2>Plotting Projections<a class="headerlink" href="#plotting-projections" title="Link to this heading">¶</a></h2>
-<p>To plot the projections of the dataset, use the <cite>plot_projections</cite> function:</p>
-<p><a href="#id16"><span class="problematic" id="id17">``</span></a><a href="#id18"><span class="problematic" id="id19">`</span></a>python
-from registration_tools.visualization import plot_projections</p>
-<dl class="simple">
-<dt>plot_projections(</dt><dd><p>viewer=viewer,
-dataset=dataset,
-projection=’XY’,
-channels=[0, 1, 2],
-old=False</p>
-</dd>
-</dl>
-<section id="id20">
-<h3>)<a class="headerlink" href="#id20" title="Link to this heading">¶</a></h3>
-</section>
-</section>
-<section id="plotting-projections-difference">
-<h2>Plotting Projections Difference<a class="headerlink" href="#plotting-projections-difference" title="Link to this heading">¶</a></h2>
-<p>To plot the difference between current and old projections of the dataset, use the <cite>plot_projections_difference</cite> function:</p>
-<p><a href="#id21"><span class="problematic" id="id22">``</span></a><a href="#id23"><span class="problematic" id="id24">`</span></a>python
-from registration_tools.visualization import plot_projections_difference</p>
-<dl class="simple">
-<dt>plot_projections_difference(</dt><dd><p>viewer=viewer,
-dataset=dataset,
-projection=’XY’,
-channel=0,
-old=True</p>
-</dd>
-</dl>
-<section id="id25">
-<h3>)<a class="headerlink" href="#id25" title="Link to this heading">¶</a></h3>
-</section>
+<p>There are several ways you can visualize images in a dataset. The package uses <cite>napari</cite> for visualization.</p>
+<p>To visualize images in a dataset, use the <cite>plot_images</cite> function:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">registration_tools.visualization</span> <span class="kn">import</span> <span class="n">plot_images</span>
+<span class="kn">import</span> <span class="nn">napari</span>
+
+<span class="n">viewer</span> <span class="o">=</span> <span class="n">napari</span><span class="o">.</span><span class="n">Viewer</span><span class="p">()</span>
+<span class="n">plot_images</span><span class="p">(</span>
+    <span class="n">viewer</span><span class="o">=</span><span class="n">viewer</span><span class="p">,</span>
+    <span class="n">dataset</span><span class="o">=</span><span class="n">dataset</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>To plot the projections of the dataset, use the <cite>plot_projections</cite> function.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">registration_tools.visualization</span> <span class="kn">import</span> <span class="n">plot_projections</span>
+
+<span class="n">plot_projections</span><span class="p">(</span>
+    <span class="n">viewer</span><span class="o">=</span><span class="n">viewer</span><span class="p">,</span>
+    <span class="n">dataset</span><span class="o">=</span><span class="n">dataset</span><span class="p">,</span>
+    <span class="n">projection</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+    <span class="n">channels</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span>
+    <span class="n">old</span><span class="o">=</span><span class="kc">False</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>When registering, you may be interested in seeing the difference between the raw and original dataset. You can use the <cite>plot_projections_difference</cite> function to plot the difference between the two.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">registration_tools.visualization</span> <span class="kn">import</span> <span class="n">plot_projections_difference</span>
+
+<span class="n">plot_projections_difference</span><span class="p">(</span>
+    <span class="n">viewer</span><span class="o">=</span><span class="n">viewer</span><span class="p">,</span>
+    <span class="n">dataset</span><span class="o">=</span><span class="n">dataset</span><span class="p">,</span>
+    <span class="n">projection</span><span class="o">=</span><span class="s1">&#39;XY&#39;</span><span class="p">,</span>
+    <span class="n">channel</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+    <span class="n">old</span><span class="o">=</span><span class="kc">True</span>
+<span class="p">)</span>
+</pre></div>
+</div>
 </section>
 <section id="plotting-vectorfield">
 <h2>Plotting Vectorfield<a class="headerlink" href="#plotting-vectorfield" title="Link to this heading">¶</a></h2>
 <p>To plot the vectorfield of the dataset, use the <cite>plot_vectorfield</cite> function:</p>
-<p><a href="#id26"><span class="problematic" id="id27">``</span></a><a href="#id28"><span class="problematic" id="id29">`</span></a>python
-from registration_tools.visualization import plot_vectorfield</p>
-<dl class="simple">
-<dt>plot_vectorfield(</dt><dd><p>viewer=viewer,
-dataset=dataset</p>
-</dd>
-</dl>
-<section id="id30">
-<h3>)<a class="headerlink" href="#id30" title="Link to this heading">¶</a></h3>
-</section>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">registration_tools.visualization</span> <span class="kn">import</span> <span class="n">plot_vectorfield</span>
+
+<span class="n">plot_vectorfield</span><span class="p">(</span>
+    <span class="n">viewer</span><span class="o">=</span><span class="n">viewer</span><span class="p">,</span>
+    <span class="n">dataset</span><span class="o">=</span><span class="n">dataset</span>
+<span class="p">)</span>
+</pre></div>
+</div>
 </section>
 </section>
 
@@ -172,16 +186,10 @@ dataset=dataset</p>
 <li class="toctree-l2"><a class="reference internal" href="#creating-a-dataset">Creating a Dataset</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#registering-images">Registering Images</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#visualizing-images">Visualizing Images</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#plotting-projections">Plotting Projections</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#plotting-projections-difference">Plotting Projections Difference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#plotting-vectorfield">Plotting Vectorfield</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="modules.html">Modules</a></li>
-<li class="toctree-l1"><a class="reference internal" href="modules.html#registration-tools-package">registration_tools package</a></li>
-<li class="toctree-l1"><a class="reference internal" href="modules.html#registration-tools-data-module">registration_tools.data module</a></li>
-<li class="toctree-l1"><a class="reference internal" href="modules.html#registration-tools-registration-module">registration_tools.registration module</a></li>
-<li class="toctree-l1"><a class="reference internal" href="modules.html#registration-tools-visualization-module">registration_tools.visualization module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="API.html">API Reference</a></li>
 </ul>
 
 <div class="relations">
@@ -189,7 +197,7 @@ dataset=dataset</p>
 <ul>
   <li><a href="index.html">Documentation overview</a><ul>
       <li>Previous: <a href="index.html" title="previous chapter">Welcome to Registration Tools’s documentation!</a></li>
-      <li>Next: <a href="modules.html" title="next chapter">Modules</a></li>
+      <li>Next: <a href="API.html" title="next chapter">API Reference</a></li>
   </ul></li>
 </ul>
 </div>

@@ -11,8 +11,7 @@ Welcome to Registration Tools's documentation!
    :caption: Contents:
 
    usage
-   modules
-   visualization
+   API
 
 Indices and tables
 ==================
