@@ -3,7 +3,7 @@ import sys
 sys.path.insert(0, os.path.abspath('../src'))
 
 project = 'Registration Tools'
-author = 'Your Name'
+author = 'Gabriel Torregrosa Cortés'
 release = '0.1'
 
 extensions = [

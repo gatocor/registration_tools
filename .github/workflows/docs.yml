@@ -13,15 +13,16 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v2
 
-    - name: Set up Python
-      uses: actions/setup-python@v2
+    - name: Set up Conda
+      uses: conda-incubator/setup-miniconda@v2
       with:
-        python-version: '3.x'
+        python-version: '3.10'
+        activate-environment: docs-env
+        environment-file: environment.yml
+        auto-update-conda: true
 
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
         pip install sphinx sphinx_rtd_theme
 
     - name: Build documentation
