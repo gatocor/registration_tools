@@ -494,7 +494,7 @@ def register(
     }
 
     metadata = dataset.get_metadata()
-    metadata["data"] = ["./files_ch{ch}/registered_files_{:04d}.tiff" for ch in range(dataset._nchannels)]
+    metadata["data"] = [os.path.join(save_path,f"files_ch{ch}","registered_files_{:04d}.tiff") for ch in range(dataset._nchannels)]
     metadata["dtype"] = "regex"
     metadata["transformations"] = transformation_metadata
 

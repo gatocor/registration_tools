@@ -1,10 +1,11 @@
 import os
 import tifffile
 import numpy as np
+from ..dataset import Dataset, create_dataset
 
-def dataset_sphere(path="data", num_images=10, image_size=100, num_channels=1, min_radius=5, max_radius=20, jump=2, stride=(1, 2, 3), verbose=False):
+def sphere(path, num_images=10, image_size=100, num_channels=1, min_radius=5, max_radius=20, jump=2, stride=(1, 2, 3), verbose=False):
     """
-    This function creates a series of 3D images with spheres positioned along an L-shaped path.
+    This function creates a series of 3D images a sphere moving along an L-shaped path while increasing the radius.
     The radius of the spheres increases linearly from min_radius to max_radius across the images.
     The spheres have Gaussian intensity from the center to the border.
     The images are saved in the specified directory with a specified stride.
@@ -63,3 +64,7 @@ def dataset_sphere(path="data", num_images=10, image_size=100, num_channels=1, m
             tifffile.imwrite(os.path.join(channel_path, f'sphere_{i:02d}.tiff'), image[::stride[0],::stride[1],::stride[2]])
             if verbose:
                 print(f"Image 'sphere_{i:02d}.tiff' saved successfully in '{channel_path}'")
+
+    # Create dataset
+    dataset = create_dataset([os.path.join(path, f"channel_{ch}", "sphere_{:02d}.tiff") for ch in range(num_channels)], "XYZ", numbers=list(range(num_images)), scale=[1/st for st in stride])
+    dataset.save(os.path.join(path))

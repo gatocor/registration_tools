@@ -2,7 +2,7 @@ import os
 import unittest
 import numpy as np
 from skimage.io import imsave, imread
-from registration_tools.dataset import create_dataset, load_dataset, Dataset
+from registration_tools import create_dataset, load_dataset, Dataset, DataIterator, FileIterator
 import shutil
 
 class TestDataset(unittest.TestCase):
@@ -34,6 +34,8 @@ class TestDataset(unittest.TestCase):
         os.remove(cls.temp_file_monochannel)
 
         os.remove(cls.temp_file_multichannel)
+
+        os.remove("tests/tmp.tiff")
 
     def test_dataset_initialization_with_monochannel_files(self):
         dataset = create_dataset(data=self.temp_file_monochannel, format='TXY')
@@ -232,6 +234,50 @@ class TestDataset(unittest.TestCase):
         dataset = create_dataset(data=data, format='TXYC')
         time_data = dataset.get_time_data(1, channel=2)
         np.testing.assert_array_equal(time_data, data[1, :, :, 2])
+
+    def test_data_iterator_file(self):
+        dataset = create_dataset(data=self.temp_file_monochannel, format='TXY')
+        iterator = dataset.get_data_iterator()
+        expected_data = imread(self.temp_file_monochannel)
+        for i, data in enumerate(iterator):
+            np.testing.assert_array_equal(data, expected_data[i,:,:])
+
+    def test_data_iterator_regex(self):
+        regex_pattern = os.path.join(self.temp_dir, 'image_{:03d}.tif')
+        dataset = create_dataset(data=regex_pattern, format='XY', numbers=list(range(3)))
+        iterator = dataset.get_data_iterator()
+        for i, data in enumerate(iterator):
+            expected_data = imread(regex_pattern.format(i))
+            np.testing.assert_array_equal(data, expected_data)
+
+    def test_data_iterator_array(self):
+        data = np.random.rand(3, 10, 10)
+        dataset = create_dataset(data=data, format='TXY')
+        iterator = dataset.get_data_iterator()
+        for i, data_slice in enumerate(iterator):
+            np.testing.assert_array_equal(data_slice, data[i])
+
+    def test_data_iterator_file(self):
+        dataset = create_dataset(data=self.temp_file_monochannel, format='TXY')
+        iterator = dataset.get_file_iterator("tests/tmp.tiff")
+        expected_data = imread(self.temp_file_monochannel)
+        for i, data in enumerate(iterator):
+            np.testing.assert_array_equal(imread(data), expected_data[i,:,:])
+
+    def test_data_iterator_regex(self):
+        regex_pattern = os.path.join(self.temp_dir, 'image_{:03d}.tif')
+        dataset = create_dataset(data=regex_pattern, format='XY', numbers=list(range(3)))
+        iterator = dataset.get_file_iterator("tests/tmp.tiff")
+        for i, data in enumerate(iterator):
+            expected_data = imread(regex_pattern.format(i))
+            np.testing.assert_array_equal(imread(data), expected_data)
+
+    def test_data_iterator_array(self):
+        data = np.random.rand(3, 10, 10)
+        dataset = create_dataset(data=data, format='TXY')
+        iterator = dataset.get_file_iterator("tests/tmp.tiff")
+        for i, data_slice in enumerate(iterator):
+            np.testing.assert_array_equal(imread(data_slice), data[i])
 
 if __name__ == '__main__':
     unittest.main()

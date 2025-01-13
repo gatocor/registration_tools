@@ -4,8 +4,32 @@ import pandas as pd
 import ast
 from tqdm import tqdm
 import napari
+import imageio
 
 from skimage.io import imread, imsave
+
+def plot_images(viewer, dataset, channels=None, numbers=None, downsample=(1, 1, 1), verbosity=1):
+    """
+    Plots the images in the dataset in the viewer.
+
+    Args:
+        viewer (napari.Viewer): The napari viewer instance.
+        dataset (Dataset): The dataset object.
+        channels (list, optional): List of channels to plot. If None, all channels are plotted.
+        numbers (list, optional): List of numbers to plot. If None, all numbers are plotted.
+        scale (tuple, optional): Scale for the images. Default is (1, 1, 1).
+        downsample (tuple, optional): downsample factor for the images. Default is (1, 1, 1).
+        verbosity (int, optional): Verbosity level. Default is 1.
+    """
+
+    cmaps = ['red', 'green', 'blue', 'magenta', 'yellow', 'cyan']
+
+    for ch in range(dataset._nchannels):
+        images = []
+        for image in dataset.get_data_iterator(channel=ch, downsample=downsample):
+            images.append(image[np.newaxis, ...])
+
+        viewer.add_image(np.concatenate(images, axis=0), scale=dataset._scale, opacity=0.5, blending='additive', colormap=cmaps[ch], name=f'Channel {ch}')
 
 def plot_projections(viewer, dataset, projection, channels=None, old=False):
     """
@@ -28,7 +52,7 @@ def plot_projections(viewer, dataset, projection, channels=None, old=False):
         channels = range(dataset.num_channels)
 
     for pos, ch in enumerate(channels):
-        path = os.path.join(dataset._save_path, "projections", f"{add_old}projections_ch{ch}", f"joint_{add_old}projections_{projection}.npy")
+        path = os.path.join(dataset._save_folder, "projections", f"{add_old}projections_ch{ch}", f"joint_{add_old}projections_{projection}.tiff")
         if not os.path.exists(path):
             raise ValueError("Projection file does not exist.")
 
@@ -49,19 +73,19 @@ def plot_projections_difference(viewer, dataset, projection, channel=0, old=True
     """
     cmaps = ['red', 'green', 'blue']
 
-    path = os.path.join(dataset._save_path, "projections", f"projections_ch{ch}", f"joint_projections_{projection}.npy")
-    image_current_registered = imread(path).take(slice(None,-1,None), axis=0)
+    path = os.path.join(dataset._save_folder, "projections", f"projections_ch{channel}", f"joint_projections_{projection}.tiff")
+    image_current_registered = imread(path)[:-1]
     viewer.add_image(image_current_registered, opacity=0.5, colormap=cmaps[0], blending='additive')
 
-    image_next_registered = imread(path).take(slice(1,None,None), axis=0)
+    image_next_registered = imread(path)[1:]
     viewer.add_image(image_next_registered, opacity=0.5, colormap=cmaps[1], blending='additive')
 
-    path = os.path.join(dataset._save_path, "projections", f"old_projections_ch{ch}", f"joint_old_projections_{projection}.npy")
+    path = os.path.join(dataset._save_folder, "projections", f"old_projections_ch{channel}", f"joint_old_projections_{projection}.tiff")
     if old and not os.path.exists(path):
         print("Warning: Old projection file does not exist.")
         return
 
-    image_next_unregistered = imread(path).take(slice(1,None,None), axis=0)
+    image_next_unregistered = imread(path)[1:]
     viewer.add_image(image_next_unregistered, opacity=0.5, colormap=cmaps[2], blending='additive')
 
 def plot_vectorfield(viewer, dataset):
@@ -72,7 +96,7 @@ def plot_vectorfield(viewer, dataset):
         viewer (napari.Viewer): The napari viewer instance.
         dataset (Dataset): The dataset object.
     """
-    path = os.path.join(dataset._save_path, "vectorfield", "vectorfield.npy")
+    path = os.path.join(dataset._save_folder, "vectorfield", "vectorfield.npy")
     if not os.path.exists(path):
         raise ValueError("Vectorfield file does not exist.")
 
@@ -80,76 +104,30 @@ def plot_vectorfield(viewer, dataset):
 
     viewer.add_vectors(vectorfield)
 
-def visualize_images(viewer, dataset, channels, save_folder, numbers=None, scale=(1, 1, 1), downscale=(1, 1, 1), verbosity=1, view_mode='3D', **kwargs):
+def make_video(viewer, save_file, fps=10, zooms=None, angles=None, canvas_only=True):
     """
-    Visualizes the images in the dataset using the napari viewer.
+    Creates a video from the napari viewer by taking screenshots of all time points.
 
     Args:
         viewer (napari.Viewer): The napari viewer instance.
-        dataset (Dataset): The dataset object.
-        channels (list): List of channels to visualize.
-        save_folder (str): The folder to save the visualizations.
-        numbers (list, optional): List of numbers to visualize. If None, all numbers in the dataset are visualized.
-        scale (tuple, optional): Scale for the images. Default is (1, 1, 1).
-        downscale (tuple, optional): Downscale factor for the images. Default is (1, 1, 1).
-        verbosity (int, optional): Verbosity level. Default is 1.
-        view_mode (str or tuple, optional): View mode(s) for the images. Default is '3D'.
-        **kwargs: Additional keyword arguments.
+        save_path (str): The path to save the video.
+        fps (int, optional): Frames per second for the video. Default is 10.
+        zooms (list, optional): List of zoom levels for each time point. If None, keep fixed.
+        angles (list, optional): List of camera angles for each time point. If None, keep fixed.
     """
-    valid_view_modes = {'3D', 'projection', 'sections'}
-    
-    if isinstance(view_mode, str):
-        view_mode = (view_mode,)
-    elif isinstance(view_mode, tuple):
-        if not all(isinstance(vm, str) for vm in view_mode):
-            raise ValueError("All elements in view_mode must be strings")
-    else:
-        raise ValueError("view_mode must be a string or a tuple of strings")
-    
-    if not all(vm in valid_view_modes for vm in view_mode):
-        raise ValueError(f"view_mode can only contain the following values: {valid_view_modes}")
+    screenshots = []
+    num_timepoints = int(viewer.dims.range[0][1])
 
-    if numbers is None:
-        numbers = dataset.numbers
-    if not isinstance(numbers, list) or not all(isinstance(n, int) for n in numbers):
-        raise ValueError("numbers must be a list of integers")
-    if not all(n in dataset.numbers for n in numbers):
-        raise ValueError("All elements in numbers must be present in dataset.numbers")
-    
-    for pos in dataset.numbers:
-        if verbosity > 0:
-            print(f"Making images")
+    for t in range(num_timepoints):
+        viewer.dims.set_point(0, t)
         
-        vs = ast.literal_eval(dataset.loc[pos, "voxel_size"])
+        if zooms is not None and t < len(zooms):
+            viewer.camera.zoom = zooms[t]
         
-        files = []
-        for ch in channels:
-            fs = [str(i) for i in np.sort(os.listdir(dataset['directory'][pos])) if f"ch{ch}" in i]
-            step = int(max(np.floor(len(fs) / kwargs.get('n_plots', 1)), 1))
-            fs = fs[::step]
-            if len(fs) > 0:
-                files.append(fs)
+        if angles is not None and t < len(angles):
+            viewer.camera.angles = angles[t]
         
-        os.makedirs(f"{save_folder}/dataset_{dataset['id'][pos]}", exist_ok=True)
-        for chs in tqdm(zip(*files), total=len(files[0])):
-            for i in ["Image", "Image [1]", "Image [2]"]:
-                try:
-                    del viewer.layers[i]
-                except:
-                    pass
-            if not os.path.exists(f"{save_folder}/dataset_{dataset['id'][pos]}/{chs[0].split('_')[0]}.png"):
-                img = skimage.io.imread(f"{dataset['directory'][pos]}/{chs[0]}")[np.newaxis, ::downscale[0], ::downscale[1], ::downscale[2]]
-                for i in range(len(chs[1:])):
-                    img = np.concatenate([img, skimage.io.imread(f"{dataset['directory'][pos]}/{chs[i + 1]}")[np.newaxis, ::downscale[0], ::downscale[1], ::downscale[2]]], axis=0)
-                
-                for vm in view_mode:
-                    if vm == '3D':
-                        viewer.add_image(img, scale=[downscale[0] * vs[0], downscale[1] * vs[1], downscale[2] * vs[2]], channel_axis=0)
-                    elif vm == 'projection':
-                        viewer.add_image(np.max(img, axis=1), scale=[downscale[0] * vs[0], downscale[1] * vs[1]], channel_axis=0)
-                    elif vm == 'sections':
-                        for z in range(img.shape[1]):
-                            viewer.add_image(img[:, z, :, :], scale=[downscale[1] * vs[1], downscale[2] * vs[2]], channel_axis=0)
-                
-                viewer.screenshot(f"{save_folder}/dataset_{dataset['id'][pos]}/{chs[0].split('_')[0]}.png", canvas_only=True)
+        screenshot = viewer.screenshot(canvas_only=canvas_only)
+        screenshots.append(screenshot)
 
+    imageio.mimsave(save_file, screenshots, fps=fps)

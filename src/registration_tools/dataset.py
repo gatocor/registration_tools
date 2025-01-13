@@ -68,6 +68,8 @@ def create_dataset(data, format, numbers=None, scale=None):
 
     if self._dtype == "array":
         self._numbers = [i for i in range(self._shape[self._pos_symbol["T"]])]
+    elif self._dtype == "file":
+        self._numbers = [i for i in range(self._shape[self._pos_symbol["T"]])]
 
     if "C" in format and self._channels_separated:
         raise ValueError("If 'C' is in the format, only one path can be provided")
@@ -398,3 +400,79 @@ class Dataset:
         metadata_path = os.path.join(directory, "dataset.json")
         with open(metadata_path, 'w') as f:
             json.dump(metadata, f, indent=4)
+
+    def get_data_iterator(self, channel=0, downsample=None, return_position=False):
+        """
+        Returns a DataIterator for the dataset.
+
+        Args:
+            channel (int): The channel to iterate over.
+            downsample (tuple): The downsample factors for each spatial dimension.
+            return_position (bool): Whether to return the position along with the data.
+            
+        Returns:
+            DataIterator: An iterator over the dataset.
+        """
+        return DataIterator(self, channel, downsample, return_position)
+
+    def get_file_iterator(self, path_tmp_file, channel=0, downsample=None, return_position=False):
+        """
+        Returns a FileIterator for the dataset.
+
+        Args:
+            path_tmp_file (str): The temporary file path to save the downsampled images.
+            channel (int): The channel to iterate over.
+            downsample (tuple): The downsample factors for each spatial dimension.
+            return_position (bool): Whether to return the position along with the file path.
+
+        Returns:
+            FileIterator: An iterator over the dataset.
+        """
+        return FileIterator(self, path_tmp_file, channel, downsample, return_position)
+
+class DataIterator:
+    def __init__(self, dataset, channel=0, downsample=None, return_position=False):
+        self._dataset = dataset
+        self._channel = channel
+        self._downsample = downsample
+        self._index = 0
+        self._max_index = len(self._dataset._numbers)
+        self._return_position = return_position
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self._index < self._max_index:
+            result = self._dataset.get_time_data(self._index, self._channel, self._downsample)
+            self._index += 1
+            if self._return_position:
+                return self._index - 1, result
+            else:
+                return result
+        else:
+            raise StopIteration
+
+class FileIterator:
+    def __init__(self, dataset, path_tmp_file, channel=0, downsample=None, return_position=False):
+        self._dataset = dataset
+        self._path_tmp_file = path_tmp_file
+        self._channel = channel
+        self._downsample = downsample
+        self._index = 0
+        self._max_index = len(self._dataset._numbers)
+        self._return_position = return_position
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self._index < self._max_index:
+            result = self._dataset.get_time_file(self._path_tmp_file, self._index, self._channel, self._downsample)
+            self._index += 1
+            if self._return_position:
+                return self._index - 1, result
+            else:
+                return result
+        else:
+            raise StopIteration

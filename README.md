@@ -1,57 +1,49 @@
-# Registration Tools Documentation
+# Registration Tools
+
+[![Documentation Status](https://img.shields.io/badge/docs-passing-brightgreen)](https://gatocor.github.io/registration_tools/)
 
 ## Overview
 
-This project provides tools for registering datasets of images. The main functionalities include:
+This project provides tools for working with batches of images. The main functionalities include:
 
 - Dataset creation and manipulation
-- Image registration
-- Transformation application
+- Image registration with [vt-python](https://gitlab.inria.fr/morpheme/vt-python). 
+- Visualization tools with [Napari](https://napari.org).
 
 ## Installation
 
-To install the required dependencies, run:
+It is encouraged to make a conda environment for the package.
 
-```bash
-pip install -r requirements.txt
-```
+1. Create the environment using the yml file provided in the repository:
 
-## Usage
+    ```bash
+    # Create the environment
+    conda create --name registration_tools -f environment.yml
+    ```
 
-### Creating a Dataset
+    Alternatively, you can explicitly install the environment dependencies:
 
-To create a dataset of spherical images, use the `dataset_sphere` function:
+    ```bash
+    # Create the environment
+    conda create --name registration_tools python=3.8 napari=0.5.5 pyqt=5.15.9 scikit-image=0.25.0 vt-python=1.3.1 -c morpheme -c conda-forge
+    ```
 
-```python
-from registration_tools.data import dataset_sphere
+2. Activate the conda environment:
 
-dataset_sphere(
-    folder='path/to/save/folder',
-    num_images=10,
-    image_size=100,
-    num_channels=3,
-    min_radius=5,
-    max_radius=20,
-    jump=2,
-    stride=(1, 2, 3)
-)
-```
+    ```bash
+    # Activate the environment
+    conda activate registration_tools
+    ```
 
-### Registering Images
+3. Finally install this package:
 
-To register images in a dataset, use the `register` function:
+    ```bash
+    pip install git+https://github.com/gatocor/registration_tools
+    ```
 
-```python
-from registration_tools import Dataset
-from registration_tools.registration import register
+## Documentation
 
-dataset = Dataset('path/to/dataset', format='XYZ', numbers=[1, 2, 3, 4, 5])
-register(
-    dataset=dataset,
-    save_path='path/to/save/folder',
-    use_channel=0
-)
-```
+For detailed documentation, visit [here](https://gatocor.github.io/registration_tools/).
 
 ## Running Tests
 

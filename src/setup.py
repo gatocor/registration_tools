@@ -18,7 +18,7 @@ setup(
     author='Your Name',
     author_email='your.email@example.com',
     description='A description of your project',
-    long_description=open('README.md').read(),
+    long_description=open('../README.md').read(),
     long_description_content_type='text/markdown',
     url='https://github.com/yourusername/registration_tools',  # Update with your project's URL
     classifiers=[

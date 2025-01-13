@@ -5,7 +5,7 @@ import shutil
 import warnings
 from skimage._shared.utils import warn
 from registration_tools.dataset import create_dataset
-from registration_tools.data import dataset_sphere
+from registration_tools.data import sphere
 from registration_tools.registration import register
 from skimage.io import imread
 import numpy as np
@@ -17,7 +17,7 @@ class TestRegistration(unittest.TestCase):
         warnings.filterwarnings("ignore", category=UserWarning, message=".*is a low contrast image")
         self.test_folder = os.path.join(os.path.dirname(__file__), 'test_folder')
         self.save_folder = os.path.join(os.path.dirname(__file__), 'save_folder')
-        dataset_sphere(self.test_folder, num_images=10, image_size=100, num_channels=3, min_radius=5, max_radius=5, jump=2, stride=(1, 1, 1))
+        sphere(self.test_folder, num_images=10, image_size=100, num_channels=3, min_radius=5, max_radius=5, jump=2, stride=(1, 1, 1))
 
     @classmethod
     def tearDownClass(self):
@@ -57,7 +57,7 @@ class TestRegistration(unittest.TestCase):
 
     def test_register_invalid_numbers(self):
         dataset=create_dataset(os.path.join(self.test_folder, "channel_0", "sphere_{:02d}.tiff"), "XYZ", numbers=[1,2,3,4,6,7,8,9])
-        shutil.rmtree(self.save_folder)
+        # shutil.rmtree(self.save_folder)
         with self.assertRaises(ValueError) as context:
             register(
                 dataset=dataset,
@@ -81,7 +81,7 @@ class TestRegistration(unittest.TestCase):
 
     def test_register_invalid_registration_direction(self):
         dataset=create_dataset(os.path.join(self.test_folder, "channel_0", "sphere_{:02d}.tiff"), "XYZ", numbers=[1,2,3,4,6,7,8,9])
-        shutil.rmtree(self.save_folder)
+        # shutil.rmtree(self.save_folder)
         with self.assertRaises(ValueError) as context:
             register(
                 dataset=dataset,

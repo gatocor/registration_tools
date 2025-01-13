@@ -1,1 +1,1 @@
-from .sphere import dataset_sphere
+from .sphere import sphere

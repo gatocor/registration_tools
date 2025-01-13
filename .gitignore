@@ -145,3 +145,8 @@ $RECYCLE.BIN/
 .project
 .cproject
 .settings/
+
+# Examples
+examples/*
+!examples/*.py
+!examples/*.ipynb
