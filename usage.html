@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="./">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Usage &#8212; Registration Tools 0.1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d1102ebc" />
+    <link rel="stylesheet" type="text/css" href="_static/basic.css?v=686e5160" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=27fed22d" />
+    <script src="_static/documentation_options.js?v=2709fde1"></script>
+    <script src="_static/doctools.js?v=9bcbadda"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Modules" href="modules.html" />
+    <link rel="prev" title="Welcome to Registration Tools’s documentation!" href="index.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="usage">
+<h1>Usage<a class="headerlink" href="#usage" title="Link to this heading">¶</a></h1>
+<section id="creating-a-dataset">
+<h2>Creating a Dataset<a class="headerlink" href="#creating-a-dataset" title="Link to this heading">¶</a></h2>
+<p>To create a dataset of spherical images, use the <cite>dataset_sphere</cite> function:</p>
+<p><a href="#id1"><span class="problematic" id="id2">``</span></a><a href="#id3"><span class="problematic" id="id4">`</span></a>python
+from registration_tools.data import dataset_sphere</p>
+<dl class="simple">
+<dt>dataset_sphere(</dt><dd><p>folder=’path/to/save/folder’,
+num_images=10,
+image_size=100,
+num_channels=3,
+min_radius=5,
+max_radius=20,
+jump=2,
+stride=(1, 2, 3)</p>
+</dd>
+</dl>
+<section id="id5">
+<h3>)<a class="headerlink" href="#id5" title="Link to this heading">¶</a></h3>
+</section>
+</section>
+<section id="registering-images">
+<h2>Registering Images<a class="headerlink" href="#registering-images" title="Link to this heading">¶</a></h2>
+<p>To register images in a dataset, use the <cite>register</cite> function:</p>
+<p><a href="#id6"><span class="problematic" id="id7">``</span></a><a href="#id8"><span class="problematic" id="id9">`</span></a>python
+from registration_tools import Dataset
+from registration_tools.registration import register</p>
+<p>dataset = Dataset(‘path/to/dataset’, format=’XYZ’, numbers=[1, 2, 3, 4, 5])
+register(</p>
+<blockquote>
+<div><p>dataset=dataset,
+save_path=’path/to/save/folder’,
+use_channel=0</p>
+</div></blockquote>
+<section id="id10">
+<h3>)<a class="headerlink" href="#id10" title="Link to this heading">¶</a></h3>
+</section>
+</section>
+<section id="visualizing-images">
+<h2>Visualizing Images<a class="headerlink" href="#visualizing-images" title="Link to this heading">¶</a></h2>
+<p>To visualize images in a dataset, use the <cite>visualize_images</cite> function:</p>
+<p><a href="#id11"><span class="problematic" id="id12">``</span></a><a href="#id13"><span class="problematic" id="id14">`</span></a>python
+from registration_tools.visualization import visualize_images
+import napari</p>
+<p>viewer = napari.Viewer()
+visualize_images(</p>
+<blockquote>
+<div><p>viewer=viewer,
+dataset=dataset,
+channels=[0, 1, 2],
+save_folder=’path/to/save/folder’</p>
+</div></blockquote>
+<section id="id15">
+<h3>)<a class="headerlink" href="#id15" title="Link to this heading">¶</a></h3>
+</section>
+</section>
+<section id="plotting-projections">
+<h2>Plotting Projections<a class="headerlink" href="#plotting-projections" title="Link to this heading">¶</a></h2>
+<p>To plot the projections of the dataset, use the <cite>plot_projections</cite> function:</p>
+<p><a href="#id16"><span class="problematic" id="id17">``</span></a><a href="#id18"><span class="problematic" id="id19">`</span></a>python
+from registration_tools.visualization import plot_projections</p>
+<dl class="simple">
+<dt>plot_projections(</dt><dd><p>viewer=viewer,
+dataset=dataset,
+projection=’XY’,
+channels=[0, 1, 2],
+old=False</p>
+</dd>
+</dl>
+<section id="id20">
+<h3>)<a class="headerlink" href="#id20" title="Link to this heading">¶</a></h3>
+</section>
+</section>
+<section id="plotting-projections-difference">
+<h2>Plotting Projections Difference<a class="headerlink" href="#plotting-projections-difference" title="Link to this heading">¶</a></h2>
+<p>To plot the difference between current and old projections of the dataset, use the <cite>plot_projections_difference</cite> function:</p>
+<p><a href="#id21"><span class="problematic" id="id22">``</span></a><a href="#id23"><span class="problematic" id="id24">`</span></a>python
+from registration_tools.visualization import plot_projections_difference</p>
+<dl class="simple">
+<dt>plot_projections_difference(</dt><dd><p>viewer=viewer,
+dataset=dataset,
+projection=’XY’,
+channel=0,
+old=True</p>
+</dd>
+</dl>
+<section id="id25">
+<h3>)<a class="headerlink" href="#id25" title="Link to this heading">¶</a></h3>
+</section>
+</section>
+<section id="plotting-vectorfield">
+<h2>Plotting Vectorfield<a class="headerlink" href="#plotting-vectorfield" title="Link to this heading">¶</a></h2>
+<p>To plot the vectorfield of the dataset, use the <cite>plot_vectorfield</cite> function:</p>
+<p><a href="#id26"><span class="problematic" id="id27">``</span></a><a href="#id28"><span class="problematic" id="id29">`</span></a>python
+from registration_tools.visualization import plot_vectorfield</p>
+<dl class="simple">
+<dt>plot_vectorfield(</dt><dd><p>viewer=viewer,
+dataset=dataset</p>
+</dd>
+</dl>
+<section id="id30">
+<h3>)<a class="headerlink" href="#id30" title="Link to this heading">¶</a></h3>
+</section>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">Registration Tools</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Usage</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#creating-a-dataset">Creating a Dataset</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#registering-images">Registering Images</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#visualizing-images">Visualizing Images</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#plotting-projections">Plotting Projections</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#plotting-projections-difference">Plotting Projections Difference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#plotting-vectorfield">Plotting Vectorfield</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="modules.html">Modules</a></li>
+<li class="toctree-l1"><a class="reference internal" href="modules.html#registration-tools-package">registration_tools package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="modules.html#registration-tools-data-module">registration_tools.data module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="modules.html#registration-tools-registration-module">registration_tools.registration module</a></li>
+<li class="toctree-l1"><a class="reference internal" href="modules.html#registration-tools-visualization-module">registration_tools.visualization module</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="index.html" title="previous chapter">Welcome to Registration Tools’s documentation!</a></li>
+      <li>Next: <a href="modules.html" title="next chapter">Modules</a></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 8.1.3</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+      |
+      <a href="_sources/usage.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>
