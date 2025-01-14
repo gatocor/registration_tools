@@ -7,10 +7,11 @@ Welcome to Registration Tools's documentation!
 ==============================================
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 4
    :caption: Contents:
 
    usage
+   examples
    API
 
 Indices and tables

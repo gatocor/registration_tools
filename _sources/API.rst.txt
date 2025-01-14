@@ -30,7 +30,7 @@ API Reference
 .. ======================================
 
 .. automodule:: registration_tools.registration
-   :members: register
+   :members: get_pyramid_levels, register
    :undoc-members:
    :show-inheritance:
 
