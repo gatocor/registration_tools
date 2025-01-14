@@ -44,7 +44,7 @@
     <span class="k">return</span> <span class="n">path_tmp_file</span>
 
 <div class="viewcode-block" id="create_dataset">
-<a class="viewcode-back" href="../../API.html#registration_tools.create_dataset">[docs]</a>
+<a class="viewcode-back" href="../../API_dataset.html#registration_tools.create_dataset">[docs]</a>
 <span class="k">def</span> <span class="nf">create_dataset</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="nb">format</span><span class="p">,</span> <span class="n">numbers</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Initializes the Dataset object with a list of paths with regex patterns, a list of numbers,</span>
@@ -119,7 +119,7 @@
 
 
 <div class="viewcode-block" id="load_dataset">
-<a class="viewcode-back" href="../../API.html#registration_tools.load_dataset">[docs]</a>
+<a class="viewcode-back" href="../../API_dataset.html#registration_tools.load_dataset">[docs]</a>
 <span class="k">def</span> <span class="nf">load_dataset</span><span class="p">(</span><span class="n">directory</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Loads the dataset metadata from a JSON file in the specified directory and creates a Dataset object.</span>
@@ -157,7 +157,7 @@
 
 
 <div class="viewcode-block" id="Dataset">
-<a class="viewcode-back" href="../../API.html#registration_tools.Dataset">[docs]</a>
+<a class="viewcode-back" href="../../API_dataset.html#registration_tools.Dataset">[docs]</a>
 <span class="k">class</span> <span class="nc">Dataset</span><span class="p">:</span>
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_data</span> <span class="o">=</span> <span class="kc">None</span>
@@ -175,7 +175,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_save_folder</span> <span class="o">=</span> <span class="kc">None</span>
         
 <div class="viewcode-block" id="Dataset.get_format">
-<a class="viewcode-back" href="../../API.html#registration_tools.Dataset.get_format">[docs]</a>
+<a class="viewcode-back" href="../../API_dataset.html#registration_tools.Dataset.get_format">[docs]</a>
     <span class="k">def</span> <span class="nf">get_format</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
             <span class="k">return</span> <span class="s2">&quot;array&quot;</span>
@@ -191,7 +191,7 @@
 
             
 <div class="viewcode-block" id="Dataset.check_files_exist">
-<a class="viewcode-back" href="../../API.html#registration_tools.Dataset.check_files_exist">[docs]</a>
+<a class="viewcode-back" href="../../API_dataset.html#registration_tools.Dataset.check_files_exist">[docs]</a>
     <span class="k">def</span> <span class="nf">check_files_exist</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Checks if all files exist based on the paths with regex patterns and numbers.</span>
@@ -216,7 +216,7 @@
 
     
 <div class="viewcode-block" id="Dataset.check_consistent_shapes">
-<a class="viewcode-back" href="../../API.html#registration_tools.Dataset.check_consistent_shapes">[docs]</a>
+<a class="viewcode-back" href="../../API_dataset.html#registration_tools.Dataset.check_consistent_shapes">[docs]</a>
     <span class="k">def</span> <span class="nf">check_consistent_shapes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Checks if all files have consistent shapes and number of dimensions.</span>
@@ -275,7 +275,7 @@
                 <span class="sa">f</span><span class="s2">&quot;ndim=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_ndim</span><span class="si">}</span><span class="s2">, nchannels=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_nchannels</span><span class="si">}</span><span class="s2">, channels_separated=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_channels_separated</span><span class="si">}</span><span class="s2">, scale=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_scale</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
     
 <div class="viewcode-block" id="Dataset.get_metadata">
-<a class="viewcode-back" href="../../API.html#registration_tools.Dataset.get_metadata">[docs]</a>
+<a class="viewcode-back" href="../../API_dataset.html#registration_tools.Dataset.get_metadata">[docs]</a>
     <span class="k">def</span> <span class="nf">get_metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Returns the metadata of the dataset.</span>
@@ -301,7 +301,7 @@
 
 
 <div class="viewcode-block" id="Dataset.get_time_data">
-<a class="viewcode-back" href="../../API.html#registration_tools.Dataset.get_time_data">[docs]</a>
+<a class="viewcode-back" href="../../API_dataset.html#registration_tools.Dataset.get_time_data">[docs]</a>
     <span class="k">def</span> <span class="nf">get_time_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">channel</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">downsample</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Retrieves the image at the specified time index.</span>
@@ -359,7 +359,7 @@
 
 
 <div class="viewcode-block" id="Dataset.get_time_file">
-<a class="viewcode-back" href="../../API.html#registration_tools.Dataset.get_time_file">[docs]</a>
+<a class="viewcode-back" href="../../API_dataset.html#registration_tools.Dataset.get_time_file">[docs]</a>
     <span class="k">def</span> <span class="nf">get_time_file</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path_tmp_file</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">channel</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">downsample</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Retrieves the image at the specified time index.</span>
@@ -419,7 +419,7 @@
 
 
 <div class="viewcode-block" id="Dataset.save">
-<a class="viewcode-back" href="../../API.html#registration_tools.Dataset.save">[docs]</a>
+<a class="viewcode-back" href="../../API_dataset.html#registration_tools.Dataset.save">[docs]</a>
     <span class="k">def</span> <span class="nf">save</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">directory</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Saves the dataset metadata to a JSON file in the specified directory.</span>
@@ -464,7 +464,7 @@
 
 
 <div class="viewcode-block" id="Dataset.get_data_iterator">
-<a class="viewcode-back" href="../../API.html#registration_tools.Dataset.get_data_iterator">[docs]</a>
+<a class="viewcode-back" href="../../API_dataset.html#registration_tools.Dataset.get_data_iterator">[docs]</a>
     <span class="k">def</span> <span class="nf">get_data_iterator</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">channel</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">downsample</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">return_position</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Returns a DataIterator for the dataset.</span>
@@ -481,7 +481,7 @@
 
 
 <div class="viewcode-block" id="Dataset.get_file_iterator">
-<a class="viewcode-back" href="../../API.html#registration_tools.Dataset.get_file_iterator">[docs]</a>
+<a class="viewcode-back" href="../../API_dataset.html#registration_tools.Dataset.get_file_iterator">[docs]</a>
     <span class="k">def</span> <span class="nf">get_file_iterator</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path_tmp_file</span><span class="p">,</span> <span class="n">channel</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">downsample</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">return_position</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Returns a FileIterator for the dataset.</span>
@@ -499,7 +499,7 @@
 
 
 <div class="viewcode-block" id="Dataset.get_spatial_shape">
-<a class="viewcode-back" href="../../API.html#registration_tools.Dataset.get_spatial_shape">[docs]</a>
+<a class="viewcode-back" href="../../API_dataset.html#registration_tools.Dataset.get_spatial_shape">[docs]</a>
     <span class="k">def</span> <span class="nf">get_spatial_shape</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Returns the spatial dimensions of the dataset in the order specified by the format.</span>
@@ -512,7 +512,7 @@
 
 
 <div class="viewcode-block" id="DataIterator">
-<a class="viewcode-back" href="../../API.html#registration_tools.DataIterator">[docs]</a>
+<a class="viewcode-back" href="../../API_dataset.html#registration_tools.DataIterator">[docs]</a>
 <span class="k">class</span> <span class="nc">DataIterator</span><span class="p">:</span>
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">channel</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">downsample</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">return_position</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_dataset</span> <span class="o">=</span> <span class="n">dataset</span>
@@ -538,7 +538,7 @@
 
 
 <div class="viewcode-block" id="FileIterator">
-<a class="viewcode-back" href="../../API.html#registration_tools.FileIterator">[docs]</a>
+<a class="viewcode-back" href="../../API_dataset.html#registration_tools.FileIterator">[docs]</a>
 <span class="k">class</span> <span class="nc">FileIterator</span><span class="p">:</span>
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">path_tmp_file</span><span class="p">,</span> <span class="n">channel</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">downsample</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">return_position</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_dataset</span> <span class="o">=</span> <span class="n">dataset</span>

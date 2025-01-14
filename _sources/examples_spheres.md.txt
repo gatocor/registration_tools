@@ -1,8 +1,8 @@
-# Rigid Registration of an Sphere
+# Rigid Registration of a sphere
 This notebook demonstrates how to create, visualize, and rigid register a dataset of spherical images using the `registration_tools` package.
 
 ## Index
-- [Rigid Registration of an Sphere](#rigid-registration-of-an-sphere)
+- [Rigid Registration of a sphere](#rigid-registration-of-a-sphere)
   - [Index](#index)
   - [Import the corresponding libraries](#import-the-corresponding-libraries)
   - [Create an artificial dataset of spherical images](#create-an-artificial-dataset-of-spherical-images)
