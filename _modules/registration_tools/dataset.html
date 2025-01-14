@@ -159,7 +159,29 @@
 <div class="viewcode-block" id="Dataset">
 <a class="viewcode-back" href="../../API_dataset.html#registration_tools.Dataset">[docs]</a>
 <span class="k">class</span> <span class="nc">Dataset</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    A class to represent a dataset of multidimensional images.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        _data (list or np.ndarray): The data of the dataset.</span>
+<span class="sd">        _dtype (str): The type of the data (&#39;array&#39;, &#39;file&#39;, or &#39;regex&#39;).</span>
+<span class="sd">        _format (str): The format of the data dimensions.</span>
+<span class="sd">        _shape (tuple): The shape of the data.</span>
+<span class="sd">        _ndim (int): The number of dimensions of the data.</span>
+<span class="sd">        _ndim_spatial (int): The number of spatial dimensions of the data.</span>
+<span class="sd">        _nchannels (int): The number of channels in the data.</span>
+<span class="sd">        _channels_separated (bool): Whether the channels are separated.</span>
+<span class="sd">        _numbers (list): The list of numbers for regex patterns.</span>
+<span class="sd">        _scale (tuple): The scale of the spatial dimensions.</span>
+<span class="sd">        _pos_symbol (dict): The position of each symbol in the format.</span>
+<span class="sd">        _transformation (dict): The transformation applied to the data.</span>
+<span class="sd">        _save_folder (str): The folder where the dataset is saved.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
     <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initializes the Dataset object with default values.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_data</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_dtype</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_format</span> <span class="o">=</span> <span class="kc">None</span>
@@ -177,6 +199,15 @@
 <div class="viewcode-block" id="Dataset.get_format">
 <a class="viewcode-back" href="../../API_dataset.html#registration_tools.Dataset.get_format">[docs]</a>
     <span class="k">def</span> <span class="nf">get_format</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Determines the format of the data.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            data (str or np.ndarray): The data to determine the format of.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            str: The format of the data (&#39;array&#39;, &#39;file&#39;, or &#39;regex&#39;).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
             <span class="k">return</span> <span class="s2">&quot;array&quot;</span>
         <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
@@ -196,8 +227,8 @@
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Checks if all files exist based on the paths with regex patterns and numbers.</span>
 
-<span class="sd">        Returns:</span>
-<span class="sd">            dict: A dictionary with the paths as keys and a boolean indicating if the file exists as values.</span>
+<span class="sd">        Raises:</span>
+<span class="sd">            FileNotFoundError: If any file does not exist.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dtype</span> <span class="o">==</span> <span class="s2">&quot;file&quot;</span><span class="p">:</span>
             <span class="n">iterate</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="p">]</span> <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channels_separated</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data</span>
@@ -222,7 +253,10 @@
 <span class="sd">        Checks if all files have consistent shapes and number of dimensions.</span>
 
 <span class="sd">        Returns:</span>
-<span class="sd">            tuple: A tuple containing the shape and number of dimensions if consistent, otherwise raises an error.</span>
+<span class="sd">            tuple: A tuple containing the shape and number of dimensions if consistent.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            ValueError: If the shapes or number of dimensions are inconsistent.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
 
         <span class="n">expected_shape</span> <span class="o">=</span> <span class="kc">None</span>
@@ -270,6 +304,9 @@
     <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Returns a string representation of the Dataset object, including its metadata.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            str: A string representation of the Dataset object.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Dataset(dtype=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_dtype</span><span class="si">}</span><span class="s2">, format=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_format</span><span class="si">}</span><span class="s2">, shape=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_shape</span><span class="si">}</span><span class="s2">, &quot;</span>
                 <span class="sa">f</span><span class="s2">&quot;ndim=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_ndim</span><span class="si">}</span><span class="s2">, nchannels=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_nchannels</span><span class="si">}</span><span class="s2">, channels_separated=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_channels_separated</span><span class="si">}</span><span class="s2">, scale=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_scale</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
@@ -308,9 +345,14 @@
 
 <span class="sd">        Args:</span>
 <span class="sd">            index (int): The time index to retrieve the image from.</span>
+<span class="sd">            channel (int): The channel to retrieve the image from.</span>
+<span class="sd">            downsample (tuple): The downsample factors for each spatial dimension. If None, no downsample is applied (default).</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            np.ndarray: The image at the specified time index.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            ValueError: If the downsample length is not equal to the number of spatial dimensions.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
 
         <span class="k">if</span> <span class="n">downsample</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -362,13 +404,19 @@
 <a class="viewcode-back" href="../../API_dataset.html#registration_tools.Dataset.get_time_file">[docs]</a>
     <span class="k">def</span> <span class="nf">get_time_file</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path_tmp_file</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">channel</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">downsample</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Retrieves the image at the specified time index.</span>
+<span class="sd">        Retrieves the image at the specified time index and saves it to a temporary file.</span>
 
 <span class="sd">        Args:</span>
+<span class="sd">            path_tmp_file (str): The temporary file path to save the downsampled image.</span>
 <span class="sd">            index (int): The time index to retrieve the image from.</span>
+<span class="sd">            channel (int): The channel to retrieve the image from.</span>
+<span class="sd">            downsample (tuple): The downsample factors for each spatial dimension. If None, no downsample is applied (default).</span>
 
 <span class="sd">        Returns:</span>
-<span class="sd">            np.ndarray: The image at the specified time index.</span>
+<span class="sd">            str: The path to the temporary file containing the image.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            ValueError: If the downsample length is not equal to the number of spatial dimensions.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
 
         <span class="k">if</span> <span class="n">downsample</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -473,7 +521,7 @@
 <span class="sd">            channel (int): The channel to iterate over.</span>
 <span class="sd">            downsample (tuple): The downsample factors for each spatial dimension.</span>
 <span class="sd">            return_position (bool): Whether to return the position along with the data.</span>
-<span class="sd">            </span>
+
 <span class="sd">        Returns:</span>
 <span class="sd">            DataIterator: An iterator over the dataset.</span>
 <span class="sd">        &quot;&quot;&quot;</span>

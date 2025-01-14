@@ -46,16 +46,163 @@
 <dt class="sig sig-object py" id="registration_tools.Dataset">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">registration_tools.</span></span><span class="sig-name descname"><span class="pre">Dataset</span></span><a class="reference internal" href="_modules/registration_tools/dataset.html#Dataset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#registration_tools.Dataset" title="Link to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>A class to represent a dataset of multidimensional images.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="registration_tools.Dataset._data">
+<span class="sig-name descname"><span class="pre">_data</span></span><a class="headerlink" href="#registration_tools.Dataset._data" title="Link to this definition">¶</a></dt>
+<dd><p>The data of the dataset.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>list or np.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="registration_tools.Dataset._dtype">
+<span class="sig-name descname"><span class="pre">_dtype</span></span><a class="headerlink" href="#registration_tools.Dataset._dtype" title="Link to this definition">¶</a></dt>
+<dd><p>The type of the data (‘array’, ‘file’, or ‘regex’).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="registration_tools.Dataset._format">
+<span class="sig-name descname"><span class="pre">_format</span></span><a class="headerlink" href="#registration_tools.Dataset._format" title="Link to this definition">¶</a></dt>
+<dd><p>The format of the data dimensions.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="registration_tools.Dataset._shape">
+<span class="sig-name descname"><span class="pre">_shape</span></span><a class="headerlink" href="#registration_tools.Dataset._shape" title="Link to this definition">¶</a></dt>
+<dd><p>The shape of the data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="registration_tools.Dataset._ndim">
+<span class="sig-name descname"><span class="pre">_ndim</span></span><a class="headerlink" href="#registration_tools.Dataset._ndim" title="Link to this definition">¶</a></dt>
+<dd><p>The number of dimensions of the data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="registration_tools.Dataset._ndim_spatial">
+<span class="sig-name descname"><span class="pre">_ndim_spatial</span></span><a class="headerlink" href="#registration_tools.Dataset._ndim_spatial" title="Link to this definition">¶</a></dt>
+<dd><p>The number of spatial dimensions of the data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="registration_tools.Dataset._nchannels">
+<span class="sig-name descname"><span class="pre">_nchannels</span></span><a class="headerlink" href="#registration_tools.Dataset._nchannels" title="Link to this definition">¶</a></dt>
+<dd><p>The number of channels in the data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="registration_tools.Dataset._channels_separated">
+<span class="sig-name descname"><span class="pre">_channels_separated</span></span><a class="headerlink" href="#registration_tools.Dataset._channels_separated" title="Link to this definition">¶</a></dt>
+<dd><p>Whether the channels are separated.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="registration_tools.Dataset._numbers">
+<span class="sig-name descname"><span class="pre">_numbers</span></span><a class="headerlink" href="#registration_tools.Dataset._numbers" title="Link to this definition">¶</a></dt>
+<dd><p>The list of numbers for regex patterns.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="registration_tools.Dataset._scale">
+<span class="sig-name descname"><span class="pre">_scale</span></span><a class="headerlink" href="#registration_tools.Dataset._scale" title="Link to this definition">¶</a></dt>
+<dd><p>The scale of the spatial dimensions.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="registration_tools.Dataset._pos_symbol">
+<span class="sig-name descname"><span class="pre">_pos_symbol</span></span><a class="headerlink" href="#registration_tools.Dataset._pos_symbol" title="Link to this definition">¶</a></dt>
+<dd><p>The position of each symbol in the format.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="registration_tools.Dataset._transformation">
+<span class="sig-name descname"><span class="pre">_transformation</span></span><a class="headerlink" href="#registration_tools.Dataset._transformation" title="Link to this definition">¶</a></dt>
+<dd><p>The transformation applied to the data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="registration_tools.Dataset._save_folder">
+<span class="sig-name descname"><span class="pre">_save_folder</span></span><a class="headerlink" href="#registration_tools.Dataset._save_folder" title="Link to this definition">¶</a></dt>
+<dd><p>The folder where the dataset is saved.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="registration_tools.Dataset.check_consistent_shapes">
 <span class="sig-name descname"><span class="pre">check_consistent_shapes</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/registration_tools/dataset.html#Dataset.check_consistent_shapes"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#registration_tools.Dataset.check_consistent_shapes" title="Link to this definition">¶</a></dt>
 <dd><p>Checks if all files have consistent shapes and number of dimensions.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>A tuple containing the shape and number of dimensions if consistent, otherwise raises an error.</p>
+<dd class="field-odd"><p>A tuple containing the shape and number of dimensions if consistent.</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
 <dd class="field-even"><p>tuple</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – If the shapes or number of dimensions are inconsistent.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -65,11 +212,8 @@
 <span class="sig-name descname"><span class="pre">check_files_exist</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/registration_tools/dataset.html#Dataset.check_files_exist"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#registration_tools.Dataset.check_files_exist" title="Link to this definition">¶</a></dt>
 <dd><p>Checks if all files exist based on the paths with regex patterns and numbers.</p>
 <dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>A dictionary with the paths as keys and a boolean indicating if the file exists as values.</p>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p>dict</p>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>FileNotFoundError</strong> – If any file does not exist.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -120,7 +264,19 @@
 <dl class="py method">
 <dt class="sig sig-object py" id="registration_tools.Dataset.get_format">
 <span class="sig-name descname"><span class="pre">get_format</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/registration_tools/dataset.html#Dataset.get_format"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#registration_tools.Dataset.get_format" title="Link to this definition">¶</a></dt>
-<dd></dd></dl>
+<dd><p>Determines the format of the data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>data</strong> (<em>str</em><em> or </em><em>np.ndarray</em>) – The data to determine the format of.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The format of the data (‘array’, ‘file’, or ‘regex’).</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="registration_tools.Dataset.get_metadata">
@@ -156,13 +312,20 @@
 <dd><p>Retrieves the image at the specified time index.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>index</strong> (<em>int</em>) – The time index to retrieve the image from.</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>index</strong> (<em>int</em>) – The time index to retrieve the image from.</p></li>
+<li><p><strong>channel</strong> (<em>int</em>) – The channel to retrieve the image from.</p></li>
+<li><p><strong>downsample</strong> (<em>tuple</em>) – The downsample factors for each spatial dimension. If None, no downsample is applied (default).</p></li>
+</ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>The image at the specified time index.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>np.ndarray</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>ValueError</strong> – If the downsample length is not equal to the number of spatial dimensions.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -170,16 +333,24 @@
 <dl class="py method">
 <dt class="sig sig-object py" id="registration_tools.Dataset.get_time_file">
 <span class="sig-name descname"><span class="pre">get_time_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path_tmp_file</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">index</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">channel</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">downsample</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/registration_tools/dataset.html#Dataset.get_time_file"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#registration_tools.Dataset.get_time_file" title="Link to this definition">¶</a></dt>
-<dd><p>Retrieves the image at the specified time index.</p>
+<dd><p>Retrieves the image at the specified time index and saves it to a temporary file.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>index</strong> (<em>int</em>) – The time index to retrieve the image from.</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>path_tmp_file</strong> (<em>str</em>) – The temporary file path to save the downsampled image.</p></li>
+<li><p><strong>index</strong> (<em>int</em>) – The time index to retrieve the image from.</p></li>
+<li><p><strong>channel</strong> (<em>int</em>) – The channel to retrieve the image from.</p></li>
+<li><p><strong>downsample</strong> (<em>tuple</em>) – The downsample factors for each spatial dimension. If None, no downsample is applied (default).</p></li>
+</ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>The image at the specified time index.</p>
+<dd class="field-even"><p>The path to the temporary file containing the image.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>np.ndarray</p>
+<dd class="field-odd"><p>str</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>ValueError</strong> – If the downsample length is not equal to the number of spatial dimensions.</p>
 </dd>
 </dl>
 </dd></dl>
