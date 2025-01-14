@@ -18,12 +18,12 @@ setup(
             # e.g., 'my-tool=my_package.module:main_function'
         ],
     },
-    author='Your Name',
-    author_email='your.email@example.com',
+    author='Gabriel Torregrosa Cortés',
+    author_email='g.torregrosa@example.com',
     description='A description of your project',
     long_description=open('../README.md').read(),
     long_description_content_type='text/markdown',
-    url='https://github.com/yourusername/registration_tools',  # Update with your project's URL
+    url='https://github.com/gatocor/registration_tools',  # Update with your project's URL
     classifiers=[
         'Programming Language :: Python :: 3',
         'License :: OSI Approved :: MIT License',

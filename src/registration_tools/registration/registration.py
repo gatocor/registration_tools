@@ -369,7 +369,7 @@ def register(
                 trnsf,
                 dataset._scale,
                 vectorfield_spacing,
-                pos_float
+                pos_ref
             )
             np.save(f"{directory_vectorfield}/vectorfield_{file_float:04d}_{file_ref:04d}.npy", vectors)
 
@@ -458,8 +458,8 @@ def register(
         if make_vectorfield:
             vectorfield_files = [f"{directory_vectorfield}/vectorfield_{num:04d}_{num-1:04d}.npy" for num in numbers if num != origin]
             vectorfields = [np.load(file) for file in vectorfield_files]
-            joint_vectorfield = np.concatenate(vectorfields, axis=0)
-            np.save(f"{directory_vectorfield}/joint_vectorfield.npy", joint_vectorfield)
+            vectorfield = np.concatenate(vectorfields, axis=0)
+            np.save(f"{directory_vectorfield}/vectorfield.npy", vectorfield)
 
             # Remove original vectorfield files
             for file in vectorfield_files:
@@ -471,8 +471,8 @@ def register(
                 for dim in range(dataset._ndim_spatial):
                     projection_files = [f"{directory_projections}/projections_ch{ch}/projections_{dim}_{num:04d}.tiff" for num in numbers]
                     projections = [imread(file)[np.newaxis,:,:] for file in projection_files]
-                    joint_projection = np.concatenate(projections, axis=0)
-                    imsave(f"{directory_projections}/projections_ch{ch}/joint_projections_{dim}.tiff", joint_projection)
+                    projection = np.concatenate(projections, axis=0)
+                    imsave(f"{directory_projections}/projections_ch{ch}/projections_{dim}.tiff", projection)
                     
                     # Remove original projection files
                     for file in projection_files:
@@ -484,8 +484,8 @@ def register(
                 for dim in range(dataset._ndim_spatial):
                     old_projection_files = [f"{directory_projections}/old_projections_ch{ch}/old_projections_{dim}_{num:04d}.tiff" for num in numbers]
                     old_projections = [imread(file)[np.newaxis,:,:] for file in old_projection_files]
-                    joint_old_projection = np.concatenate(old_projections, axis=0)
-                    imsave(f"{directory_projections}/old_projections_ch{ch}/joint_old_projections_{dim}.tiff", joint_old_projection)
+                    old_projection = np.concatenate(old_projections, axis=0)
+                    imsave(f"{directory_projections}/old_projections_ch{ch}/old_projections_{dim}.tiff", old_projection)
 
                     # Remove original old projection files
                     for file in old_projection_files:
@@ -542,17 +542,20 @@ def transformation_to_vectorfield(mask, transformation, spacing, separation, tim
     # Create points from the mask
     slices = tuple(slice(None, None, separation) for i in range(mask.ndim))
     points = np.argwhere(mask[slices])*separation
-    points = points[:, ::-1].tolist()
+    sp = np.array(spacing).reshape(1,-1)
+    points = (points*sp)[:,::-1]
     points_vt = vt.vtPointList(points)
-    points_vt.setSpacing(spacing[::-1])
 
     # Apply transformation
     transformed_points = vt.apply_trsf_to_points(points_vt, transformation).copy_to_array()
+    points = points[:,::-1]/sp
+    transformed_points = transformed_points[:,::-1]/sp
 
     # Convert points and transformed points to napari vector format
     vectors = np.zeros((len(points), 2, mask.ndim + 1))
-    vectors[:, 0, :-1] = points
-    vectors[:, 1, :-1] = transformed_points
-    vectors[:, :, -1] = time
+    vectors[:, 0, 1:] = (points)
+    vectors[:, 1, 1:] = (transformed_points-points)
+    vectors[:, 0, 0] = time
+    vectors[:, 1, 0] = 0
 
     return vectors

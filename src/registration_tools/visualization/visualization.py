@@ -55,7 +55,7 @@ def plot_projections(viewer, dataset, projection, channels=None, old=False):
     del scale[projection]
 
     for pos, ch in enumerate(channels):
-        path = os.path.join(dataset._save_folder, "projections", f"{add_old}projections_ch{ch}", f"joint_{add_old}projections_{projection}.tiff")
+        path = os.path.join(dataset._save_folder, "projections", f"{add_old}projections_ch{ch}", f"{add_old}projections_{projection}.tiff")
         if not os.path.exists(path):
             raise ValueError("Projection file does not exist.")
 
@@ -79,14 +79,14 @@ def plot_projections_difference(viewer, dataset, projection, channel=0, old=True
     scale = list(dataset._scale)
     del scale[projection]
 
-    path = os.path.join(dataset._save_folder, "projections", f"projections_ch{channel}", f"joint_projections_{projection}.tiff")
+    path = os.path.join(dataset._save_folder, "projections", f"projections_ch{channel}", f"projections_{projection}.tiff")
     image_current_registered = imread(path)[:-1]
     viewer.add_image(image_current_registered, scale=scale, opacity=0.5, colormap=cmaps[0], blending='additive')
 
     image_next_registered = imread(path)[1:]
     viewer.add_image(image_next_registered, scale=scale, opacity=0.5, colormap=cmaps[1], blending='additive')
 
-    path = os.path.join(dataset._save_folder, "projections", f"old_projections_ch{channel}", f"joint_old_projections_{projection}.tiff")
+    path = os.path.join(dataset._save_folder, "projections", f"old_projections_ch{channel}", f"old_projections_{projection}.tiff")
     if old and not os.path.exists(path):
         print("Warning: Old projection file does not exist.")
         return
@@ -108,7 +108,7 @@ def plot_vectorfield(viewer, dataset):
 
     vectorfield = np.load(path)
 
-    viewer.add_vectors(vectorfield)
+    viewer.add_vectors(vectorfield, scale=(1,*dataset._scale))
 
 def make_video(viewer, save_file, fps=10, zooms=None, angles=None, canvas_only=True):
     """

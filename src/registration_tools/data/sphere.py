@@ -3,7 +3,7 @@ import tifffile
 import numpy as np
 from ..dataset import Dataset, create_dataset
 
-def sphere(path, num_images=10, image_size=100, num_channels=1, min_radius=5, max_radius=20, jump=2, stride=(3, 2, 1), verbose=False):
+def sphere(path, num_images=10, image_size=100, num_channels=1, min_radius=5, max_radius=20, jump=2, stride=(3, 2, 1), decay_factor=0.5, verbose=False):
     """
     This function creates a series of 3D images a sphere moving along an L-shaped path while increasing the radius.
     The radius of the spheres increases linearly from min_radius to max_radius across the images.
@@ -19,6 +19,7 @@ def sphere(path, num_images=10, image_size=100, num_channels=1, min_radius=5, ma
         max_radius (int): The maximum radius of the spheres. Default is 20.
         jump (int): The step size for the L-shaped path points. Default is 2.
         stride (tuple): The stride to apply when saving the images. Default is (1, 2, 3).
+        decay_factor (float): The exponential decay factor for the Gaussian intensity. Default is 0.5.
         verbose (bool): If True, print detailed information. Default is False.
 
     Returns:
@@ -57,7 +58,7 @@ def sphere(path, num_images=10, image_size=100, num_channels=1, min_radius=5, ma
         X, Y, Z = np.meshgrid(np.arange(image_size), np.arange(image_size), np.arange(image_size), indexing='ij')
         distances = np.sqrt((X - x)**2 + (Y - y)**2 + (Z - z)**2)
         mask = distances < radius
-        image[mask] = 255 * np.exp(-0.5 * (distances[mask] / radius)**2)
+        image[mask] = 255 * np.exp(-decay_factor * (distances[mask] / radius)**2)
         
         for channel in range(num_channels):
             channel_path = os.path.join(path, f"channel_{channel}")
@@ -70,3 +71,4 @@ def sphere(path, num_images=10, image_size=100, num_channels=1, min_radius=5, ma
     dataset.save(os.path.join(path))
 
     return dataset
+
