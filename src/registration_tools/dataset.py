@@ -118,7 +118,29 @@ def load_dataset(directory):
     return dataset
 
 class Dataset:
+    """
+    A class to represent a dataset of multidimensional images.
+
+    Attributes:
+        _data (list or np.ndarray): The data of the dataset.
+        _dtype (str): The type of the data ('array', 'file', or 'regex').
+        _format (str): The format of the data dimensions.
+        _shape (tuple): The shape of the data.
+        _ndim (int): The number of dimensions of the data.
+        _ndim_spatial (int): The number of spatial dimensions of the data.
+        _nchannels (int): The number of channels in the data.
+        _channels_separated (bool): Whether the channels are separated.
+        _numbers (list): The list of numbers for regex patterns.
+        _scale (tuple): The scale of the spatial dimensions.
+        _pos_symbol (dict): The position of each symbol in the format.
+        _transformation (dict): The transformation applied to the data.
+        _save_folder (str): The folder where the dataset is saved.
+    """
+
     def __init__(self):
+        """
+        Initializes the Dataset object with default values.
+        """
         self._data = None
         self._dtype = None
         self._format = None
@@ -134,6 +156,15 @@ class Dataset:
         self._save_folder = None
         
     def get_format(self, data):
+        """
+        Determines the format of the data.
+
+        Args:
+            data (str or np.ndarray): The data to determine the format of.
+
+        Returns:
+            str: The format of the data ('array', 'file', or 'regex').
+        """
         if isinstance(data, np.ndarray):
             return "array"
         elif isinstance(data, str):
@@ -150,8 +181,8 @@ class Dataset:
         """
         Checks if all files exist based on the paths with regex patterns and numbers.
 
-        Returns:
-            dict: A dictionary with the paths as keys and a boolean indicating if the file exists as values.
+        Raises:
+            FileNotFoundError: If any file does not exist.
         """
         if self._dtype == "file":
             iterate = [self._data] if not self._channels_separated else self._data
@@ -173,7 +204,10 @@ class Dataset:
         Checks if all files have consistent shapes and number of dimensions.
 
         Returns:
-            tuple: A tuple containing the shape and number of dimensions if consistent, otherwise raises an error.
+            tuple: A tuple containing the shape and number of dimensions if consistent.
+
+        Raises:
+            ValueError: If the shapes or number of dimensions are inconsistent.
         """
 
         expected_shape = None
@@ -220,9 +254,12 @@ class Dataset:
     def __repr__(self):
         """
         Returns a string representation of the Dataset object, including its metadata.
+
+        Returns:
+            str: A string representation of the Dataset object.
         """
         return (f"Dataset(dtype={self._dtype}, format={self._format}, shape={self._shape}, "
-                f"ndim={self._ndim}, nchannels={self._nchannels}, channels_separated={self._channels_separated})")
+                f"ndim={self._ndim}, nchannels={self._nchannels}, channels_separated={self._channels_separated}, scale={self._scale})")
     
     def get_metadata(self):
         """
@@ -253,9 +290,14 @@ class Dataset:
 
         Args:
             index (int): The time index to retrieve the image from.
+            channel (int): The channel to retrieve the image from.
+            downsample (tuple): The downsample factors for each spatial dimension. If None, no downsample is applied (default).
 
         Returns:
             np.ndarray: The image at the specified time index.
+
+        Raises:
+            ValueError: If the downsample length is not equal to the number of spatial dimensions.
         """
 
         if downsample is not None:
@@ -304,13 +346,19 @@ class Dataset:
 
     def get_time_file(self, path_tmp_file, index, channel=0, downsample=None):
         """
-        Retrieves the image at the specified time index.
+        Retrieves the image at the specified time index and saves it to a temporary file.
 
         Args:
+            path_tmp_file (str): The temporary file path to save the downsampled image.
             index (int): The time index to retrieve the image from.
+            channel (int): The channel to retrieve the image from.
+            downsample (tuple): The downsample factors for each spatial dimension. If None, no downsample is applied (default).
 
         Returns:
-            np.ndarray: The image at the specified time index.
+            str: The path to the temporary file containing the image.
+
+        Raises:
+            ValueError: If the downsample length is not equal to the number of spatial dimensions.
         """
 
         if downsample is not None:
@@ -409,7 +457,7 @@ class Dataset:
             channel (int): The channel to iterate over.
             downsample (tuple): The downsample factors for each spatial dimension.
             return_position (bool): Whether to return the position along with the data.
-            
+
         Returns:
             DataIterator: An iterator over the dataset.
         """
@@ -429,6 +477,15 @@ class Dataset:
             FileIterator: An iterator over the dataset.
         """
         return FileIterator(self, path_tmp_file, channel, downsample, return_position)
+
+    def get_spatial_shape(self):
+        """
+        Returns the spatial dimensions of the dataset in the order specified by the format.
+
+        Returns:
+            tuple: A tuple representing the spatial dimensions of the dataset in the order specified by the format.
+        """
+        return tuple(self._shape[self._pos_symbol[dim]] for dim in self._format if dim in "XYZ")
 
 class DataIterator:
     def __init__(self, dataset, channel=0, downsample=None, return_position=False):

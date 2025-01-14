@@ -8,13 +8,35 @@ from ..dataset import Dataset, load_dataset
 import json
 import atexit
 from tqdm import tqdm
+import warnings  # Add this import
 
-AXIS_FORMATS = [
-    "(X,Y)",
-    "(Z,Y,X)",
-    "(C,Y,X)",
-    "(C,Z,Y,X)"
-]
+def get_pyramid_levels(dataset, maximum_size = 100, verbose = True):
+    """
+    Returns the lowest and highest pyramid levels for the dataset.
+
+    Args:
+        dataset (Dataset): The dataset object.
+        maximum_size (int, optional): The maximum size for the pyramid levels. Default is 100.
+        verbose (bool, optional): If True, print the pyramid levels. Default is True.
+
+    Returns:
+        tuple: The lowest and highest pyramid levels.
+    """
+
+    shape = np.array(dataset.get_spatial_shape())
+    n = int(np.ceil(np.max(np.log2(shape))))
+    ll_threshold = n
+    for level, n in enumerate(range(n, -1, -1)):
+        if 2**n < 32:
+            print(f"Level {level} is below 32 per dimension. Registration will use up to level {level-1} when computing.")
+            break
+        new_shape = np.minimum(2**n, shape)
+        if verbose:
+            print(f"Level {level}: {new_shape}")
+        if np.any(2**n > maximum_size):
+            ll_threshold = level
+
+    return ll_threshold, level - 1
 
 def register(
     dataset,
@@ -54,6 +76,7 @@ def register(
             translation2D, translation3D, translation-scaling2D, translation-scaling3D,
             rigid2D, rigid3D, rigid, similitude2D, similitude3D, similitude,
             affine2D, affine3D, affine, vectorfield2D, vectorfield3D, vectorfield, vector
+
         pyramid_lowest_level (int, optional): pyramid lowest level. Default is 0.
         pyramid_highest_level: pyramid highest level. Default is 3: it corresponds to 32x32x32 for an original 256x256x256 image.
         registration_direction (str, optional): Direction of registration. Options are "forward", "backward". Default is None.
@@ -164,9 +187,7 @@ def register(
         [-parallel-scheduling|-ps default|static|dynamic-one|dynamic|guided] # type
         of scheduling for open mp
         ### general parameters ###
-        -verbose|-v: increase verboseness
-            parameters being read several time, use '-nv -v -v ...'
-            to set the verboseness level
+        -verbose|-v: increase verboseness parameters being read several time, use '-nv -v -v ...' to set the verboseness level
         -debug|-D: increase debug level
         -no-debug|-nodebug: no debug indication
         -trace:
@@ -176,9 +197,7 @@ def register(
         -no-time|-notime:
         -trace-memory|-memory: keep trace of allocated pointers (in instrumented procedures)
         display some information about memory consumption
-        Attention: it disables the parallel mode, because of concurrent access to memory
-            parallel mode may be restored by specifying '-parallel' after '-memory'
-            but unexpected crashes may be experienced
+        Attention: it disables the parallel mode, because of concurrent access to memory parallel mode may be restored by specifying '-parallel' after '-memory' but unexpected crashes may be experienced
         -no-memory|-nomemory:
         -h: print option list
         -help: print option list + details
@@ -289,7 +308,11 @@ def register(
     def cleanup():
         if debug == 0 and os.path.exists(directory_tmp):
             shutil.rmtree(directory_tmp)
+        warnings.filterwarnings("default", category=UserWarning, message=".*low contrast image.*")
     atexit.register(cleanup)
+
+    # Suppress skimage warnings for low contrast images
+    warnings.filterwarnings("ignore", category=UserWarning, message=".*low contrast image.*")
 
     #Check file is not too heavy
     tmp_file = dataset.get_time_file(os.path.join(directory_tmp, "ref"), 0, 0, downsample)
@@ -344,7 +367,7 @@ def register(
             vectors = transformation_to_vectorfield(
                 img_ref.to_array() > vectorfield_threshold,
                 trnsf,
-                dataset._scale[::-1],
+                dataset._scale,
                 vectorfield_spacing,
                 pos_float
             )

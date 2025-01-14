@@ -29,7 +29,7 @@ def plot_images(viewer, dataset, channels=None, numbers=None, downsample=(1, 1, 
         for image in dataset.get_data_iterator(channel=ch, downsample=downsample):
             images.append(image[np.newaxis, ...])
 
-        viewer.add_image(np.concatenate(images, axis=0), scale=dataset._scale, opacity=0.5, blending='additive', colormap=cmaps[ch], name=f'Channel {ch}')
+        viewer.add_image(np.concatenate(images, axis=0), scale=(dataset._scale), opacity=0.5, blending='additive', colormap=cmaps[ch], name=f'Channel {ch}')
 
 def plot_projections(viewer, dataset, projection, channels=None, old=False):
     """
@@ -38,7 +38,7 @@ def plot_projections(viewer, dataset, projection, channels=None, old=False):
     Args:
         viewer (napari.Viewer): The napari viewer instance.
         dataset (Dataset): The dataset object.
-        projection (str): The projection type (e.g., 'XY', 'XZ', 'YZ').
+        projection (int): The projection axis (e.g., 0 for X, 1 for Y, 2 for Z).
         channels (list, optional): List of channels to plot. If None, all channels are plotted.
         old (bool, optional): Whether to plot old projections. Default is False.
     """
@@ -51,6 +51,9 @@ def plot_projections(viewer, dataset, projection, channels=None, old=False):
     if channels is None:
         channels = range(dataset.num_channels)
 
+    scale = list(dataset._scale)
+    del scale[projection]
+
     for pos, ch in enumerate(channels):
         path = os.path.join(dataset._save_folder, "projections", f"{add_old}projections_ch{ch}", f"joint_{add_old}projections_{projection}.tiff")
         if not os.path.exists(path):
@@ -58,7 +61,7 @@ def plot_projections(viewer, dataset, projection, channels=None, old=False):
 
         image = imread(path)
 
-        viewer.add_image(image, opacity=0.5, colormap=cmaps[pos], blending='additive')
+        viewer.add_image(image, scale=scale, opacity=0.5, colormap=cmaps[pos], blending='additive')
 
 def plot_projections_difference(viewer, dataset, projection, channel=0, old=True):
     """
@@ -67,18 +70,21 @@ def plot_projections_difference(viewer, dataset, projection, channel=0, old=True
     Args:
         viewer (napari.Viewer): The napari viewer instance.
         dataset (Dataset): The dataset object.
-        projection (str): The projection type (e.g., 'XY', 'XZ', 'YZ').
+        projection (int): The projection axis (e.g., 0 for X, 1 for Y, 2 for Z).
         channel (int, optional): The channel to plot. Default is 0.
         old (bool, optional): Whether to plot old projections. Default is True.
     """
     cmaps = ['red', 'green', 'blue']
 
+    scale = list(dataset._scale)
+    del scale[projection]
+
     path = os.path.join(dataset._save_folder, "projections", f"projections_ch{channel}", f"joint_projections_{projection}.tiff")
     image_current_registered = imread(path)[:-1]
-    viewer.add_image(image_current_registered, opacity=0.5, colormap=cmaps[0], blending='additive')
+    viewer.add_image(image_current_registered, scale=scale, opacity=0.5, colormap=cmaps[0], blending='additive')
 
     image_next_registered = imread(path)[1:]
-    viewer.add_image(image_next_registered, opacity=0.5, colormap=cmaps[1], blending='additive')
+    viewer.add_image(image_next_registered, scale=scale, opacity=0.5, colormap=cmaps[1], blending='additive')
 
     path = os.path.join(dataset._save_folder, "projections", f"old_projections_ch{channel}", f"joint_old_projections_{projection}.tiff")
     if old and not os.path.exists(path):
@@ -86,7 +92,7 @@ def plot_projections_difference(viewer, dataset, projection, channel=0, old=True
         return
 
     image_next_unregistered = imread(path)[1:]
-    viewer.add_image(image_next_unregistered, opacity=0.5, colormap=cmaps[2], blending='additive')
+    viewer.add_image(image_next_unregistered, scale=scale, opacity=0.5, colormap=cmaps[2], blending='additive')
 
 def plot_vectorfield(viewer, dataset):
     """

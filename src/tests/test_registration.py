@@ -6,7 +6,7 @@ import warnings
 from skimage._shared.utils import warn
 from registration_tools.dataset import create_dataset
 from registration_tools.data import sphere
-from registration_tools.registration import register
+from registration_tools.registration import register, get_pyramid_levels
 from skimage.io import imread
 import numpy as np
 
@@ -127,6 +127,17 @@ class TestRegistration(unittest.TestCase):
             expected_center = np.array(image.shape) // 2
 
             self.assertTrue(np.allclose(mean_center, expected_center, atol=2), f"Mean center {mean_center} in channel {channel} is not around the expected center {expected_center}")
+
+    def test_get_pyramid_levels(self):
+        dataset = create_dataset(
+            os.path.join(self.test_folder, "channel_0", "sphere_{:02d}.tiff"),
+            "XYZ",
+            numbers=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+            scale=(1, 1, 1)
+        )
+        lowest_level, highest_level = get_pyramid_levels(dataset, maximum_size=50, verbose=False)
+        self.assertEqual(lowest_level, 1)
+        self.assertEqual(highest_level, 2)
 
 if __name__ == "__main__":
     unittest.main()

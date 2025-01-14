@@ -35,7 +35,7 @@ class TestDataset(unittest.TestCase):
 
         os.remove(cls.temp_file_multichannel)
 
-        os.remove("tests/tmp.tiff")
+        os.remove("tmp.tiff")
 
     def test_dataset_initialization_with_monochannel_files(self):
         dataset = create_dataset(data=self.temp_file_monochannel, format='TXY')
@@ -259,7 +259,7 @@ class TestDataset(unittest.TestCase):
 
     def test_data_iterator_file(self):
         dataset = create_dataset(data=self.temp_file_monochannel, format='TXY')
-        iterator = dataset.get_file_iterator("tests/tmp.tiff")
+        iterator = dataset.get_file_iterator("tmp.tiff")
         expected_data = imread(self.temp_file_monochannel)
         for i, data in enumerate(iterator):
             np.testing.assert_array_equal(imread(data), expected_data[i,:,:])
@@ -267,7 +267,7 @@ class TestDataset(unittest.TestCase):
     def test_data_iterator_regex(self):
         regex_pattern = os.path.join(self.temp_dir, 'image_{:03d}.tif')
         dataset = create_dataset(data=regex_pattern, format='XY', numbers=list(range(3)))
-        iterator = dataset.get_file_iterator("tests/tmp.tiff")
+        iterator = dataset.get_file_iterator("tmp.tiff")
         for i, data in enumerate(iterator):
             expected_data = imread(regex_pattern.format(i))
             np.testing.assert_array_equal(imread(data), expected_data)
@@ -275,7 +275,7 @@ class TestDataset(unittest.TestCase):
     def test_data_iterator_array(self):
         data = np.random.rand(3, 10, 10)
         dataset = create_dataset(data=data, format='TXY')
-        iterator = dataset.get_file_iterator("tests/tmp.tiff")
+        iterator = dataset.get_file_iterator("tmp.tiff")
         for i, data_slice in enumerate(iterator):
             np.testing.assert_array_equal(imread(data_slice), data[i])
 

@@ -21,13 +21,13 @@ jobs:
         environment-file: environment.yml
         auto-update-conda: true
 
-    - name: Install dependencies
-      run: |
-        pip install sphinx sphinx_rtd_theme
-
     - name: Build documentation
+      shell: bash -el {0}
       run: |
-        cd docs
+        pip install sphinx sphinx_rtd_theme myst-parser
+        cd src
+        pip install -e . --no-deps
+        cd ../docs
         make html
 
     - name: Deploy to GitHub Pages

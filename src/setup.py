@@ -5,9 +5,12 @@ setup(
     version='0.1',
     packages=find_packages(),
     install_requires=[
-        'scikit-image',
-        'napari',
+        'scikit-image'
     ],
+    extras_require={
+        'vt': ['vt-python'],
+        'napari': ['napari']
+    },
     test_suite='tests',
     entry_points={
         'console_scripts': [
