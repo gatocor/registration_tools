@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>registration_tools.dataset &#8212; Registration Tools 0.1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=d1102ebc" />
+    <link rel="stylesheet" type="text/css" href="../../_static/basic.css?v=686e5160" />
+    <link rel="stylesheet" type="text/css" href="../../_static/alabaster.css?v=27fed22d" />
+    <script src="../../_static/documentation_options.js?v=2709fde1"></script>
+    <script src="../../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+   
+  <link rel="stylesheet" href="../../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for registration_tools.dataset</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">re</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="kn">import</span> <span class="n">Counter</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">from</span> <span class="nn">skimage.io</span> <span class="kn">import</span> <span class="n">imread</span><span class="p">,</span> <span class="n">imsave</span>
+<span class="kn">import</span> <span class="nn">json</span>
+
+<span class="k">def</span> <span class="nf">make_tmp_image</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">path_tmp_file</span><span class="p">,</span> <span class="n">downsample</span><span class="p">):</span>
+    <span class="n">slices</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">slice</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">ds</span><span class="p">)</span> <span class="k">for</span> <span class="n">ds</span> <span class="ow">in</span> <span class="n">downsample</span><span class="p">)</span>
+    <span class="n">imsave</span><span class="p">(</span><span class="n">path_tmp_file</span><span class="p">,</span> <span class="n">image</span><span class="p">[</span><span class="n">slices</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">path_tmp_file</span>
+
+<div class="viewcode-block" id="create_dataset">
+<a class="viewcode-back" href="../../API.html#registration_tools.create_dataset">[docs]</a>
+<span class="k">def</span> <span class="nf">create_dataset</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="nb">format</span><span class="p">,</span> <span class="n">numbers</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Initializes the Dataset object with a list of paths with regex patterns, a list of numbers,</span>
+<span class="sd">    a format for the numbers, and a scale for the spatial dimensions.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        data (list): A list of paths with regex patterns.</span>
+<span class="sd">        numbers (list): A list of numbers to be substituted in the regex paths.</span>
+<span class="sd">        format (str): The format to be used for the numbers. It can only contain &#39;C&#39;, &#39;T&#39;, &#39;X&#39;, &#39;Y&#39;, &#39;Z&#39;,</span>
+<span class="sd">              each representing a dimension in a multidimensional image. Each character must appear only once.</span>
+<span class="sd">        scale (tuple): A tuple representing the scale for the spatial dimensions. Must be the same length as ndim_spatial.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="bp">self</span> <span class="o">=</span> <span class="n">Dataset</span><span class="p">()</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">_data</span> <span class="o">=</span> <span class="n">data</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_channels_separated</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="s1">&#39;__iter__&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_data</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="n">data_format</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">get_format</span><span class="p">(</span><span class="n">d</span><span class="p">)</span> <span class="o">==</span> <span class="n">data_format</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;All elements in the data list must have the same format (either all file paths, all regex patterns, or all numpy arrays)&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dtype</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dtype</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_channels_separated</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dtype</span> <span class="o">==</span> <span class="s2">&quot;regex&quot;</span> <span class="ow">and</span> <span class="n">numbers</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Numbers must be provided when data is a regex pattern&quot;</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dtype</span> <span class="o">==</span> <span class="s2">&quot;regex&quot;</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_numbers</span> <span class="o">=</span> <span class="n">numbers</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">check_files_exist</span><span class="p">()</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span><span class="n">f</span> <span class="ow">in</span> <span class="p">{</span><span class="s2">&quot;X&quot;</span><span class="p">,</span> <span class="s2">&quot;T&quot;</span><span class="p">,</span> <span class="s2">&quot;Y&quot;</span><span class="p">,</span> <span class="s2">&quot;Z&quot;</span><span class="p">,</span> <span class="s2">&quot;C&quot;</span><span class="p">}</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="nb">format</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Format can only contain &#39;X&#39;, &#39;Y&#39;, &#39;Z&#39;, &#39;T&#39;, and &#39;C&#39;&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="nb">format</span><span class="p">))</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="nb">format</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Format can only contain each of &#39;X&#39;, &#39;Y&#39;, &#39;Z&#39;, &#39;T&#39;, and &#39;C&#39; once&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dtype</span> <span class="o">==</span> <span class="s2">&quot;regex&quot;</span> <span class="ow">and</span> <span class="s2">&quot;T&quot;</span> <span class="ow">in</span> <span class="nb">format</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Format cannot contain &#39;T&#39; when data is a regex pattern&quot;</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dtype</span> <span class="o">!=</span> <span class="s2">&quot;regex&quot;</span> <span class="ow">and</span> <span class="s2">&quot;T&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="nb">format</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Format must contain &#39;T&#39; for time dimension when data is not a regex pattern&quot;</span><span class="p">)</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">_format</span> <span class="o">=</span> <span class="nb">format</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">_ndim_spatial</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">dim</span> <span class="ow">in</span> <span class="nb">format</span> <span class="k">for</span> <span class="n">dim</span> <span class="ow">in</span> <span class="s2">&quot;XYZ&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">scale</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">scale</span><span class="p">)</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ndim_spatial</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Scale must be the same length as the number of spatial dimensions (ndim_spatial)&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_scale</span> <span class="o">=</span> <span class="n">scale</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_scale</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span><span class="p">,)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ndim_spatial</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span> <span class="o">=</span> <span class="p">{</span><span class="n">symbol</span><span class="p">:</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">symbol</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_format</span><span class="p">)}</span>
+
+    <span class="bp">self</span><span class="o">.</span><span class="n">_shape</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ndim</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">check_consistent_shapes</span><span class="p">()</span>
+
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dtype</span> <span class="o">==</span> <span class="s2">&quot;array&quot;</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_numbers</span> <span class="o">=</span> <span class="p">[</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_shape</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">[</span><span class="s2">&quot;T&quot;</span><span class="p">]])]</span>
+    <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dtype</span> <span class="o">==</span> <span class="s2">&quot;file&quot;</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_numbers</span> <span class="o">=</span> <span class="p">[</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_shape</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">[</span><span class="s2">&quot;T&quot;</span><span class="p">]])]</span>
+
+    <span class="k">if</span> <span class="s2">&quot;C&quot;</span> <span class="ow">in</span> <span class="nb">format</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channels_separated</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;If &#39;C&#39; is in the format, only one path can be provided&quot;</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channels_separated</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_nchannels</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="s2">&quot;C&quot;</span> <span class="ow">in</span> <span class="nb">format</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_nchannels</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shape</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">[</span><span class="s2">&quot;C&quot;</span><span class="p">]]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_nchannels</span> <span class="o">=</span> <span class="mi">1</span>
+
+    <span class="k">return</span> <span class="bp">self</span></div>
+
+
+<div class="viewcode-block" id="load_dataset">
+<a class="viewcode-back" href="../../API.html#registration_tools.load_dataset">[docs]</a>
+<span class="k">def</span> <span class="nf">load_dataset</span><span class="p">(</span><span class="n">directory</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Loads the dataset metadata from a JSON file in the specified directory and creates a Dataset object.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        directory (str): The directory where the metadata JSON file is located.</span>
+<span class="sd">    Returns:</span>
+<span class="sd">        Dataset: The Dataset object created from the metadata.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">metadata_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">directory</span><span class="p">,</span> <span class="s2">&quot;dataset.json&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">metadata_path</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Metadata file not found: </span><span class="si">{</span><span class="n">metadata_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">metadata_path</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">metadata</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+
+    <span class="n">dataset</span> <span class="o">=</span> <span class="n">Dataset</span><span class="p">()</span>
+    <span class="n">dataset</span><span class="o">.</span><span class="n">_data</span> <span class="o">=</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">]</span>
+    <span class="n">dataset</span><span class="o">.</span><span class="n">_dtype</span> <span class="o">=</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;dtype&quot;</span><span class="p">]</span>
+    <span class="n">dataset</span><span class="o">.</span><span class="n">_format</span> <span class="o">=</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;format&quot;</span><span class="p">]</span>
+    <span class="n">dataset</span><span class="o">.</span><span class="n">_shape</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;shape&quot;</span><span class="p">])</span>
+    <span class="n">dataset</span><span class="o">.</span><span class="n">_ndim</span> <span class="o">=</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;ndim&quot;</span><span class="p">]</span>
+    <span class="n">dataset</span><span class="o">.</span><span class="n">_ndim_spatial</span> <span class="o">=</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;ndim_spatial&quot;</span><span class="p">]</span>
+    <span class="n">dataset</span><span class="o">.</span><span class="n">_nchannels</span> <span class="o">=</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;nchannels&quot;</span><span class="p">]</span>
+    <span class="n">dataset</span><span class="o">.</span><span class="n">_channels_separated</span> <span class="o">=</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;channels_separated&quot;</span><span class="p">]</span>
+    <span class="n">dataset</span><span class="o">.</span><span class="n">_numbers</span> <span class="o">=</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;numbers&quot;</span><span class="p">]</span>
+    <span class="n">dataset</span><span class="o">.</span><span class="n">_scale</span> <span class="o">=</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;scale&quot;</span><span class="p">]</span>
+    <span class="n">dataset</span><span class="o">.</span><span class="n">_pos_symbol</span> <span class="o">=</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;pos_symbol&quot;</span><span class="p">]</span>
+    <span class="n">dataset</span><span class="o">.</span><span class="n">_transformation</span> <span class="o">=</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;transformation&quot;</span><span class="p">]</span>
+    <span class="n">dataset</span><span class="o">.</span><span class="n">_save_folder</span> <span class="o">=</span> <span class="n">directory</span>
+
+    <span class="k">return</span> <span class="n">dataset</span></div>
+
+
+<div class="viewcode-block" id="Dataset">
+<a class="viewcode-back" href="../../API.html#registration_tools.Dataset">[docs]</a>
+<span class="k">class</span> <span class="nc">Dataset</span><span class="p">:</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_data</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dtype</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_format</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_shape</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ndim</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ndim_spatial</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_nchannels</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_channels_separated</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_numbers</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_scale</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_transformation</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_save_folder</span> <span class="o">=</span> <span class="kc">None</span>
+        
+<div class="viewcode-block" id="Dataset.get_format">
+<a class="viewcode-back" href="../../API.html#registration_tools.Dataset.get_format">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_format</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+            <span class="k">return</span> <span class="s2">&quot;array&quot;</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isfile</span><span class="p">(</span><span class="n">data</span><span class="p">):</span>
+                <span class="k">return</span> <span class="s2">&quot;file&quot;</span>
+            <span class="k">elif</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="sa">r</span><span class="s1">&#39;\{.*\}&#39;</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+                <span class="k">return</span> <span class="s2">&quot;regex&quot;</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Invalid data format&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Data must be a numpy array, a file path, a regex pattern, or an iterator containing those.&quot;</span><span class="p">)</span></div>
+
+            
+<div class="viewcode-block" id="Dataset.check_files_exist">
+<a class="viewcode-back" href="../../API.html#registration_tools.Dataset.check_files_exist">[docs]</a>
+    <span class="k">def</span> <span class="nf">check_files_exist</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Checks if all files exist based on the paths with regex patterns and numbers.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            dict: A dictionary with the paths as keys and a boolean indicating if the file exists as values.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dtype</span> <span class="o">==</span> <span class="s2">&quot;file&quot;</span><span class="p">:</span>
+            <span class="n">iterate</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="p">]</span> <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channels_separated</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data</span>
+            <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">iterate</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
+                    <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;File not found: </span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dtype</span> <span class="o">==</span> <span class="s2">&quot;regex&quot;</span><span class="p">:</span>
+            <span class="n">iterate</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="p">]</span> <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channels_separated</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data</span>
+            <span class="k">for</span> <span class="n">path_with_regex</span> <span class="ow">in</span> <span class="n">iterate</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">number</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_numbers</span><span class="p">:</span>
+                    <span class="n">path</span> <span class="o">=</span> <span class="n">path_with_regex</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">number</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
+                        <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;File not found: </span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="k">return</span></div>
+
+    
+<div class="viewcode-block" id="Dataset.check_consistent_shapes">
+<a class="viewcode-back" href="../../API.html#registration_tools.Dataset.check_consistent_shapes">[docs]</a>
+    <span class="k">def</span> <span class="nf">check_consistent_shapes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Checks if all files have consistent shapes and number of dimensions.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            tuple: A tuple containing the shape and number of dimensions if consistent, otherwise raises an error.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">expected_shape</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">expected_ndim</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dtype</span> <span class="o">==</span> <span class="s2">&quot;file&quot;</span><span class="p">:</span>
+            <span class="n">iterate</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="p">]</span> <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channels_separated</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data</span>
+            <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">iterate</span><span class="p">:</span>
+                <span class="n">image</span> <span class="o">=</span> <span class="n">imread</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">expected_shape</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">expected_shape</span> <span class="o">=</span> <span class="n">image</span><span class="o">.</span><span class="n">shape</span>
+                    <span class="n">expected_ndim</span> <span class="o">=</span> <span class="n">image</span><span class="o">.</span><span class="n">ndim</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">image</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">expected_shape</span> <span class="ow">or</span> <span class="n">image</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="n">expected_ndim</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Inconsistent shape or number of dimensions found in file: </span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2"> with respect other files.&quot;</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dtype</span> <span class="o">==</span> <span class="s2">&quot;regex&quot;</span><span class="p">:</span>
+            <span class="n">iterate</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="p">]</span> <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channels_separated</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data</span>
+            <span class="k">for</span> <span class="n">path_with_regex</span> <span class="ow">in</span> <span class="n">iterate</span><span class="p">:</span>
+                <span class="n">number</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_numbers</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="n">path</span> <span class="o">=</span> <span class="n">path_with_regex</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">number</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
+                    <span class="n">image</span> <span class="o">=</span> <span class="n">imread</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">expected_shape</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="n">expected_shape</span> <span class="o">=</span> <span class="n">image</span><span class="o">.</span><span class="n">shape</span>
+                        <span class="n">expected_ndim</span> <span class="o">=</span> <span class="n">image</span><span class="o">.</span><span class="n">ndim</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="k">if</span> <span class="n">image</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">expected_shape</span> <span class="ow">or</span> <span class="n">image</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="n">expected_ndim</span><span class="p">:</span>
+                            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Inconsistent shape or number of dimensions found in file: </span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2"> with respect other files.&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">iterate</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="p">]</span> <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channels_separated</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data</span>
+            <span class="k">for</span> <span class="n">image</span> <span class="ow">in</span> <span class="n">iterate</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">expected_shape</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">expected_shape</span> <span class="o">=</span> <span class="n">image</span><span class="o">.</span><span class="n">shape</span>
+                    <span class="n">expected_ndim</span> <span class="o">=</span> <span class="n">image</span><span class="o">.</span><span class="n">ndim</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">image</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">expected_shape</span> <span class="ow">or</span> <span class="n">image</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="n">expected_ndim</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Inconsistent shape or number of dimensions found in files.&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">image</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_format</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Number of dimensions in data does not match the length of the format.&quot;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">expected_shape</span><span class="p">,</span> <span class="n">expected_ndim</span></div>
+
+
+    <span class="k">def</span> <span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns a string representation of the Dataset object, including its metadata.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Dataset(dtype=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_dtype</span><span class="si">}</span><span class="s2">, format=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_format</span><span class="si">}</span><span class="s2">, shape=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_shape</span><span class="si">}</span><span class="s2">, &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;ndim=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_ndim</span><span class="si">}</span><span class="s2">, nchannels=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_nchannels</span><span class="si">}</span><span class="s2">, channels_separated=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_channels_separated</span><span class="si">}</span><span class="s2">, scale=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_scale</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+    
+<div class="viewcode-block" id="Dataset.get_metadata">
+<a class="viewcode-back" href="../../API.html#registration_tools.Dataset.get_metadata">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns the metadata of the dataset.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            dict: A dictionary containing the metadata of the dataset.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">metadata</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;data&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="p">,</span>
+            <span class="s2">&quot;dtype&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dtype</span><span class="p">,</span>
+            <span class="s2">&quot;format&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_format</span><span class="p">,</span>
+            <span class="s2">&quot;shape&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_shape</span><span class="p">,</span>
+            <span class="s2">&quot;ndim&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ndim</span><span class="p">,</span>
+            <span class="s2">&quot;ndim_spatial&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ndim_spatial</span><span class="p">,</span>
+            <span class="s2">&quot;nchannels&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_nchannels</span><span class="p">,</span>
+            <span class="s2">&quot;channels_separated&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channels_separated</span><span class="p">,</span>
+            <span class="s2">&quot;numbers&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_numbers</span><span class="p">,</span>
+            <span class="s2">&quot;scale&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scale</span><span class="p">,</span>
+            <span class="s2">&quot;pos_symbol&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">,</span>
+            <span class="s2">&quot;transformation&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transformation</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="n">metadata</span></div>
+
+
+<div class="viewcode-block" id="Dataset.get_time_data">
+<a class="viewcode-back" href="../../API.html#registration_tools.Dataset.get_time_data">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_time_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">channel</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">downsample</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Retrieves the image at the specified time index.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            index (int): The time index to retrieve the image from.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            np.ndarray: The image at the specified time index.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="k">if</span> <span class="n">downsample</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">downsample</span><span class="p">)</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ndim_spatial</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Downsample must be the same length as the number of spatial dimensions (ndim_spatial)&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">downsample</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span><span class="p">,)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ndim_spatial</span>
+
+        <span class="n">slices</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">slice</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">ds</span><span class="p">)</span> <span class="k">for</span> <span class="n">ds</span> <span class="ow">in</span> <span class="n">downsample</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dtype</span> <span class="o">==</span> <span class="s2">&quot;file&quot;</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channels_separated</span><span class="p">:</span>
+            <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data</span>
+            <span class="k">if</span> <span class="s2">&quot;C&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_format</span><span class="p">:</span>
+                <span class="n">image</span> <span class="o">=</span> <span class="n">imread</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">[</span><span class="s2">&quot;T&quot;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">[</span><span class="s2">&quot;C&quot;</span><span class="p">]:</span>
+                    <span class="k">return</span> <span class="n">image</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">[</span><span class="s2">&quot;T&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">channel</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">[</span><span class="s2">&quot;C&quot;</span><span class="p">])[</span><span class="n">slices</span><span class="p">]</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="n">image</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">channel</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">[</span><span class="s2">&quot;C&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">[</span><span class="s2">&quot;T&quot;</span><span class="p">])[</span><span class="n">slices</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">imread</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">[</span><span class="s2">&quot;T&quot;</span><span class="p">])[</span><span class="n">slices</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dtype</span> <span class="o">==</span> <span class="s2">&quot;file&quot;</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channels_separated</span><span class="p">:</span>
+            <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="p">[</span><span class="n">channel</span><span class="p">]</span>
+            <span class="n">image</span> <span class="o">=</span> <span class="n">imread</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">image</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">[</span><span class="s2">&quot;T&quot;</span><span class="p">])[</span><span class="n">slices</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dtype</span> <span class="o">==</span> <span class="s2">&quot;regex&quot;</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channels_separated</span><span class="p">:</span>
+            <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_numbers</span><span class="p">[</span><span class="n">index</span><span class="p">])</span>
+            <span class="n">image</span> <span class="o">=</span> <span class="n">imread</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+            <span class="k">if</span> <span class="s2">&quot;C&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_format</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">image</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">channel</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">[</span><span class="s2">&quot;C&quot;</span><span class="p">])[</span><span class="n">slices</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">image</span><span class="p">[</span><span class="n">slices</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dtype</span> <span class="o">==</span> <span class="s2">&quot;regex&quot;</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channels_separated</span><span class="p">:</span>
+            <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="p">[</span><span class="n">channel</span><span class="p">]</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_numbers</span><span class="p">[</span><span class="n">index</span><span class="p">])</span>
+            <span class="n">image</span> <span class="o">=</span> <span class="n">imread</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">image</span><span class="p">[</span><span class="n">slices</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dtype</span> <span class="o">==</span> <span class="s2">&quot;array&quot;</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channels_separated</span><span class="p">:</span>
+            <span class="k">if</span> <span class="s2">&quot;C&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_format</span><span class="p">:</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">[</span><span class="s2">&quot;T&quot;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">[</span><span class="s2">&quot;C&quot;</span><span class="p">]:</span>
+                    <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">[</span><span class="s2">&quot;T&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">channel</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">[</span><span class="s2">&quot;C&quot;</span><span class="p">])[</span><span class="n">slices</span><span class="p">]</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">channel</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">[</span><span class="s2">&quot;C&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">[</span><span class="s2">&quot;T&quot;</span><span class="p">])[</span><span class="n">slices</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">[</span><span class="s2">&quot;T&quot;</span><span class="p">])[</span><span class="n">slices</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dtype</span> <span class="o">==</span> <span class="s2">&quot;array&quot;</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channels_separated</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="p">[</span><span class="n">channel</span><span class="p">]</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">[</span><span class="s2">&quot;T&quot;</span><span class="p">])[</span><span class="n">slices</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="Dataset.get_time_file">
+<a class="viewcode-back" href="../../API.html#registration_tools.Dataset.get_time_file">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_time_file</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path_tmp_file</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="n">channel</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">downsample</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Retrieves the image at the specified time index.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            index (int): The time index to retrieve the image from.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            np.ndarray: The image at the specified time index.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="k">if</span> <span class="n">downsample</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">downsample</span><span class="p">)</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ndim_spatial</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Downsample must be the same length as the number of spatial dimensions (ndim_spatial)&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">downsample</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span><span class="p">,)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ndim_spatial</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dtype</span> <span class="o">==</span> <span class="s2">&quot;file&quot;</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channels_separated</span><span class="p">:</span>
+            <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data</span>
+            <span class="k">if</span> <span class="s2">&quot;C&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_format</span><span class="p">:</span>
+                <span class="n">image</span> <span class="o">=</span> <span class="n">imread</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">[</span><span class="s2">&quot;T&quot;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">[</span><span class="s2">&quot;C&quot;</span><span class="p">]:</span>
+                    <span class="k">return</span> <span class="n">make_tmp_image</span><span class="p">(</span><span class="n">image</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">[</span><span class="s2">&quot;T&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">channel</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">[</span><span class="s2">&quot;C&quot;</span><span class="p">]),</span> <span class="n">path_tmp_file</span><span class="p">,</span> <span class="n">downsample</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="n">make_tmp_image</span><span class="p">(</span><span class="n">image</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">channel</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">[</span><span class="s2">&quot;C&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">[</span><span class="s2">&quot;T&quot;</span><span class="p">]),</span> <span class="n">path_tmp_file</span><span class="p">,</span> <span class="n">downsample</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">make_tmp_image</span><span class="p">(</span><span class="n">imread</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">[</span><span class="s2">&quot;T&quot;</span><span class="p">]),</span> <span class="n">path_tmp_file</span><span class="p">,</span> <span class="n">downsample</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dtype</span> <span class="o">==</span> <span class="s2">&quot;file&quot;</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channels_separated</span><span class="p">:</span>
+            <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="p">[</span><span class="n">channel</span><span class="p">]</span>
+            <span class="n">image</span> <span class="o">=</span> <span class="n">imread</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">make_tmp_image</span><span class="p">(</span><span class="n">image</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">[</span><span class="s2">&quot;T&quot;</span><span class="p">]),</span> <span class="n">path_tmp_file</span><span class="p">,</span> <span class="n">downsample</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dtype</span> <span class="o">==</span> <span class="s2">&quot;regex&quot;</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channels_separated</span><span class="p">:</span>
+            <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_numbers</span><span class="p">[</span><span class="n">index</span><span class="p">])</span>
+            <span class="k">if</span> <span class="s2">&quot;C&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_format</span><span class="p">:</span>
+                <span class="n">image</span> <span class="o">=</span> <span class="n">imread</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">make_tmp_image</span><span class="p">(</span><span class="n">image</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">channel</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">[</span><span class="s2">&quot;C&quot;</span><span class="p">]),</span> <span class="n">path_tmp_file</span><span class="p">,</span> <span class="n">downsample</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="nb">any</span><span class="p">(</span><span class="n">i</span> <span class="o">!=</span> <span class="mi">1</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">downsample</span><span class="p">):</span>
+                <span class="n">image</span> <span class="o">=</span> <span class="n">imread</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">make_tmp_image</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">path_tmp_file</span><span class="p">,</span> <span class="n">downsample</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">path</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dtype</span> <span class="o">==</span> <span class="s2">&quot;regex&quot;</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channels_separated</span><span class="p">:</span>
+            <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="p">[</span><span class="n">channel</span><span class="p">]</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_numbers</span><span class="p">[</span><span class="n">index</span><span class="p">])</span>
+            <span class="k">return</span> <span class="n">path</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dtype</span> <span class="o">==</span> <span class="s2">&quot;array&quot;</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channels_separated</span><span class="p">:</span>
+            <span class="k">if</span> <span class="s2">&quot;C&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_format</span><span class="p">:</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">[</span><span class="s2">&quot;T&quot;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">[</span><span class="s2">&quot;C&quot;</span><span class="p">]:</span>
+                    <span class="k">return</span> <span class="n">make_tmp_image</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">[</span><span class="s2">&quot;T&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">channel</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">[</span><span class="s2">&quot;C&quot;</span><span class="p">]),</span> <span class="n">path_tmp_file</span><span class="p">,</span> <span class="n">downsample</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="n">make_tmp_image</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">channel</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">[</span><span class="s2">&quot;C&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">[</span><span class="s2">&quot;T&quot;</span><span class="p">]),</span> <span class="n">path_tmp_file</span><span class="p">,</span> <span class="n">downsample</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">make_tmp_image</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">[</span><span class="s2">&quot;T&quot;</span><span class="p">]),</span> <span class="n">path_tmp_file</span><span class="p">,</span> <span class="n">downsample</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dtype</span> <span class="o">==</span> <span class="s2">&quot;array&quot;</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channels_separated</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="p">[</span><span class="n">channel</span><span class="p">]</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">[</span><span class="s2">&quot;T&quot;</span><span class="p">])</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;No file has been generated.&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Dataset.save">
+<a class="viewcode-back" href="../../API.html#registration_tools.Dataset.save">[docs]</a>
+    <span class="k">def</span> <span class="nf">save</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">directory</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Saves the dataset metadata to a JSON file in the specified directory.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            directory (str): The directory where the metadata JSON file will be saved.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">directory</span><span class="p">):</span>
+            <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span>
+
+        <span class="n">metadata</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_metadata</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dtype</span> <span class="o">==</span> <span class="s2">&quot;array&quot;</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channels_separated</span><span class="p">:</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">array</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="p">):</span>
+                    <span class="n">channel_dir</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">directory</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;files_ch</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">channel_dir</span><span class="p">):</span>
+                        <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">channel_dir</span><span class="p">)</span>
+                    <span class="n">file_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">channel_dir</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;data.tif&quot;</span><span class="p">)</span>
+                    <span class="n">imsave</span><span class="p">(</span><span class="n">file_path</span><span class="p">,</span> <span class="n">array</span><span class="p">)</span>
+                    <span class="n">data</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">file_path</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">channel_dir</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">directory</span><span class="p">,</span> <span class="s2">&quot;files_ch0&quot;</span><span class="p">)</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">channel_dir</span><span class="p">):</span>
+                    <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">channel_dir</span><span class="p">)</span>
+                <span class="n">file_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">channel_dir</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;data.tif&quot;</span><span class="p">)</span>
+                <span class="n">imsave</span><span class="p">(</span><span class="n">file_path</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="p">)</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="n">file_path</span>
+
+            <span class="n">dtype</span> <span class="o">=</span> <span class="s2">&quot;file&quot;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_data</span>
+            <span class="n">dtype</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dtype</span>
+
+        <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span>
+        <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;dtype&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">dtype</span>
+        
+        <span class="n">metadata_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">directory</span><span class="p">,</span> <span class="s2">&quot;dataset.json&quot;</span><span class="p">)</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">metadata_path</span><span class="p">,</span> <span class="s1">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">json</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">metadata</span><span class="p">,</span> <span class="n">f</span><span class="p">,</span> <span class="n">indent</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Dataset.get_data_iterator">
+<a class="viewcode-back" href="../../API.html#registration_tools.Dataset.get_data_iterator">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_data_iterator</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">channel</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">downsample</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">return_position</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns a DataIterator for the dataset.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            channel (int): The channel to iterate over.</span>
+<span class="sd">            downsample (tuple): The downsample factors for each spatial dimension.</span>
+<span class="sd">            return_position (bool): Whether to return the position along with the data.</span>
+<span class="sd">            </span>
+<span class="sd">        Returns:</span>
+<span class="sd">            DataIterator: An iterator over the dataset.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">DataIterator</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="n">downsample</span><span class="p">,</span> <span class="n">return_position</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Dataset.get_file_iterator">
+<a class="viewcode-back" href="../../API.html#registration_tools.Dataset.get_file_iterator">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_file_iterator</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path_tmp_file</span><span class="p">,</span> <span class="n">channel</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">downsample</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">return_position</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns a FileIterator for the dataset.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            path_tmp_file (str): The temporary file path to save the downsampled images.</span>
+<span class="sd">            channel (int): The channel to iterate over.</span>
+<span class="sd">            downsample (tuple): The downsample factors for each spatial dimension.</span>
+<span class="sd">            return_position (bool): Whether to return the position along with the file path.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            FileIterator: An iterator over the dataset.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">FileIterator</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path_tmp_file</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="n">downsample</span><span class="p">,</span> <span class="n">return_position</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Dataset.get_spatial_shape">
+<a class="viewcode-back" href="../../API.html#registration_tools.Dataset.get_spatial_shape">[docs]</a>
+    <span class="k">def</span> <span class="nf">get_spatial_shape</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns the spatial dimensions of the dataset in the order specified by the format.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            tuple: A tuple representing the spatial dimensions of the dataset in the order specified by the format.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_shape</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">[</span><span class="n">dim</span><span class="p">]]</span> <span class="k">for</span> <span class="n">dim</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_format</span> <span class="k">if</span> <span class="n">dim</span> <span class="ow">in</span> <span class="s2">&quot;XYZ&quot;</span><span class="p">)</span></div>
+</div>
+
+
+<div class="viewcode-block" id="DataIterator">
+<a class="viewcode-back" href="../../API.html#registration_tools.DataIterator">[docs]</a>
+<span class="k">class</span> <span class="nc">DataIterator</span><span class="p">:</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">channel</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">downsample</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">return_position</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dataset</span> <span class="o">=</span> <span class="n">dataset</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span> <span class="o">=</span> <span class="n">channel</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_downsample</span> <span class="o">=</span> <span class="n">downsample</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_index</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_max_index</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_dataset</span><span class="o">.</span><span class="n">_numbers</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_return_position</span> <span class="o">=</span> <span class="n">return_position</span>
+
+    <span class="k">def</span> <span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="k">def</span> <span class="fm">__next__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_index</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_max_index</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dataset</span><span class="o">.</span><span class="n">get_time_data</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_index</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_downsample</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_index</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_return_position</span><span class="p">:</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_index</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">result</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">result</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">StopIteration</span></div>
+
+
+<div class="viewcode-block" id="FileIterator">
+<a class="viewcode-back" href="../../API.html#registration_tools.FileIterator">[docs]</a>
+<span class="k">class</span> <span class="nc">FileIterator</span><span class="p">:</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">path_tmp_file</span><span class="p">,</span> <span class="n">channel</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">downsample</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">return_position</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dataset</span> <span class="o">=</span> <span class="n">dataset</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_path_tmp_file</span> <span class="o">=</span> <span class="n">path_tmp_file</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span> <span class="o">=</span> <span class="n">channel</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_downsample</span> <span class="o">=</span> <span class="n">downsample</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_index</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_max_index</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_dataset</span><span class="o">.</span><span class="n">_numbers</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_return_position</span> <span class="o">=</span> <span class="n">return_position</span>
+
+    <span class="k">def</span> <span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="k">def</span> <span class="fm">__next__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_index</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_max_index</span><span class="p">:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dataset</span><span class="o">.</span><span class="n">get_time_file</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_path_tmp_file</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_index</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_downsample</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_index</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_return_position</span><span class="p">:</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_index</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">result</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">result</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">StopIteration</span></div>
+
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../index.html">Registration Tools</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../examples.html">Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../API.html">API Reference</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../index.html">Documentation overview</a><ul>
+  <li><a href="../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 8.1.3</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>
