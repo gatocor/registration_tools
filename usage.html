@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
     <title>Usage &#8212; Registration Tools 0.1 documentation</title>
-    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d1102ebc" />
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=5ecbeea2" />
     <link rel="stylesheet" type="text/css" href="_static/basic.css?v=686e5160" />
     <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=27fed22d" />
     <script src="_static/documentation_options.js?v=2709fde1"></script>
@@ -40,7 +40,7 @@
 <section id="creating-a-dataset">
 <h2>Creating a Dataset<a class="headerlink" href="#creating-a-dataset" title="Link to this heading">¶</a></h2>
 <p>For creating a dataset from a folder of images, use the <cite>create_dataset</cite> function:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">registration_tools</span> <span class="kn">import</span> <span class="n">create_dataset</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">registration_tools</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_dataset</span>
 
 <span class="n">dataset</span> <span class="o">=</span> <span class="n">create_dataset</span><span class="p">(</span>
     <span class="n">data</span><span class="o">=</span><span class="p">[</span>
@@ -54,13 +54,13 @@
 </pre></div>
 </div>
 <p>If you already had a dataset created, you can load one using the <cite>load_dataset</cite> function.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">registration_tools</span> <span class="kn">import</span> <span class="n">load_dataset</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">registration_tools</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_dataset</span>
 
 <span class="n">dataset</span> <span class="o">=</span> <span class="n">load_dataset</span><span class="p">(</span><span class="s1">&#39;path/to/dataset&#39;</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>You can create some artificial datasets from the module <cite>registration_tools.data</cite>:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">registration_tools.data</span> <span class="kn">import</span> <span class="n">sphere</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">registration_tools.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">sphere</span>
 
 <span class="n">sphere</span><span class="p">(</span>
     <span class="n">path</span><span class="o">=</span><span class="s1">&#39;path/to/save/folder&#39;</span><span class="p">,</span>
@@ -78,8 +78,8 @@
 <section id="registering-images">
 <h2>Registering Images<a class="headerlink" href="#registering-images" title="Link to this heading">¶</a></h2>
 <p>To register images in a dataset, use the <cite>register</cite> function:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">registration_tools</span> <span class="kn">import</span> <span class="n">create_dataset</span>
-<span class="kn">from</span> <span class="nn">registration_tools.registration</span> <span class="kn">import</span> <span class="n">register</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">registration_tools</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_dataset</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">registration_tools.registration</span><span class="w"> </span><span class="kn">import</span> <span class="n">register</span>
 
 <span class="n">dataset</span> <span class="o">=</span> <span class="n">create_dataset</span><span class="p">(</span>
     <span class="n">data</span><span class="o">=</span><span class="p">[</span>
@@ -105,8 +105,8 @@
 <h2>Visualizing Images<a class="headerlink" href="#visualizing-images" title="Link to this heading">¶</a></h2>
 <p>There are several ways you can visualize images in a dataset. The package uses <cite>napari</cite> for visualization.</p>
 <p>To visualize images in a dataset, use the <cite>plot_images</cite> function:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">registration_tools.visualization</span> <span class="kn">import</span> <span class="n">plot_images</span>
-<span class="kn">import</span> <span class="nn">napari</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">registration_tools.visualization</span><span class="w"> </span><span class="kn">import</span> <span class="n">plot_images</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">napari</span>
 
 <span class="n">viewer</span> <span class="o">=</span> <span class="n">napari</span><span class="o">.</span><span class="n">Viewer</span><span class="p">()</span>
 <span class="n">plot_images</span><span class="p">(</span>
@@ -116,7 +116,7 @@
 </pre></div>
 </div>
 <p>To plot the projections of the dataset, use the <cite>plot_projections</cite> function.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">registration_tools.visualization</span> <span class="kn">import</span> <span class="n">plot_projections</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">registration_tools.visualization</span><span class="w"> </span><span class="kn">import</span> <span class="n">plot_projections</span>
 
 <span class="n">plot_projections</span><span class="p">(</span>
     <span class="n">viewer</span><span class="o">=</span><span class="n">viewer</span><span class="p">,</span>
@@ -128,7 +128,7 @@
 </pre></div>
 </div>
 <p>When registering, you may be interested in seeing the difference between the raw and original dataset. You can use the <cite>plot_projections_difference</cite> function to plot the difference between the two.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">registration_tools.visualization</span> <span class="kn">import</span> <span class="n">plot_projections_difference</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">registration_tools.visualization</span><span class="w"> </span><span class="kn">import</span> <span class="n">plot_projections_difference</span>
 
 <span class="n">plot_projections_difference</span><span class="p">(</span>
     <span class="n">viewer</span><span class="o">=</span><span class="n">viewer</span><span class="p">,</span>
@@ -143,7 +143,7 @@
 <section id="plotting-vectorfield">
 <h2>Plotting Vectorfield<a class="headerlink" href="#plotting-vectorfield" title="Link to this heading">¶</a></h2>
 <p>To plot the vectorfield of the dataset, use the <cite>plot_vectorfield</cite> function:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">registration_tools.visualization</span> <span class="kn">import</span> <span class="n">plot_vectorfield</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">registration_tools.visualization</span><span class="w"> </span><span class="kn">import</span> <span class="n">plot_vectorfield</span>
 
 <span class="n">plot_vectorfield</span><span class="p">(</span>
     <span class="n">viewer</span><span class="o">=</span><span class="n">viewer</span><span class="p">,</span>

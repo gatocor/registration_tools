@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>registration_tools.visualization.visualization &#8212; Registration Tools 0.1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/basic.css?v=686e5160" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/alabaster.css?v=27fed22d" />
+    <script src="../../../_static/documentation_options.js?v=2709fde1"></script>
+    <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+   
+  <link rel="stylesheet" href="../../../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for registration_tools.visualization.visualization</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">ast</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tqdm</span><span class="w"> </span><span class="kn">import</span> <span class="n">tqdm</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">napari</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">imageio</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">skimage.io</span><span class="w"> </span><span class="kn">import</span> <span class="n">imread</span><span class="p">,</span> <span class="n">imsave</span>
+
+<div class="viewcode-block" id="plot_images">
+<a class="viewcode-back" href="../../../API_visualization.html#registration_tools.visualization.plot_images">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_images</span><span class="p">(</span><span class="n">viewer</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">channels</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">numbers</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">downsample</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">verbosity</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Plots the images in the dataset in the viewer.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        viewer (napari.Viewer): The napari viewer instance.</span>
+<span class="sd">        dataset (Dataset): The dataset object.</span>
+<span class="sd">        channels (list, optional): List of channels to plot. If None, all channels are plotted.</span>
+<span class="sd">        numbers (list, optional): List of numbers to plot. If None, all numbers are plotted.</span>
+<span class="sd">        scale (tuple, optional): Scale for the images. Default is (1, 1, 1).</span>
+<span class="sd">        downsample (tuple, optional): downsample factor for the images. Default is (1, 1, 1).</span>
+<span class="sd">        verbosity (int, optional): Verbosity level. Default is 1.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">cmaps</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;red&#39;</span><span class="p">,</span> <span class="s1">&#39;green&#39;</span><span class="p">,</span> <span class="s1">&#39;blue&#39;</span><span class="p">,</span> <span class="s1">&#39;magenta&#39;</span><span class="p">,</span> <span class="s1">&#39;yellow&#39;</span><span class="p">,</span> <span class="s1">&#39;cyan&#39;</span><span class="p">]</span>
+
+    <span class="k">for</span> <span class="n">ch</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">_nchannels</span><span class="p">):</span>
+        <span class="n">images</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">image</span> <span class="ow">in</span> <span class="n">dataset</span><span class="o">.</span><span class="n">get_data_iterator</span><span class="p">(</span><span class="n">channel</span><span class="o">=</span><span class="n">ch</span><span class="p">,</span> <span class="n">downsample</span><span class="o">=</span><span class="n">downsample</span><span class="p">):</span>
+            <span class="n">images</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">image</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">newaxis</span><span class="p">,</span> <span class="o">...</span><span class="p">])</span>
+
+        <span class="n">viewer</span><span class="o">.</span><span class="n">add_image</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">images</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span> <span class="n">scale</span><span class="o">=</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">_scale</span><span class="p">),</span> <span class="n">opacity</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">blending</span><span class="o">=</span><span class="s1">&#39;additive&#39;</span><span class="p">,</span> <span class="n">colormap</span><span class="o">=</span><span class="n">cmaps</span><span class="p">[</span><span class="n">ch</span><span class="p">],</span> <span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;Channel </span><span class="si">{</span><span class="n">ch</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="plot_projections">
+<a class="viewcode-back" href="../../../API_visualization.html#registration_tools.visualization.plot_projections">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_projections</span><span class="p">(</span><span class="n">viewer</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">projection</span><span class="p">,</span> <span class="n">channels</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">old</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Plots the projections of the dataset in the viewer.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        viewer (napari.Viewer): The napari viewer instance.</span>
+<span class="sd">        dataset (Dataset): The dataset object.</span>
+<span class="sd">        projection (int): The projection axis (e.g., 0 for X, 1 for Y, 2 for Z).</span>
+<span class="sd">        channels (list, optional): List of channels to plot. If None, all channels are plotted.</span>
+<span class="sd">        old (bool, optional): Whether to plot old projections. Default is False.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">cmaps</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;red&#39;</span><span class="p">,</span> <span class="s1">&#39;green&#39;</span><span class="p">,</span> <span class="s1">&#39;blue&#39;</span><span class="p">,</span> <span class="s1">&#39;magenta&#39;</span><span class="p">,</span> <span class="s1">&#39;yellow&#39;</span><span class="p">,</span> <span class="s1">&#39;cyan&#39;</span><span class="p">]</span>
+
+    <span class="n">add_old</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">old</span><span class="p">:</span>
+        <span class="n">add_old</span> <span class="o">=</span> <span class="s2">&quot;old_&quot;</span>
+
+    <span class="k">if</span> <span class="n">channels</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">channels</span> <span class="o">=</span> <span class="nb">range</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">num_channels</span><span class="p">)</span>
+
+    <span class="n">scale</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">_scale</span><span class="p">)</span>
+    <span class="k">del</span> <span class="n">scale</span><span class="p">[</span><span class="n">projection</span><span class="p">]</span>
+
+    <span class="k">for</span> <span class="n">pos</span><span class="p">,</span> <span class="n">ch</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">channels</span><span class="p">):</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">_save_folder</span><span class="p">,</span> <span class="s2">&quot;projections&quot;</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">add_old</span><span class="si">}</span><span class="s2">projections_ch</span><span class="si">{</span><span class="n">ch</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;joint_</span><span class="si">{</span><span class="n">add_old</span><span class="si">}</span><span class="s2">projections_</span><span class="si">{</span><span class="n">projection</span><span class="si">}</span><span class="s2">.tiff&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Projection file does not exist.&quot;</span><span class="p">)</span>
+
+        <span class="n">image</span> <span class="o">=</span> <span class="n">imread</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+
+        <span class="n">viewer</span><span class="o">.</span><span class="n">add_image</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="n">scale</span><span class="p">,</span> <span class="n">opacity</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">colormap</span><span class="o">=</span><span class="n">cmaps</span><span class="p">[</span><span class="n">pos</span><span class="p">],</span> <span class="n">blending</span><span class="o">=</span><span class="s1">&#39;additive&#39;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="plot_projections_difference">
+<a class="viewcode-back" href="../../../API_visualization.html#registration_tools.visualization.plot_projections_difference">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_projections_difference</span><span class="p">(</span><span class="n">viewer</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">projection</span><span class="p">,</span> <span class="n">channel</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">old</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Plots the difference between current and old projections of the dataset in the viewer.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        viewer (napari.Viewer): The napari viewer instance.</span>
+<span class="sd">        dataset (Dataset): The dataset object.</span>
+<span class="sd">        projection (int): The projection axis (e.g., 0 for X, 1 for Y, 2 for Z).</span>
+<span class="sd">        channel (int, optional): The channel to plot. Default is 0.</span>
+<span class="sd">        old (bool, optional): Whether to plot old projections. Default is True.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">cmaps</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;red&#39;</span><span class="p">,</span> <span class="s1">&#39;green&#39;</span><span class="p">,</span> <span class="s1">&#39;blue&#39;</span><span class="p">]</span>
+
+    <span class="n">scale</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">_scale</span><span class="p">)</span>
+    <span class="k">del</span> <span class="n">scale</span><span class="p">[</span><span class="n">projection</span><span class="p">]</span>
+
+    <span class="n">path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">_save_folder</span><span class="p">,</span> <span class="s2">&quot;projections&quot;</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;projections_ch</span><span class="si">{</span><span class="n">channel</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;joint_projections_</span><span class="si">{</span><span class="n">projection</span><span class="si">}</span><span class="s2">.tiff&quot;</span><span class="p">)</span>
+    <span class="n">image_current_registered</span> <span class="o">=</span> <span class="n">imread</span><span class="p">(</span><span class="n">path</span><span class="p">)[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">viewer</span><span class="o">.</span><span class="n">add_image</span><span class="p">(</span><span class="n">image_current_registered</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="n">scale</span><span class="p">,</span> <span class="n">opacity</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">colormap</span><span class="o">=</span><span class="n">cmaps</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">blending</span><span class="o">=</span><span class="s1">&#39;additive&#39;</span><span class="p">)</span>
+
+    <span class="n">image_next_registered</span> <span class="o">=</span> <span class="n">imread</span><span class="p">(</span><span class="n">path</span><span class="p">)[</span><span class="mi">1</span><span class="p">:]</span>
+    <span class="n">viewer</span><span class="o">.</span><span class="n">add_image</span><span class="p">(</span><span class="n">image_next_registered</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="n">scale</span><span class="p">,</span> <span class="n">opacity</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">colormap</span><span class="o">=</span><span class="n">cmaps</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">blending</span><span class="o">=</span><span class="s1">&#39;additive&#39;</span><span class="p">)</span>
+
+    <span class="n">path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">_save_folder</span><span class="p">,</span> <span class="s2">&quot;projections&quot;</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;old_projections_ch</span><span class="si">{</span><span class="n">channel</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;joint_old_projections_</span><span class="si">{</span><span class="n">projection</span><span class="si">}</span><span class="s2">.tiff&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">old</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Warning: Old projection file does not exist.&quot;</span><span class="p">)</span>
+        <span class="k">return</span>
+
+    <span class="n">image_next_unregistered</span> <span class="o">=</span> <span class="n">imread</span><span class="p">(</span><span class="n">path</span><span class="p">)[</span><span class="mi">1</span><span class="p">:]</span>
+    <span class="n">viewer</span><span class="o">.</span><span class="n">add_image</span><span class="p">(</span><span class="n">image_next_unregistered</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="n">scale</span><span class="p">,</span> <span class="n">opacity</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">colormap</span><span class="o">=</span><span class="n">cmaps</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">blending</span><span class="o">=</span><span class="s1">&#39;additive&#39;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="plot_vectorfield">
+<a class="viewcode-back" href="../../../API_visualization.html#registration_tools.visualization.plot_vectorfield">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">plot_vectorfield</span><span class="p">(</span><span class="n">viewer</span><span class="p">,</span> <span class="n">dataset</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Plots the vectorfield of the dataset in the viewer.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        viewer (napari.Viewer): The napari viewer instance.</span>
+<span class="sd">        dataset (Dataset): The dataset object.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">_save_folder</span><span class="p">,</span> <span class="s2">&quot;vectorfield&quot;</span><span class="p">,</span> <span class="s2">&quot;vectorfield.npy&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Vectorfield file does not exist.&quot;</span><span class="p">)</span>
+
+    <span class="n">vectorfield</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+
+    <span class="n">viewer</span><span class="o">.</span><span class="n">add_vectors</span><span class="p">(</span><span class="n">vectorfield</span><span class="p">)</span></div>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">make_video</span><span class="p">(</span><span class="n">viewer</span><span class="p">,</span> <span class="n">save_file</span><span class="p">,</span> <span class="n">fps</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">zooms</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">angles</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">canvas_only</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Creates a video from the napari viewer by taking screenshots of all time points.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        viewer (napari.Viewer): The napari viewer instance.</span>
+<span class="sd">        save_path (str): The path to save the video.</span>
+<span class="sd">        fps (int, optional): Frames per second for the video. Default is 10.</span>
+<span class="sd">        zooms (list, optional): List of zoom levels for each time point. If None, keep fixed.</span>
+<span class="sd">        angles (list, optional): List of camera angles for each time point. If None, keep fixed.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">screenshots</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">num_timepoints</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">viewer</span><span class="o">.</span><span class="n">dims</span><span class="o">.</span><span class="n">range</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">])</span>
+
+    <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_timepoints</span><span class="p">):</span>
+        <span class="n">viewer</span><span class="o">.</span><span class="n">dims</span><span class="o">.</span><span class="n">set_point</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">t</span><span class="p">)</span>
+        
+        <span class="k">if</span> <span class="n">zooms</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">t</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">zooms</span><span class="p">):</span>
+            <span class="n">viewer</span><span class="o">.</span><span class="n">camera</span><span class="o">.</span><span class="n">zoom</span> <span class="o">=</span> <span class="n">zooms</span><span class="p">[</span><span class="n">t</span><span class="p">]</span>
+        
+        <span class="k">if</span> <span class="n">angles</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">t</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">angles</span><span class="p">):</span>
+            <span class="n">viewer</span><span class="o">.</span><span class="n">camera</span><span class="o">.</span><span class="n">angles</span> <span class="o">=</span> <span class="n">angles</span><span class="p">[</span><span class="n">t</span><span class="p">]</span>
+        
+        <span class="n">screenshot</span> <span class="o">=</span> <span class="n">viewer</span><span class="o">.</span><span class="n">screenshot</span><span class="p">(</span><span class="n">canvas_only</span><span class="o">=</span><span class="n">canvas_only</span><span class="p">)</span>
+        <span class="n">screenshots</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">screenshot</span><span class="p">)</span>
+
+    <span class="n">imageio</span><span class="o">.</span><span class="n">mimsave</span><span class="p">(</span><span class="n">save_file</span><span class="p">,</span> <span class="n">screenshots</span><span class="p">,</span> <span class="n">fps</span><span class="o">=</span><span class="n">fps</span><span class="p">)</span>
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../../index.html">Registration Tools</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../examples.html">Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../API.html">API Reference</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../../index.html">Documentation overview</a><ul>
+  <li><a href="../../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 8.1.3</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>

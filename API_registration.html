@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
     <title>Registration &#8212; Registration Tools 0.1 documentation</title>
-    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d1102ebc" />
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=5ecbeea2" />
     <link rel="stylesheet" type="text/css" href="_static/basic.css?v=686e5160" />
     <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=27fed22d" />
     <script src="_static/documentation_options.js?v=2709fde1"></script>
@@ -36,6 +36,182 @@
   <section id="registration">
 <h1>Registration<a class="headerlink" href="#registration" title="Link to this heading">¶</a></h1>
 <p>Functions for registering Datasets objects.</p>
+<dl class="py function" id="module-registration_tools.registration">
+<dt class="sig sig-object py" id="registration_tools.registration.get_pyramid_levels">
+<span class="sig-prename descclassname"><span class="pre">registration_tools.registration.</span></span><span class="sig-name descname"><span class="pre">get_pyramid_levels</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">maximum_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/registration_tools/registration/registration.html#get_pyramid_levels"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#registration_tools.registration.get_pyramid_levels" title="Link to this definition">¶</a></dt>
+<dd><p>Returns the lowest and highest pyramid levels for the dataset.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dataset</strong> (<a class="reference internal" href="API_dataset.html#registration_tools.Dataset" title="registration_tools.Dataset"><em>Dataset</em></a>) – The dataset object.</p></li>
+<li><p><strong>maximum_size</strong> (<em>int</em><em>, </em><em>optional</em>) – The maximum size for the pyramid levels. Default is 100.</p></li>
+<li><p><strong>verbose</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, print the pyramid levels. Default is True.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The lowest and highest pyramid levels.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="registration_tools.registration.register">
+<span class="sig-prename descclassname"><span class="pre">registration_tools.registration.</span></span><span class="sig-name descname"><span class="pre">register</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_channel</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">numbers</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_behavior</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'Continue'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">perfom_global_trnsf</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">apply_registration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">registration_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'rigid'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pyramid_lowest_level</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pyramid_highest_level</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">registration_direction</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">padding</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">downsample</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">debug</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">args_registration</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">''</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">plot_old_projections</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">plot_projections</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">make_vectorfield</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vectorfield_threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vectorfield_spacing</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/registration_tools/registration/registration.html#register"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#registration_tools.registration.register" title="Link to this definition">¶</a></dt>
+<dd><p>Registers a dataset and saves the results to the specified path.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dataset</strong> (<a class="reference internal" href="API_dataset.html#registration_tools.Dataset" title="registration_tools.Dataset"><em>Dataset</em></a>) – The dataset to be registered. Must be an instance of the Dataset class.</p></li>
+<li><p><strong>save_path</strong> (<em>str</em>) – The directory where the registration results will be saved.</p></li>
+<li><p><strong>use_channel</strong> (<em>int</em><em>, </em><em>optional</em>) – The channel to use for registration. Default is 0.</p></li>
+<li><p><strong>numbers</strong> (<em>list</em><em>, </em><em>optional</em>) – List of numbers to register. If None, all numbers in the dataset will be used. Default is None.</p></li>
+<li><p><strong>save_behavior</strong> (<em>str</em><em>, </em><em>optional</em>) – Behavior for saving files. Options are “NotOverwrite”, “Continue”, “Overwrite”. Default is “Continue”.</p></li>
+<li><p><strong>perfom_global_trnsf</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to perform global transformation. Default is None.</p></li>
+<li><p><strong>apply_registration</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to apply the registration. Default is True.</p></li>
+<li><p><strong>registration_type</strong> (<em>str</em><em>, </em><em>optional</em>) – Type of registration to perform. Default is “rigid”. Select among:
+translation2D, translation3D, translation-scaling2D, translation-scaling3D,
+rigid2D, rigid3D, rigid, similitude2D, similitude3D, similitude,
+affine2D, affine3D, affine, vectorfield2D, vectorfield3D, vectorfield, vector</p></li>
+<li><p><strong>pyramid_lowest_level</strong> (<em>int</em><em>, </em><em>optional</em>) – pyramid lowest level. Default is 0.</p></li>
+<li><p><strong>pyramid_highest_level</strong> – pyramid highest level. Default is 3: it corresponds to 32x32x32 for an original 256x256x256 image.</p></li>
+<li><p><strong>registration_direction</strong> (<em>str</em><em>, </em><em>optional</em>) – Direction of registration. Options are “forward”, “backward”. Default is None.</p></li>
+<li><p><strong>padding</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to apply padding. Default is True.</p></li>
+<li><p><strong>downsample</strong> (<em>tuple</em><em>, </em><em>optional</em>) – Downsample factor for the images. Default is None.</p></li>
+<li><p><strong>debug</strong> (<em>int</em><em>, </em><em>optional</em>) – Debug level. Default is 1.</p></li>
+<li><p><strong>args_registration</strong> (<em>str</em><em>, </em><em>optional</em>) – Additional arguments for the blockmatching algorithm. These can be (from vt-python documentation):</p></li>
+</ul>
+</dd>
+</dl>
+<dl>
+<dt>Parameters for the blockmatching algorithm:</dt><dd><p>### image geometry ###
+[-reference-voxel %lf %lf [%lf]]:
+changes/sets the voxel sizes of the reference image
+[-floating-voxel %lf %lf [%lf]]:
+changes/sets the voxel sizes of the floating image
+### pre-processing ###
+[-normalisation|-norma|-rescale] # input images are normalized on one byte
+before matching (this may be the default behavior)
+[-no-normalisation|-no-norma|-no-rescale] # input images are not normalized on
+one byte before matching
+### post-processing ###
+[-no-composition-with-left] # the written result transformation is only the
+computed one, ie it is not composed with the left/initial one (thus does not allow
+to resample the floating image if an left/initial transformation is given) [default]
+[-composition-with-left] # the written result transformation is the
+computed one composed with the left/initial one (thus allows to resample the
+floating image if an left/initial transformation is given)
+### pyramid building ###
+[-pyramid-gaussian-filtering | -py-gf] # before subsampling, the images
+are filtered (ie smoothed) by a gaussian kernel.
+### block geometry (floating image) ###
+-block-size|-bl-size %d %d %d       # size of the block along X, Y, Z
+-block-spacing|-bl-space %d %d %d   # block spacing in the floating image
+-block-border|-bl-border %d %d %d   # block borders: to be added twice at
+each dimension for statistics computation
+### block selection ###
+[-floating-low-threshold | -flo-lt %d]     # values &lt;= low threshold are not
+considered
+[-floating-high-threshold | -flo-ht %d]    # values &gt;= high threshold are not
+considered
+[-floating-removed-fraction | -flo-rf %f]  # maximal fraction of removed points
+because of the threshold. If too many points are removed, the block is
+discarded
+[-reference-low-threshold | -ref-lt %d]    # values &lt;= low threshold are not
+considered
+[-reference-high-threshold | -ref-ht %d]   # values &gt;= high threshold are not
+considered
+[-reference-removed-fraction | -ref-rf %f] # maximal fraction of removed points
+because of the threshold. If too many points are removed, the block is
+discarded
+[-floating-selection-fraction[-ll|-hl] | -flo-frac[-ll|-hl] %lf] # fraction of
+blocks from the floating image kept at a pyramid level, the blocks being
+sorted w.r.t their variance (see note (1) for [-ll|-hl])
+### pairing ###
+[-search-neighborhood-half-size | -se-hsize %d %d %d] # half size of the search
+neighborhood in the reference when looking for similar blocks
+[-search-neighborhood-step | -se-step %d %d %d] # step between blocks to be
+tested in the search neighborhood
+[-similarity-measure | -similarity | -si [cc|ecc|ssd|sad]]  # similarity measure
+cc: correlation coefficient
+ecc: extended correlation coefficient
+[-similarity-measure-threshold | -si-th %lf]    # threshold on the similarity
+measure: pairings below that threshold are discarded
+### transformation regularization ###
+[-elastic-regularization-sigma[-ll|-hl] | -elastic-sigma[-ll|-hl]  %lf %lf %lf]
+# sigma for elastic regularization (only for vector field) (see note (1) for
+[-ll|-hl])
+### transformation estimation ###
+[-estimator-type|-estimator|-es-type %s] # transformation estimator
+wlts: weighted least trimmed squares
+lts: least trimmed squares
+wls: weighted least squares
+ls: least squares
+[-lts-cut|-lts-fraction %lf] # for trimmed estimations, fraction of pairs that are kept
+[-lts-deviation %lf] # for trimmed estimations, defines the threshold to discard
+pairings, ie ‘average + this_value * standard_deviation’
+[-lts-iterations %d] # for trimmed estimations, the maximal number of iterations
+[-fluid-sigma|-lts-sigma[-ll|-hl] %lf %lf %lf] # sigma for fluid regularization,
+ie field interpolation and regularization for pairings (only for vector field)
+(see note (1) for [-ll|-hl])
+[-vector-propagation-distance|-propagation-distance|-pdistance %f] #
+distance propagation of initial pairings (ie displacements)
+this implies the same displacement for the spanned sphere
+(only for vectorfield)
+[-vector-fading-distance|-fading-distance|-fdistance %f] #
+area of fading for initial pairings (ie displacements)
+this allows progressive transition towards null displacements
+and thus avoid discontinuites
+### end conditions for matching loop ###
+[-max-iteration[-ll|-hl]|-max-iterations[-ll|-hl]|-max-iter[-ll|-hl] %d]|…
+…|-iterations[-ll|-hl] %d]   # maximal number of iteration
+(see note (1) for [-ll|-hl])
+[-corner-ending-condition|-rms] # evolution of image corners
+### filter type ###
+[-gaussian-filter-type|-filter-type deriche|fidrich|young-1995|young-2002|…
+…|gabor-young-2002|convolution] # type of filter for image/vector field
+smoothing
+### misc writing stuff ###
+[-default-filenames|-df]     # use default filename names
+[-no-default-filenames|-ndf] # do not use default filename names
+[-command-line %s]           # write the command line
+[-logfile %s]                # write some output in this logfile
+[-vischeck]  # write an image with ‘active’ blocks
+[-write_def] # id.
+### parallelism ###
+[-parallel|-no-parallel] # use parallelism (or not)
+[-parallelism-type|-parallel-type default|none|openmp|omp|pthread|thread]
+[-max-chunks %d] # maximal number of chunks
+[-parallel-scheduling|-ps default|static|dynamic-one|dynamic|guided] # type
+of scheduling for open mp
+### general parameters ###
+-verbose|-v: increase verboseness parameters being read several time, use ‘-nv -v -v …’ to set the verboseness level
+-debug|-D: increase debug level
+-no-debug|-nodebug: no debug indication
+-trace:
+-no-trace:
+-print-parameters|-param:
+-print-time|-time:
+-no-time|-notime:
+-trace-memory|-memory: keep trace of allocated pointers (in instrumented procedures)
+display some information about memory consumption
+Attention: it disables the parallel mode, because of concurrent access to memory parallel mode may be restored by specifying ‘-parallel’ after ‘-memory’ but unexpected crashes may be experienced
+-no-memory|-nomemory:
+-h: print option list
+-help: print option list + details</p>
+<p>Notes
+(1) If -ll or -hl are respectively added to the option, this specifies only the
+value for respectively the lowest or the highest level of the pyramid (recall
+that the most lowest level, ie #0, refers to the original image). For
+intermediary levels, values are linearly interpolated.</p>
+</dd>
+</dl>
+<p>Returns:
+None</p>
+</dd></dl>
+
 </section>
 
 
