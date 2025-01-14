@@ -35,36 +35,6 @@
   <section id="datasets">
 <h1>Datasets<a class="headerlink" href="#datasets" title="Link to this heading">¶</a></h1>
 <p>Functions to generate artificial datasets to test.</p>
-<dl class="py function" id="module-registration_tools.data">
-<dt class="sig sig-object py" id="registration_tools.data.sphere">
-<span class="sig-prename descclassname"><span class="pre">registration_tools.data.</span></span><span class="sig-name descname"><span class="pre">sphere</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_images</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">image_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_channels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_radius</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_radius</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">jump</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">stride</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">(3,</span> <span class="pre">2,</span> <span class="pre">1)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/registration_tools/data/sphere.html#sphere"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#registration_tools.data.sphere" title="Link to this definition">¶</a></dt>
-<dd><p>This function creates a series of 3D images a sphere moving along an L-shaped path while increasing the radius.
-The radius of the spheres increases linearly from min_radius to max_radius across the images.
-The spheres have Gaussian intensity from the center to the border.
-The images are saved in the specified directory with a specified stride.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>path</strong> (<em>str</em>) – The directory where the images will be saved. Default is “data”.</p></li>
-<li><p><strong>num_images</strong> (<em>int</em>) – The number of images to generate. Default is 10.</p></li>
-<li><p><strong>image_size</strong> (<em>int</em>) – The size of each dimension of the cubic images. Default is 100.</p></li>
-<li><p><strong>num_channels</strong> (<em>int</em>) – The number of channels for the images. Default is 1.</p></li>
-<li><p><strong>min_radius</strong> (<em>int</em>) – The minimum radius of the spheres. Default is 5.</p></li>
-<li><p><strong>max_radius</strong> (<em>int</em>) – The maximum radius of the spheres. Default is 20.</p></li>
-<li><p><strong>jump</strong> (<em>int</em>) – The step size for the L-shaped path points. Default is 2.</p></li>
-<li><p><strong>stride</strong> (<em>tuple</em>) – The stride to apply when saving the images. Default is (1, 2, 3).</p></li>
-<li><p><strong>verbose</strong> (<em>bool</em>) – If True, print detailed information. Default is False.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>The dataset object containing the generated images.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>Dataset object</p>
-</dd>
-</dl>
-</dd></dl>
-
 </section>
 
 
