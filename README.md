@@ -50,7 +50,7 @@ For detailed documentation, visit [here](https://gatocor.github.io/registration_
 To run the tests, use:
 
 ```bash
-python -m unittest discover -s src/tests
+python -m unittest discover -s tests
 ```
 
 ## License
