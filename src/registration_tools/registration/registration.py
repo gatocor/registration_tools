@@ -264,6 +264,12 @@ def register(
     # Check downsample
     if downsample is None:
         downsample = (1,) * dataset._ndim_spatial
+    elif not all(isinstance(d, int) for d in downsample):
+        raise ValueError("All elements in downsample must be integers.")
+    elif len(downsample) != dataset._ndim_spatial:
+        raise ValueError(f"downsample must have the same length as the number of spatial dimensions ({dataset._ndim_spatial}).")
+    
+    new_scale = tuple([i*j for i,j in zip(dataset._scale, downsample)])
 
     # Check if dataset spatial dimensions are not 3, set plot projections to False
     if dataset._ndim_spatial != 3:
@@ -315,8 +321,9 @@ def register(
     warnings.filterwarnings("ignore", category=UserWarning, message=".*low contrast image.*")
 
     #Check file is not too heavy
-    tmp_file = dataset.get_time_file(os.path.join(directory_tmp, "ref"), 0, 0, downsample)
+    tmp_file = dataset.get_time_file(os.path.join(directory_tmp, "ref.tiff"), 0, 0, downsample)
     try:
+        print(f"Size: {imread(tmp_file).shape}")
         l = np.prod(imread(tmp_file).shape)
         l2 = np.prod(vt.vtImage(tmp_file).shape())
     except:
@@ -345,15 +352,15 @@ def register(
     for pos_ref, pos_float, file_ref, file_float in tqdm(iterator, desc=f"Registering images using channel {use_channel}", unit=""):
             
         if pos_ref in [0, len(numbers)-1]:
-            tmp_file_ref = dataset.get_time_file(os.path.join(directory_tmp, "ref"), pos_ref, use_channel, downsample)
+            tmp_file_ref = dataset.get_time_file(os.path.join(directory_tmp, "ref.tiff"), pos_ref, use_channel, downsample)
             img_ref = vt.vtImage(tmp_file_ref)
-            img_ref.setSpacing(dataset._scale[::-1])
+            img_ref.setSpacing(new_scale[::-1])
         else:
             img_ref = img_float
 
-        tmp_file_float = dataset.get_time_file(os.path.join(directory_tmp, "float"), pos_float, use_channel, downsample)
+        tmp_file_float = dataset.get_time_file(os.path.join(directory_tmp, "float.tiff"), pos_float, use_channel, downsample)
         img_float = vt.vtImage(tmp_file_float)
-        img_float.setSpacing(dataset._scale[::-1])
+        img_float.setSpacing(new_scale[::-1])
 
         add = ""
         if not verbose:
@@ -367,7 +374,7 @@ def register(
             vectors = transformation_to_vectorfield(
                 img_ref.to_array() > vectorfield_threshold,
                 trnsf,
-                dataset._scale,
+                new_scale,
                 vectorfield_spacing,
                 pos_ref
             )
@@ -433,9 +440,9 @@ def register(
                             for dim in range(dataset._ndim_spatial):
                                 imsave(f"{directory_projections}/projections_ch{ch}/projections_{dim}_{file_ref:04d}.tiff", img_corr_ch.max(axis=dim))
 
-                    tmp_file_float_ch = dataset.get_time_file(os.path.join(directory_tmp, f"float_ch{ch}"), pos_float, ch, downsample)
+                    tmp_file_float_ch = dataset.get_time_file(os.path.join(directory_tmp, f"float_ch{ch}.tiff"), pos_float, ch, downsample)
                     img_float_ch = vt.vtImage(tmp_file_float_ch)
-                    img_float_ch.setSpacing(dataset._scale[::-1])
+                    img_float_ch.setSpacing(new_scale[::-1])
                         
                     if perfom_global_trnsf:
                         trnsf_global = vt.vtTransformation(f"{save_path}/trnsf_global/trnsf_global_{file_float:04d}_{origin:04d}")
@@ -520,6 +527,7 @@ def register(
     metadata["data"] = [os.path.join(save_path,f"files_ch{ch}","registered_files_{:04d}.tiff") for ch in range(dataset._nchannels)]
     metadata["dtype"] = "regex"
     metadata["transformations"] = transformation_metadata
+    metadata["scale"] = new_scale
 
     with open(f"{save_path}/dataset.json", "w") as f:
         json.dump(metadata, f, indent=4)

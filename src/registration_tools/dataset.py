@@ -393,7 +393,11 @@ class Dataset:
                 return path
         elif self._dtype == "regex" and self._channels_separated:
             path = self._data[channel].format(self._numbers[index])
-            return path
+            if any(i != 1 for i in downsample):
+                image = imread(path)
+                return make_tmp_image(image, path_tmp_file, downsample)
+            else:
+                return path
         elif self._dtype == "array" and not self._channels_separated:
             if "C" in self._format:
                 if self._pos_symbol["T"] > self._pos_symbol["C"]:
