@@ -453,7 +453,7 @@ class Dataset:
         with open(metadata_path, 'w') as f:
             json.dump(metadata, f, indent=4)
 
-    def get_data_iterator(self, channel=0, downsample=None, return_position=False):
+    def get_data_iterator(self, channel=0, downsample=None, return_position=False, numbers=None):
         """
         Returns a DataIterator for the dataset.
 
@@ -461,13 +461,14 @@ class Dataset:
             channel (int): The channel to iterate over.
             downsample (tuple): The downsample factors for each spatial dimension.
             return_position (bool): Whether to return the position along with the data.
+            numbers (list): A list of specific numbers to iterate over. Default is None (iterate over all numbers).
 
         Returns:
             DataIterator: An iterator over the dataset.
         """
-        return DataIterator(self, channel, downsample, return_position)
+        return DataIterator(self, channel, downsample, return_position, numbers)
 
-    def get_file_iterator(self, path_tmp_file, channel=0, downsample=None, return_position=False):
+    def get_file_iterator(self, path_tmp_file, channel=0, downsample=None, return_position=False, numbers=None):
         """
         Returns a FileIterator for the dataset.
 
@@ -476,11 +477,12 @@ class Dataset:
             channel (int): The channel to iterate over.
             downsample (tuple): The downsample factors for each spatial dimension.
             return_position (bool): Whether to return the position along with the file path.
+            numbers (list): A list of specific numbers to iterate over. Default is None (iterate over all numbers).
 
         Returns:
             FileIterator: An iterator over the dataset.
         """
-        return FileIterator(self, path_tmp_file, channel, downsample, return_position)
+        return FileIterator(self, path_tmp_file, channel, downsample, return_position, numbers)
 
     def get_spatial_shape(self):
         """
@@ -490,22 +492,59 @@ class Dataset:
             tuple: A tuple representing the spatial dimensions of the dataset in the order specified by the format.
         """
         return tuple(self._shape[self._pos_symbol[dim]] for dim in self._format if dim in "XYZ")
+    
+    def numbers_to_positions(self, numbers=None):
+        """
+        Converts a list of numbers to their corresponding positions in the dataset.
+
+        Args:
+            dataset (Dataset): The dataset object.
+            numbers (list): A list of numbers to convert to positions.
+
+        Returns:
+            list: A list of positions corresponding to the numbers.
+        """
+        if numbers is None:
+            numbers = self._numbers
+
+        positions = []
+        for i in numbers:
+            pos = np.where(np.array(self._numbers) == i)[0][0]
+            if pos is not None:
+                positions.append(pos)
+            else:
+                raise ValueError(f"Number {i} not found in dataset numbers")
+        return positions
 
 class DataIterator:
-    def __init__(self, dataset, channel=0, downsample=None, return_position=False):
+    def __init__(self, dataset, channel=0, downsample=None, return_position=False, numbers=None):
+        """
+        Initializes the DataIterator object.
+
+        Args:
+            dataset (Dataset): The dataset to iterate over.
+            channel (int): The channel to iterate over.
+            downsample (tuple): The downsample factors for each spatial dimension.
+            return_position (bool): Whether to return the position along with the data.
+            numbers (list): A list of specific numbers to iterate over. Default is None (iterate over all numbers).
+        """
+
+        positions = dataset.numbers_to_positions(numbers)
+
         self._dataset = dataset
         self._channel = channel
         self._downsample = downsample
         self._index = 0
-        self._max_index = len(self._dataset._numbers)
+        self._max_index = len(positions)
         self._return_position = return_position
+        self._positions = positions
 
     def __iter__(self):
         return self
 
     def __next__(self):
         if self._index < self._max_index:
-            result = self._dataset.get_time_data(self._index, self._channel, self._downsample)
+            result = self._dataset.get_time_data(self._positions[self._index], self._channel, self._downsample)
             self._index += 1
             if self._return_position:
                 return self._index - 1, result
@@ -515,21 +554,36 @@ class DataIterator:
             raise StopIteration
 
 class FileIterator:
-    def __init__(self, dataset, path_tmp_file, channel=0, downsample=None, return_position=False):
+    def __init__(self, dataset, path_tmp_file, channel=0, downsample=None, return_position=False, numbers=None):
+        """
+        Initializes the FileIterator object.
+
+        Args:
+            dataset (Dataset): The dataset to iterate over.
+            path_tmp_file (str): The temporary file path to save the downsampled images.
+            channel (int): The channel to iterate over.
+            downsample (tuple): The downsample factors for each spatial dimension.
+            return_position (bool): Whether to return the position along with the file path.
+            numbers (list): A list of specific numbers to iterate over. Default is None (iterate over all numbers).
+        """
+
+        positions = dataset.numbers_to_positions(numbers)
+
         self._dataset = dataset
         self._path_tmp_file = path_tmp_file
         self._channel = channel
         self._downsample = downsample
         self._index = 0
-        self._max_index = len(self._dataset._numbers)
+        self._max_index = len(positions)
         self._return_position = return_position
+        self._positions = positions
 
     def __iter__(self):
         return self
 
     def __next__(self):
         if self._index < self._max_index:
-            result = self._dataset.get_time_file(self._path_tmp_file, self._index, self._channel, self._downsample)
+            result = self._dataset.get_time_file(self._path_tmp_file, self._positions[self._index], self._channel, self._downsample)
             self._index += 1
             if self._return_position:
                 return self._index - 1, result

@@ -26,12 +26,12 @@ def plot_images(viewer, dataset, channels=None, numbers=None, downsample=(1, 1, 
 
     for ch in range(dataset._nchannels):
         images = []
-        for image in dataset.get_data_iterator(channel=ch, downsample=downsample):
+        for image in dataset.get_data_iterator(channel=ch, downsample=downsample, numbers=numbers):
             images.append(image[np.newaxis, ...])
 
         viewer.add_image(np.concatenate(images, axis=0), scale=(dataset._scale), opacity=0.5, blending='additive', colormap=cmaps[ch], name=f'Channel {ch}')
 
-def plot_projections(viewer, dataset, projection, channels=None, old=False):
+def plot_projections(viewer, dataset, projection, channels=None, old=False, numbers=None):
     """
     Plots the projections of the dataset in the viewer.
 
@@ -41,6 +41,7 @@ def plot_projections(viewer, dataset, projection, channels=None, old=False):
         projection (int): The projection axis (e.g., 0 for X, 1 for Y, 2 for Z).
         channels (list, optional): List of channels to plot. If None, all channels are plotted.
         old (bool, optional): Whether to plot old projections. Default is False.
+        numbers (list, optional): List of numbers to plot. If None, all numbers are plotted.
     """
     cmaps = ['red', 'green', 'blue', 'magenta', 'yellow', 'cyan']
 
@@ -54,6 +55,8 @@ def plot_projections(viewer, dataset, projection, channels=None, old=False):
     scale = list(dataset._scale)
     del scale[projection]
 
+    positions = dataset.numbers_to_positions(numbers)
+
     for pos, ch in enumerate(channels):
         path = os.path.join(dataset._save_folder, "projections", f"{add_old}projections_ch{ch}", f"{add_old}projections_{projection}.tiff")
         if not os.path.exists(path):
@@ -61,9 +64,12 @@ def plot_projections(viewer, dataset, projection, channels=None, old=False):
 
         image = imread(path)
 
+        if positions is not None:
+            image = image[positions]
+
         viewer.add_image(image, scale=scale, opacity=0.5, colormap=cmaps[pos], blending='additive')
 
-def plot_projections_difference(viewer, dataset, projection, channel=0, old=True):
+def plot_projections_difference(viewer, dataset, projection, channel=0, old=True, numbers=None):
     """
     Plots the difference between current and old projections of the dataset in the viewer.
 
@@ -73,17 +79,24 @@ def plot_projections_difference(viewer, dataset, projection, channel=0, old=True
         projection (int): The projection axis (e.g., 0 for X, 1 for Y, 2 for Z).
         channel (int, optional): The channel to plot. Default is 0.
         old (bool, optional): Whether to plot old projections. Default is True.
+        numbers (list, optional): List of numbers to plot. If None, all numbers are plotted.
     """
     cmaps = ['red', 'green', 'blue']
 
     scale = list(dataset._scale)
     del scale[projection]
 
+    positions = dataset.numbers_to_positions(numbers)
+
     path = os.path.join(dataset._save_folder, "projections", f"projections_ch{channel}", f"projections_{projection}.tiff")
-    image_current_registered = imread(path)[:-1]
+    image_current_registered = imread(path)
+    if positions is not None:
+        image_current_registered = image_current_registered[positions[:-1]]
     viewer.add_image(image_current_registered, scale=scale, opacity=0.5, colormap=cmaps[0], blending='additive')
 
-    image_next_registered = imread(path)[1:]
+    image_next_registered = imread(path)
+    if positions is not None:
+        image_next_registered = image_next_registered[positions[1:]]
     viewer.add_image(image_next_registered, scale=scale, opacity=0.5, colormap=cmaps[1], blending='additive')
 
     path = os.path.join(dataset._save_folder, "projections", f"old_projections_ch{channel}", f"old_projections_{projection}.tiff")
@@ -91,22 +104,30 @@ def plot_projections_difference(viewer, dataset, projection, channel=0, old=True
         print("Warning: Old projection file does not exist.")
         return
 
-    image_next_unregistered = imread(path)[1:]
+    image_next_unregistered = imread(path)
+    if positions is not None:
+        image_next_unregistered = image_next_unregistered[positions[1:]]
     viewer.add_image(image_next_unregistered, scale=scale, opacity=0.5, colormap=cmaps[2], blending='additive')
 
-def plot_vectorfield(viewer, dataset):
+def plot_vectorfield(viewer, dataset, numbers=None):
     """
     Plots the vectorfield of the dataset in the viewer.
 
     Args:
         viewer (napari.Viewer): The napari viewer instance.
         dataset (Dataset): The dataset object.
+        numbers (list, optional): List of numbers to plot. If None, all numbers are plotted.
     """
     path = os.path.join(dataset._save_folder, "vectorfield", "vectorfield.npy")
     if not os.path.exists(path):
         raise ValueError("Vectorfield file does not exist.")
 
     vectorfield = np.load(path)
+
+    positions = dataset.numbers_to_positions(numbers)
+
+    if positions is not None:
+        vectorfield = vectorfield[np.isin(vectorfield[:, 0, 0], positions)]
 
     viewer.add_vectors(vectorfield, scale=(1,*dataset._scale))
 
