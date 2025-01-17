@@ -262,7 +262,7 @@ def register(
     # Save parameters to JSON file
     transformation_metadata = {
         "use_channel": use_channel,
-        "numbers": numbers,
+        "numbers": list(numbers),
         "registration_type": registration_type,
         "registration_direction": registration_direction,
         "args_registration": args_registration,
@@ -285,6 +285,7 @@ def register(
     metadata["dtype"] = "regex"
     metadata["transformations"] = transformation_metadata
     metadata["scale"] = new_scale
+    metadata["shape"] = [len(list(range(i))[::j]) for i,j in zip(dataset._shape, downsample)]
 
     # Check continue
     if save_behavior == "Continue":

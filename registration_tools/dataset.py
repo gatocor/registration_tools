@@ -272,13 +272,13 @@ class Dataset:
             "data": self._data,
             "dtype": self._dtype,
             "format": self._format,
-            "shape": self._shape,
+            "shape": list(self._shape),
             "ndim": self._ndim,
             "ndim_spatial": self._ndim_spatial,
             "nchannels": self._nchannels,
             "channels_separated": self._channels_separated,
-            "numbers": self._numbers,
-            "scale": self._scale,
+            "numbers": list(self._numbers),
+            "scale": list(self._scale),
             "pos_symbol": self._pos_symbol,
             "transformations": self._transformation
         }

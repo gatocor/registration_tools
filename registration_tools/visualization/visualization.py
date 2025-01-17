@@ -29,7 +29,7 @@ def plot_images(viewer, dataset, channels=None, numbers=None, downsample=(1, 1, 
         for image in dataset.get_data_iterator(channel=ch, downsample=downsample, numbers=numbers):
             images.append(image[np.newaxis, ...])
 
-        viewer.add_image(np.concatenate(images, axis=0), scale=(dataset._scale), opacity=0.5, blending='additive', colormap=cmaps[ch], name=f'Channel {ch}')
+        viewer.add_image(np.concatenate(images, axis=0), scale=[i*j for i,j in zip(dataset._scale,downsample)], opacity=0.5, blending='additive', colormap=cmaps[ch], name=f'Channel {ch}')
 
 def plot_projections(viewer, dataset, projection, channels=None, old=False, numbers=None):
     """
