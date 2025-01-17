@@ -150,7 +150,7 @@
     <span class="n">dataset</span><span class="o">.</span><span class="n">_numbers</span> <span class="o">=</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;numbers&quot;</span><span class="p">]</span>
     <span class="n">dataset</span><span class="o">.</span><span class="n">_scale</span> <span class="o">=</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;scale&quot;</span><span class="p">]</span>
     <span class="n">dataset</span><span class="o">.</span><span class="n">_pos_symbol</span> <span class="o">=</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;pos_symbol&quot;</span><span class="p">]</span>
-    <span class="n">dataset</span><span class="o">.</span><span class="n">_transformation</span> <span class="o">=</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;transformation&quot;</span><span class="p">]</span>
+    <span class="n">dataset</span><span class="o">.</span><span class="n">_transformation</span> <span class="o">=</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;transformations&quot;</span><span class="p">]</span>
     <span class="n">dataset</span><span class="o">.</span><span class="n">_save_folder</span> <span class="o">=</span> <span class="n">directory</span>
 
     <span class="k">return</span> <span class="n">dataset</span></div>
@@ -193,7 +193,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_numbers</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_scale</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_transformation</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_transformation</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_save_folder</span> <span class="o">=</span> <span class="kc">None</span>
         
 <div class="viewcode-block" id="Dataset.get_format">
@@ -332,7 +332,7 @@
             <span class="s2">&quot;numbers&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_numbers</span><span class="p">,</span>
             <span class="s2">&quot;scale&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scale</span><span class="p">,</span>
             <span class="s2">&quot;pos_symbol&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">,</span>
-            <span class="s2">&quot;transformation&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transformation</span>
+            <span class="s2">&quot;transformations&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transformation</span>
         <span class="p">}</span>
         <span class="k">return</span> <span class="n">metadata</span></div>
 
@@ -517,7 +517,7 @@
 
 <div class="viewcode-block" id="Dataset.get_data_iterator">
 <a class="viewcode-back" href="../../API_dataset.html#registration_tools.Dataset.get_data_iterator">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">get_data_iterator</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">channel</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">downsample</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">return_position</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_data_iterator</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">channel</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">downsample</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">return_position</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">numbers</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Returns a DataIterator for the dataset.</span>
 
@@ -525,16 +525,17 @@
 <span class="sd">            channel (int): The channel to iterate over.</span>
 <span class="sd">            downsample (tuple): The downsample factors for each spatial dimension.</span>
 <span class="sd">            return_position (bool): Whether to return the position along with the data.</span>
+<span class="sd">            numbers (list): A list of specific numbers to iterate over. Default is None (iterate over all numbers).</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            DataIterator: An iterator over the dataset.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="n">DataIterator</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="n">downsample</span><span class="p">,</span> <span class="n">return_position</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="n">DataIterator</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="n">downsample</span><span class="p">,</span> <span class="n">return_position</span><span class="p">,</span> <span class="n">numbers</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="Dataset.get_file_iterator">
 <a class="viewcode-back" href="../../API_dataset.html#registration_tools.Dataset.get_file_iterator">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">get_file_iterator</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path_tmp_file</span><span class="p">,</span> <span class="n">channel</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">downsample</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">return_position</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_file_iterator</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path_tmp_file</span><span class="p">,</span> <span class="n">channel</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">downsample</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">return_position</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">numbers</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Returns a FileIterator for the dataset.</span>
 
@@ -543,11 +544,12 @@
 <span class="sd">            channel (int): The channel to iterate over.</span>
 <span class="sd">            downsample (tuple): The downsample factors for each spatial dimension.</span>
 <span class="sd">            return_position (bool): Whether to return the position along with the file path.</span>
+<span class="sd">            numbers (list): A list of specific numbers to iterate over. Default is None (iterate over all numbers).</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">            FileIterator: An iterator over the dataset.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="n">FileIterator</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path_tmp_file</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="n">downsample</span><span class="p">,</span> <span class="n">return_position</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="n">FileIterator</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path_tmp_file</span><span class="p">,</span> <span class="n">channel</span><span class="p">,</span> <span class="n">downsample</span><span class="p">,</span> <span class="n">return_position</span><span class="p">,</span> <span class="n">numbers</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="Dataset.get_spatial_shape">
@@ -560,26 +562,66 @@
 <span class="sd">            tuple: A tuple representing the spatial dimensions of the dataset in the order specified by the format.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_shape</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_pos_symbol</span><span class="p">[</span><span class="n">dim</span><span class="p">]]</span> <span class="k">for</span> <span class="n">dim</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_format</span> <span class="k">if</span> <span class="n">dim</span> <span class="ow">in</span> <span class="s2">&quot;XYZ&quot;</span><span class="p">)</span></div>
+
+    
+<div class="viewcode-block" id="Dataset.numbers_to_positions">
+<a class="viewcode-back" href="../../API_dataset.html#registration_tools.Dataset.numbers_to_positions">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">numbers_to_positions</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">numbers</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Converts a list of numbers to their corresponding positions in the dataset.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            dataset (Dataset): The dataset object.</span>
+<span class="sd">            numbers (list): A list of numbers to convert to positions.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            list: A list of positions corresponding to the numbers.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">numbers</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">numbers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_numbers</span>
+
+        <span class="n">positions</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">numbers</span><span class="p">:</span>
+            <span class="n">pos</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_numbers</span><span class="p">)</span> <span class="o">==</span> <span class="n">i</span><span class="p">)[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">pos</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">positions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">pos</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Number </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2"> not found in dataset numbers&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">positions</span></div>
 </div>
 
 
 <div class="viewcode-block" id="DataIterator">
 <a class="viewcode-back" href="../../API_dataset.html#registration_tools.DataIterator">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">DataIterator</span><span class="p">:</span>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">channel</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">downsample</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">return_position</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">channel</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">downsample</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">return_position</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">numbers</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initializes the DataIterator object.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            dataset (Dataset): The dataset to iterate over.</span>
+<span class="sd">            channel (int): The channel to iterate over.</span>
+<span class="sd">            downsample (tuple): The downsample factors for each spatial dimension.</span>
+<span class="sd">            return_position (bool): Whether to return the position along with the data.</span>
+<span class="sd">            numbers (list): A list of specific numbers to iterate over. Default is None (iterate over all numbers).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">positions</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">numbers_to_positions</span><span class="p">(</span><span class="n">numbers</span><span class="p">)</span>
+
         <span class="bp">self</span><span class="o">.</span><span class="n">_dataset</span> <span class="o">=</span> <span class="n">dataset</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span> <span class="o">=</span> <span class="n">channel</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_downsample</span> <span class="o">=</span> <span class="n">downsample</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_index</span> <span class="o">=</span> <span class="mi">0</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_max_index</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_dataset</span><span class="o">.</span><span class="n">_numbers</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_max_index</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">positions</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_return_position</span> <span class="o">=</span> <span class="n">return_position</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_positions</span> <span class="o">=</span> <span class="n">positions</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__next__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_index</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_max_index</span><span class="p">:</span>
-            <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dataset</span><span class="o">.</span><span class="n">get_time_data</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_index</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_downsample</span><span class="p">)</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dataset</span><span class="o">.</span><span class="n">get_time_data</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_positions</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_index</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_downsample</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_index</span> <span class="o">+=</span> <span class="mi">1</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_return_position</span><span class="p">:</span>
                 <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_index</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">result</span>
@@ -592,21 +634,36 @@
 <div class="viewcode-block" id="FileIterator">
 <a class="viewcode-back" href="../../API_dataset.html#registration_tools.FileIterator">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">FileIterator</span><span class="p">:</span>
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">path_tmp_file</span><span class="p">,</span> <span class="n">channel</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">downsample</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">return_position</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">path_tmp_file</span><span class="p">,</span> <span class="n">channel</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">downsample</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">return_position</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">numbers</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initializes the FileIterator object.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            dataset (Dataset): The dataset to iterate over.</span>
+<span class="sd">            path_tmp_file (str): The temporary file path to save the downsampled images.</span>
+<span class="sd">            channel (int): The channel to iterate over.</span>
+<span class="sd">            downsample (tuple): The downsample factors for each spatial dimension.</span>
+<span class="sd">            return_position (bool): Whether to return the position along with the file path.</span>
+<span class="sd">            numbers (list): A list of specific numbers to iterate over. Default is None (iterate over all numbers).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">positions</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">numbers_to_positions</span><span class="p">(</span><span class="n">numbers</span><span class="p">)</span>
+
         <span class="bp">self</span><span class="o">.</span><span class="n">_dataset</span> <span class="o">=</span> <span class="n">dataset</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_path_tmp_file</span> <span class="o">=</span> <span class="n">path_tmp_file</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span> <span class="o">=</span> <span class="n">channel</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_downsample</span> <span class="o">=</span> <span class="n">downsample</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_index</span> <span class="o">=</span> <span class="mi">0</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_max_index</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_dataset</span><span class="o">.</span><span class="n">_numbers</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_max_index</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">positions</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_return_position</span> <span class="o">=</span> <span class="n">return_position</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_positions</span> <span class="o">=</span> <span class="n">positions</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">return</span> <span class="bp">self</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__next__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_index</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_max_index</span><span class="p">:</span>
-            <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dataset</span><span class="o">.</span><span class="n">get_time_file</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_path_tmp_file</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_index</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_downsample</span><span class="p">)</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dataset</span><span class="o">.</span><span class="n">get_time_file</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_path_tmp_file</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_positions</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_index</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">_channel</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_downsample</span><span class="p">)</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_index</span> <span class="o">+=</span> <span class="mi">1</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_return_position</span><span class="p">:</span>
                 <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_index</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">result</span>
