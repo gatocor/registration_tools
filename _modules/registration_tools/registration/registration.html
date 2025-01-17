@@ -42,6 +42,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">atexit</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tqdm</span><span class="w"> </span><span class="kn">import</span> <span class="n">tqdm</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">copy</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>  <span class="c1"># Add this import</span>
 
 <div class="viewcode-block" id="get_pyramid_levels">
@@ -318,15 +319,17 @@
         <span class="s2">&quot;vectorfield_spacing&quot;</span><span class="p">:</span> <span class="n">vectorfield_spacing</span><span class="p">,</span>
     <span class="p">}</span>
 
-    <span class="n">metadata</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">get_metadata</span><span class="p">()</span>
+    <span class="n">metadata</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">get_metadata</span><span class="p">())</span>
     <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">save_path</span><span class="p">,</span><span class="sa">f</span><span class="s2">&quot;files_ch</span><span class="si">{</span><span class="n">ch</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span><span class="s2">&quot;registered_files_</span><span class="si">{:04d}</span><span class="s2">.tiff&quot;</span><span class="p">)</span> <span class="k">for</span> <span class="n">ch</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">_nchannels</span><span class="p">)]</span>
     <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;dtype&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;regex&quot;</span>
     <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;transformations&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">transformation_metadata</span>
     <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;scale&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">new_scale</span>
     <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;shape&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">i</span><span class="p">))[::</span><span class="n">j</span><span class="p">])</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span><span class="n">j</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">_shape</span><span class="p">,</span> <span class="n">downsample</span><span class="p">)]</span>
+    <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;numbers&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">numbers</span><span class="p">)</span>
 
     <span class="c1"># Check continue</span>
     <span class="k">if</span> <span class="n">save_behavior</span> <span class="o">==</span> <span class="s2">&quot;Continue&quot;</span><span class="p">:</span>
+        <span class="n">ignore</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;numbers&quot;</span><span class="p">]</span>
         <span class="c1"># Check if dataset.json exists and load it</span>
         <span class="n">dataset_json_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">save_path</span><span class="p">,</span> <span class="s2">&quot;dataset.json&quot;</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">dataset_json_path</span><span class="p">):</span>
@@ -335,9 +338,11 @@
             
             <span class="c1"># Check if all metadata is preserved</span>
             <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">transformation_metadata</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-                <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">existing_metadata</span><span class="p">[</span><span class="s2">&quot;transformations&quot;</span><span class="p">]:</span>
+                <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">existing_metadata</span><span class="p">[</span><span class="s2">&quot;transformations&quot;</span><span class="p">]</span> <span class="ow">and</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">ignore</span><span class="p">:</span>
                     <span class="k">if</span> <span class="n">existing_metadata</span><span class="p">[</span><span class="s2">&quot;transformations&quot;</span><span class="p">][</span><span class="n">key</span><span class="p">]</span> <span class="o">!=</span> <span class="n">value</span><span class="p">:</span>
                         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Metadata mismatch for key &#39;</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&#39;: </span><span class="si">{</span><span class="n">existing_metadata</span><span class="p">[</span><span class="s1">&#39;transformations&#39;</span><span class="p">][</span><span class="n">key</span><span class="p">]</span><span class="si">}</span><span class="s2"> != </span><span class="si">{</span><span class="n">value</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">ignore</span><span class="p">:</span>
+                    <span class="kc">None</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Metadata key &#39;</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">&#39; is missing in the existing dataset.json. This indicates that this is not the same project. Please change the save_path or delete the content before proceeding.&quot;</span><span class="p">)</span>
         
