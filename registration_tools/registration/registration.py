@@ -412,7 +412,6 @@ def register(
         # time.sleep(5)
 
         if save_behavior == "Continue" and os.path.exists(f"{save_path}/files_ch{use_channel}/registered_files_{file_ref:04d}.tiff") and skip:
-            skip = False
             continue
         else:
             skip = False
