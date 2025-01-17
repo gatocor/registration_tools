@@ -41,7 +41,8 @@ class TestRegistration(unittest.TestCase):
             register(
                 dataset=create_dataset(path, format="XYZ", numbers=[1,2,3,4,6,7,8,9]),
                 save_path=self.test_folder,
-                use_channel=0
+                use_channel=0,
+                save_behavior="NotOverwrite"
             )
         self.assertEqual(str(context.exception), "save_path must be an empty directory.")
 
@@ -127,6 +128,29 @@ class TestRegistration(unittest.TestCase):
             expected_center = np.array(image.shape) // 2
 
             self.assertTrue(np.allclose(mean_center, expected_center, atol=2), f"Mean center {mean_center} in channel {channel} is not around the expected center {expected_center}")
+
+    def test_register_continuation(self):
+        dataset = create_dataset(
+            [
+                os.path.join(self.test_folder, "channel_0", "sphere_{:02d}.tiff"),
+                os.path.join(self.test_folder, "channel_1", "sphere_{:02d}.tiff"),
+                os.path.join(self.test_folder, "channel_2", "sphere_{:02d}.tiff")             
+            ]
+            , "XYZ", numbers=[0,1,2,3,4,5,6,7,8,9], scale=(1,1,1))
+        register(
+            dataset=dataset,
+            save_path=self.save_folder,
+            use_channel=0,
+            save_behavior="Continue"
+        ),
+        for i in [5,6,7,8,9]:
+            os.remove(os.path.join(self.save_folder, "files_ch0", f"sphere_{i:02d}.tiff"))
+        register(
+            dataset=dataset,
+            save_path=self.save_folder,
+            use_channel=0,
+            save_behavior="NotOverwrite"
+        ),
 
     def test_get_pyramid_levels(self):
         dataset = create_dataset(

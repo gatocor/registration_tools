@@ -112,7 +112,7 @@ def load_dataset(directory):
     dataset._numbers = metadata["numbers"]
     dataset._scale = metadata["scale"]
     dataset._pos_symbol = metadata["pos_symbol"]
-    dataset._transformation = metadata["transformation"]
+    dataset._transformation = metadata["transformations"]
     dataset._save_folder = directory
 
     return dataset
@@ -152,7 +152,7 @@ class Dataset:
         self._numbers = None
         self._scale = None
         self._pos_symbol = None
-        self._transformation = None
+        self._transformation = {}
         self._save_folder = None
         
     def get_format(self, data):
@@ -280,7 +280,7 @@ class Dataset:
             "numbers": self._numbers,
             "scale": self._scale,
             "pos_symbol": self._pos_symbol,
-            "transformation": self._transformation
+            "transformations": self._transformation
         }
         return metadata
 

@@ -8,6 +8,7 @@ from ..dataset import Dataset, load_dataset
 import json
 import atexit
 from tqdm import tqdm
+import time
 import warnings  # Add this import
 
 def get_pyramid_levels(dataset, maximum_size = 100, verbose = True):
@@ -69,7 +70,7 @@ def register(
         save_path (str): The directory where the registration results will be saved.
         use_channel (int, optional): The channel to use for registration. Default is 0.
         numbers (list, optional): List of numbers to register. If None, all numbers in the dataset will be used. Default is None.
-        save_behavior (str, optional): Behavior for saving files. Options are "NotOverwrite", "Continue", "Overwrite". Default is "Continue".
+        save_behavior (str, optional): Behavior for saving files. Options are "NotOverwrite", "Continue". Default is "Continue".
         perfom_global_trnsf (bool, optional): Whether to perform global transformation. Default is None.
         apply_registration (bool, optional): Whether to apply the registration. Default is True.
         registration_type (str, optional): Type of registration to perform. Default is "rigid". Select among:
@@ -228,7 +229,7 @@ def register(
             os.makedirs(save_path)
         elif not os.path.isdir(save_path):
             raise ValueError("save_path must be a directory.")
-        elif len(os.listdir(save_path)) > 0:
+        elif len(os.listdir(save_path)) > 0 and save_behavior == "NotOverwrite":
             raise ValueError("save_path must be an empty directory.")
     else:
         raise ValueError("save_path must be a string representing a directory path.")
@@ -247,6 +248,64 @@ def register(
     # Check save behavior
     if save_behavior not in save_behaviors:
         raise ValueError(f"save_behavior should be one of the following: {save_behaviors}.")
+    
+    # Check downsample
+    if downsample is None:
+        downsample = (1,) * dataset._ndim_spatial
+    elif not all(isinstance(d, int) for d in downsample):
+        raise ValueError("All elements in downsample must be integers.")
+    elif len(downsample) != dataset._ndim_spatial:
+        raise ValueError(f"downsample must have the same length as the number of spatial dimensions ({dataset._ndim_spatial}).")
+    
+    new_scale = tuple([i*j for i,j in zip(dataset._scale, downsample)])
+
+    # Save parameters to JSON file
+    transformation_metadata = {
+        "use_channel": use_channel,
+        "numbers": numbers,
+        "registration_type": registration_type,
+        "registration_direction": registration_direction,
+        "args_registration": args_registration,
+        "padding": padding,
+        "downsample": list(downsample),
+        "pyramid_lowest_level": pyramid_lowest_level,
+        "pyramid_highest_level": pyramid_highest_level,
+        "perfom_global_trnsf": perfom_global_trnsf,
+        "apply_registration": apply_registration,
+        "save_behavior": save_behavior,
+        "plot_old_projections": plot_old_projections,
+        "plot_projections": plot_projections,
+        "make_vectorfield": make_vectorfield,
+        "vectorfield_threshold": vectorfield_threshold,
+        "vectorfield_spacing": vectorfield_spacing,
+    }
+
+    metadata = dataset.get_metadata()
+    metadata["data"] = [os.path.join(save_path,f"files_ch{ch}","registered_files_{:04d}.tiff") for ch in range(dataset._nchannels)]
+    metadata["dtype"] = "regex"
+    metadata["transformations"] = transformation_metadata
+    metadata["scale"] = new_scale
+
+    # Check continue
+    if save_behavior == "Continue":
+        # Check if dataset.json exists and load it
+        dataset_json_path = os.path.join(save_path, "dataset.json")
+        if os.path.exists(dataset_json_path):
+            with open(dataset_json_path, "r") as f:
+                existing_metadata = json.load(f)
+            
+            # Check if all metadata is preserved
+            for key, value in transformation_metadata.items():
+                if key in existing_metadata["transformations"]:
+                    if existing_metadata["transformations"][key] != value:
+                        raise ValueError(f"Metadata mismatch for key '{key}': {existing_metadata['transformations'][key]} != {value}")
+                else:
+                    raise ValueError(f"Metadata key '{key}' is missing in the existing dataset.json. This indicates that this is not the same project. Please change the save_path or delete the content before proceeding.")
+        
+            print("Continuing registration from existing dataset skiping the registered positions.")
+
+    with open(f"{save_path}/dataset.json", "w") as f:
+        json.dump(metadata, f, indent=4)
 
     # Perform global transformation
     if perfom_global_trnsf == None and registration_type in ["translation2D", "translation3D", "translation", "rigid2D", "rigid3D", "rigid"]:
@@ -261,16 +320,6 @@ def register(
     elif registration_direction not in ["forward", "backward"]:
         raise ValueError("registration_direction must be either None or 'forward' or 'backward'.")
     
-    # Check downsample
-    if downsample is None:
-        downsample = (1,) * dataset._ndim_spatial
-    elif not all(isinstance(d, int) for d in downsample):
-        raise ValueError("All elements in downsample must be integers.")
-    elif len(downsample) != dataset._ndim_spatial:
-        raise ValueError(f"downsample must have the same length as the number of spatial dimensions ({dataset._ndim_spatial}).")
-    
-    new_scale = tuple([i*j for i,j in zip(dataset._scale, downsample)])
-
     # Check if dataset spatial dimensions are not 3, set plot projections to False
     if dataset._ndim_spatial != 3:
         plot_old_projections = False
@@ -323,7 +372,6 @@ def register(
     #Check file is not too heavy
     tmp_file = dataset.get_time_file(os.path.join(directory_tmp, "ref.tiff"), 0, 0, downsample)
     try:
-        print(f"Size: {imread(tmp_file).shape}")
         l = np.prod(imread(tmp_file).shape)
         l2 = np.prod(vt.vtImage(tmp_file).shape())
     except:
@@ -349,12 +397,25 @@ def register(
             numbers[:-1][::-1]
         )
 
-    for pos_ref, pos_float, file_ref, file_float in tqdm(iterator, desc=f"Registering images using channel {use_channel}", unit=""):
-            
-        if pos_ref in [0, len(numbers)-1]:
+    load_ref = True
+    make_ref_proj = True
+    skip = True
+    for pos_ref, pos_float, file_ref, file_float in tqdm(iterator, desc=f"Registering images using channel {use_channel}", unit="", total=len(numbers)-1):
+
+        # Load reference image
+        # time.sleep(5)
+
+        if save_behavior == "Continue" and os.path.exists(f"{save_path}/files_ch{use_channel}/registered_files_{file_ref:04d}.tiff") and skip:
+            skip = False
+            continue
+        else:
+            skip = False
+
+        if load_ref:
             tmp_file_ref = dataset.get_time_file(os.path.join(directory_tmp, "ref.tiff"), pos_ref, use_channel, downsample)
             img_ref = vt.vtImage(tmp_file_ref)
             img_ref.setSpacing(new_scale[::-1])
+            load_ref = False
         else:
             img_ref = img_float
 
@@ -368,7 +429,7 @@ def register(
         add += f" -transformation-type {registration_type} -pyramid-lowest-level {pyramid_lowest_level} -pyramid-highest-level {pyramid_highest_level}"
 
         trnsf = vt.blockmatching(img_float, image_ref = img_ref, params=args_registration+add)
-        trnsf.write(f"{save_path}/trnsf_relative/trnsf_relative_{file_float:04d}_{file_ref:04d}")
+        trnsf.write(f"{save_path}/trnsf_relative/trnsf_relative_{file_float:04d}_{file_ref:04d}.trnsf")
 
         if make_vectorfield:
             vectors = transformation_to_vectorfield(
@@ -383,15 +444,15 @@ def register(
         if perfom_global_trnsf:
             if file_ref != origin:
                 trnsf = vt.compose_trsf([
-                    vt.vtTransformation(f"{save_path}/trnsf_global/trnsf_global_{file_ref:04d}_{origin:04d}"),
+                    vt.vtTransformation(f"{save_path}/trnsf_global/trnsf_global_{file_ref:04d}_{origin:04d}.trnsf"),
                     trnsf
                 ])
-                trnsf.write(f"{save_path}/trnsf_global/trnsf_global_{file_float:04d}_{origin:04d}")
+                trnsf.write(f"{save_path}/trnsf_global/trnsf_global_{file_float:04d}_{origin:04d}.trnsf")
             else:
-                trnsf.write(f"{save_path}/trnsf_global/trnsf_global_{file_float:04d}_{origin:04d}")
+                trnsf.write(f"{save_path}/trnsf_global/trnsf_global_{file_float:04d}_{origin:04d}.trnsf")
         
         if apply_registration:
-            if file_ref == origin:
+            if make_ref_proj:
                 img_ref_ = img_ref.to_array()
                 imsave(f"{save_path}/files_ch{use_channel}/registered_files_{file_ref:04d}.tiff", img_ref_)            
                 if plot_old_projections:
@@ -400,6 +461,7 @@ def register(
                 if plot_projections:
                     for dim in range(dataset._ndim_spatial):
                         imsave(f"{directory_projections}/projections_ch{use_channel}/projections_{dim}_{file_ref:04d}.tiff", img_ref_.max(axis=dim))
+                make_ref_proj = False
 
             img_corr = vt.apply_trsf(img_float, trnsf).to_array()
             imsave(f"{save_path}/files_ch{use_channel}/registered_files_{file_float:04d}.tiff", img_corr)
@@ -427,7 +489,7 @@ def register(
                     numbers[:-1][::-1]
                 )
 
-                for pos_ref, pos_float, file_ref, file_float in tqdm(iterator, desc=f"Applying registration to channel {ch}", unit=""):
+                for pos_ref, pos_float, file_ref, file_float in tqdm(iterator, desc=f"Applying registration to channel {ch}", unit="", total=len(numbers)-1):
                     if file_ref == origin:
                         img_corr_ch = dataset.get_time_data(pos_ref, ch, downsample)
                         imsave(f"{save_path}/files_ch{ch}/registered_files_{file_ref:04d}.tiff", img_corr_ch)
@@ -445,10 +507,10 @@ def register(
                     img_float_ch.setSpacing(new_scale[::-1])
                         
                     if perfom_global_trnsf:
-                        trnsf_global = vt.vtTransformation(f"{save_path}/trnsf_global/trnsf_global_{file_float:04d}_{origin:04d}")
+                        trnsf_global = vt.vtTransformation(f"{save_path}/trnsf_global/trnsf_global_{file_float:04d}_{origin:04d}.trnsf")
                         img_corr_ch = vt.apply_trsf(img_float_ch, trnsf_global).to_array()
                     else:
-                        trnsf_relative = vt.vtTransformation(f"{save_path}/trnsf_relative/trnsf_relative_{file_float:04d}_{file_ref:04d}")
+                        trnsf_relative = vt.vtTransformation(f"{save_path}/trnsf_relative/trnsf_relative_{file_float:04d}_{file_ref:04d}.trnsf")
                         img_corr_ch = vt.apply_trsf(img_float_ch, trnsf_relative).to_array()
 
                     imsave(f"{save_path}/files_ch{ch}/registered_files_{file_float:04d}.tiff", img_corr_ch)
@@ -481,9 +543,9 @@ def register(
                     projection = np.concatenate(projections, axis=0)
                     imsave(f"{directory_projections}/projections_ch{ch}/projections_{dim}.tiff", projection)
                     
-                    # Remove original projection files
-                    for file in projection_files:
-                        os.remove(file)
+                    # # Remove original projection files
+                    # for file in projection_files:
+                    #     os.remove(file)
 
         # Joint all old projections from one axis into a single file
         if plot_old_projections:
@@ -494,43 +556,13 @@ def register(
                     old_projection = np.concatenate(old_projections, axis=0)
                     imsave(f"{directory_projections}/old_projections_ch{ch}/old_projections_{dim}.tiff", old_projection)
 
-                    # Remove original old projection files
-                    for file in old_projection_files:
-                        os.remove(file)
+                    # # Remove original old projection files
+                    # for file in old_projection_files:
+                    #     os.remove(file)
 
     # Remove temporary directory if it exists
     if os.path.exists(directory_tmp):
         shutil.rmtree(directory_tmp)
-
-    # Save parameters to JSON file
-    transformation_metadata = {
-        "use_channel": use_channel,
-        "numbers": numbers,
-        "registration_type": registration_type,
-        "registration_direction": registration_direction,
-        "args_registration": args_registration,
-        "padding": padding,
-        "downsample": downsample,
-        "pyramid_lowest_level": pyramid_lowest_level,
-        "pyramid_highest_level": pyramid_highest_level,
-        "perfom_global_trnsf": perfom_global_trnsf,
-        "apply_registration": apply_registration,
-        "save_behavior": save_behavior,
-        "plot_old_projections": plot_old_projections,
-        "plot_projections": plot_projections,
-        "make_vectorfield": make_vectorfield,
-        "vectorfield_threshold": vectorfield_threshold,
-        "vectorfield_spacing": vectorfield_spacing,
-    }
-
-    metadata = dataset.get_metadata()
-    metadata["data"] = [os.path.join(save_path,f"files_ch{ch}","registered_files_{:04d}.tiff") for ch in range(dataset._nchannels)]
-    metadata["dtype"] = "regex"
-    metadata["transformations"] = transformation_metadata
-    metadata["scale"] = new_scale
-
-    with open(f"{save_path}/dataset.json", "w") as f:
-        json.dump(metadata, f, indent=4)
 
     return load_dataset(save_path)
 
