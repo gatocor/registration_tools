@@ -9,6 +9,7 @@ import json
 import atexit
 from tqdm import tqdm
 import time
+import copy
 import warnings  # Add this import
 
 def get_pyramid_levels(dataset, maximum_size = 100, verbose = True):
@@ -280,15 +281,17 @@ def register(
         "vectorfield_spacing": vectorfield_spacing,
     }
 
-    metadata = dataset.get_metadata()
+    metadata = copy.deepcopy(dataset.get_metadata())
     metadata["data"] = [os.path.join(save_path,f"files_ch{ch}","registered_files_{:04d}.tiff") for ch in range(dataset._nchannels)]
     metadata["dtype"] = "regex"
     metadata["transformations"] = transformation_metadata
     metadata["scale"] = new_scale
     metadata["shape"] = [len(list(range(i))[::j]) for i,j in zip(dataset._shape, downsample)]
+    metadata["numbers"] = list(numbers)
 
     # Check continue
     if save_behavior == "Continue":
+        ignore = ["numbers"]
         # Check if dataset.json exists and load it
         dataset_json_path = os.path.join(save_path, "dataset.json")
         if os.path.exists(dataset_json_path):
@@ -297,9 +300,11 @@ def register(
             
             # Check if all metadata is preserved
             for key, value in transformation_metadata.items():
-                if key in existing_metadata["transformations"]:
+                if key in existing_metadata["transformations"] and key not in ignore:
                     if existing_metadata["transformations"][key] != value:
                         raise ValueError(f"Metadata mismatch for key '{key}': {existing_metadata['transformations'][key]} != {value}")
+                elif key in ignore:
+                    None
                 else:
                     raise ValueError(f"Metadata key '{key}' is missing in the existing dataset.json. This indicates that this is not the same project. Please change the save_path or delete the content before proceeding.")
         
