@@ -494,7 +494,14 @@ def register(
                     numbers[:-1][::-1]
                 )
 
+                skip = True
                 for pos_ref, pos_float, file_ref, file_float in tqdm(iterator, desc=f"Applying registration to channel {ch}", unit="", total=len(numbers)-1):
+
+                    if save_behavior == "Continue" and os.path.exists(f"{save_path}/files_ch{ch}/registered_files_{file_float:04d}.tiff") and skip:
+                        continue
+                    else:
+                        skip = False
+
                     if file_ref == origin:
                         img_corr_ch = dataset.get_time_data(pos_ref, ch, downsample)
                         imsave(f"{save_path}/files_ch{ch}/registered_files_{file_ref:04d}.tiff", img_corr_ch)
