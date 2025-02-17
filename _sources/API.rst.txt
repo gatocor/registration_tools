@@ -6,5 +6,6 @@ API Reference
 
    API_dataset
    API_registration
+   API_utils
    API_visualization
    API_data

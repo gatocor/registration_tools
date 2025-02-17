@@ -3,7 +3,7 @@ Classes
 
 Main class objects of the package.
 
-.. automodule:: registration_tools
-   :members: Dataset, create_dataset, load_dataset, DataIterator, FileIterator
+.. automodule:: registration_tools.dataset
+   :members: Dataset
    :undoc-members:
    :show-inheritance:

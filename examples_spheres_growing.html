@@ -15,7 +15,7 @@
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
     <link rel="next" title="API Reference" href="API.html" />
-    <link rel="prev" title="Rigid Registration of a sphere" href="examples_spheres.html" />
+    <link rel="prev" title="Rigid Registration of Spheres" href="examples_spheres.html" />
    
   <link rel="stylesheet" href="_static/custom.css" type="text/css" />
   
@@ -43,11 +43,18 @@
 <ul>
 <li><p><a class="reference internal" href="index.html"><span class="doc std std-doc">Index</span></a></p></li>
 <li><p><a class="reference internal" href="#import-the-corresponding-libraries"><span class="xref myst">Import the corresponding libraries</span></a></p></li>
-<li><p><a class="reference internal" href="#create-an-artificial-dataset-of-growing-spherical-images"><span class="xref myst">Create an artificial dataset of growing spherical images</span></a></p></li>
+<li><p><a class="reference internal" href="#create-an-artificial-dataset-of-growing-spherical-images"><span class="xref myst">Create an artificial dataset of growing spherical images</span></a></p>
+<ul>
 <li><p><a class="reference internal" href="#visualizing"><span class="xref myst">Visualizing</span></a></p></li>
 <li><p><a class="reference internal" href="#make-video"><span class="xref myst">Make video</span></a></p></li>
-<li><p><a class="reference internal" href="#register-the-images"><span class="xref myst">Register the images</span></a></p></li>
+</ul>
+</li>
+<li><p><a class="reference internal" href="#register-the-images"><span class="xref myst">Register the images</span></a></p>
+<ul>
 <li><p><a class="reference internal" href="#plot-the-vector-field-and-make-videos"><span class="xref myst">Plot the vector field and make videos</span></a></p></li>
+<li><p><a class="reference internal" href="#plot-the-trajectories"><span class="xref myst">Plot the trajectories</span></a></p></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -60,6 +67,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">registration_tools.data</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">rt_data</span> <span class="c1">#For generating artificial datasets</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">registration_tools.visualization</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">rt_vis</span> <span class="c1">#For visualization</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">registration_tools.registration</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">rt_reg</span> <span class="c1">#For registration</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">registration_tools.utils</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">rt_utils</span> <span class="c1">#Other utility functions</span>
 </pre></div>
 </div>
 </section>
@@ -68,10 +76,9 @@
 <p>We will create a dataset of 10 growing spherical images with 3 channels.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Create a dataset of growing spherical images</span>
 <span class="n">dataset</span> <span class="o">=</span> <span class="n">rt_data</span><span class="o">.</span><span class="n">sphere</span><span class="p">(</span>
-    <span class="n">path</span><span class="o">=</span><span class="s1">&#39;sphere_dataset&#39;</span><span class="p">,</span>
     <span class="n">num_images</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
     <span class="n">image_size</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
-    <span class="n">num_channels</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+    <span class="n">num_channels</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
     <span class="n">min_radius</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
     <span class="n">max_radius</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>
     <span class="n">jump</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
@@ -80,9 +87,8 @@
 <span class="p">)</span>
 </pre></div>
 </div>
-</section>
 <section id="visualizing">
-<h2>Visualizing<a class="headerlink" href="#visualizing" title="Link to this heading">¶</a></h2>
+<h3>Visualizing<a class="headerlink" href="#visualizing" title="Link to this heading">¶</a></h3>
 <p>Initialize the napari viewer to visualize the dataset.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Initialize the napari viewer</span>
 <span class="n">viewer</span> <span class="o">=</span> <span class="n">napari</span><span class="o">.</span><span class="n">Viewer</span><span class="p">()</span>
@@ -91,13 +97,13 @@
 <p>and load the dataset to napari,</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Plot the images in the dataset</span>
 <span class="n">viewer</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span> <span class="c1">#Clear the viewer of other layers that may be present</span>
-<span class="n">rt_vis</span><span class="o">.</span><span class="n">plot_images</span><span class="p">(</span><span class="n">viewer</span><span class="p">,</span> <span class="n">dataset</span><span class="p">)</span>
+<span class="n">rt_vis</span><span class="o">.</span><span class="n">add_image</span><span class="p">(</span><span class="n">viewer</span><span class="p">,</span> <span class="n">dataset</span><span class="p">)</span>
+<span class="n">viewer</span><span class="o">.</span><span class="n">dims</span><span class="o">.</span><span class="n">ndisplay</span> <span class="o">=</span> <span class="mi">3</span>
 </pre></div>
 </div>
-<p><img alt="../assets/sphere_growing_dataset.gif" src="_images/sphere_growing_dataset.gif" /></p>
 </section>
 <section id="make-video">
-<h2>Make video<a class="headerlink" href="#make-video" title="Link to this heading">¶</a></h2>
+<h3>Make video<a class="headerlink" href="#make-video" title="Link to this heading">¶</a></h3>
 <p>Create a video from the images in the dataset.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Make video</span>
 <span class="n">rt_vis</span><span class="o">.</span><span class="n">make_video</span><span class="p">(</span>
@@ -107,41 +113,103 @@
 <span class="p">)</span>
 </pre></div>
 </div>
+<p><img alt="../assets/sphere_growing_dataset.gif" src="_images/sphere_growing_dataset.gif" /></p>
+</section>
 </section>
 <section id="register-the-images">
 <h2>Register the images<a class="headerlink" href="#register-the-images" title="Link to this heading">¶</a></h2>
 <p>Register the images in the dataset to correct for any misalignments.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Register the video</span>
-<span class="n">registered_dataset</span> <span class="o">=</span> <span class="n">rt_reg</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
-    <span class="n">dataset</span><span class="o">=</span><span class="n">dataset</span><span class="p">,</span>
-    <span class="n">save_path</span><span class="o">=</span><span class="s1">&#39;registered_sphere_dataset&#39;</span><span class="p">,</span>
+<span class="n">registration</span> <span class="o">=</span> <span class="n">rt_reg</span><span class="o">.</span><span class="n">Registration</span><span class="p">(</span>
     <span class="n">pyramid_highest_level</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
     <span class="n">pyramid_lowest_level</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
     <span class="n">registration_type</span><span class="o">=</span><span class="s1">&#39;vectorfield&#39;</span><span class="p">,</span>
-    <span class="n">registration_direction</span><span class="o">=</span><span class="s1">&#39;backward&#39;</span><span class="p">,</span>
-    <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-    <span class="n">vectorfield_spacing</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+    <span class="n">registration_direction</span><span class="o">=</span><span class="s1">&#39;forward&#39;</span><span class="p">,</span>
 <span class="p">)</span>
 </pre></div>
 </div>
-</section>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">registration</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span>
+    <span class="n">dataset</span><span class="p">,</span>
+    <span class="n">use_channel</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>Registering images using channel 0: 100%|██████████| 9/9 [00:23&lt;00:00,  2.65s/]
+</pre></div>
+</div>
 <section id="plot-the-vector-field-and-make-videos">
-<h2>Plot the vector field and make videos<a class="headerlink" href="#plot-the-vector-field-and-make-videos" title="Link to this heading">¶</a></h2>
+<h3>Plot the vector field and make videos<a class="headerlink" href="#plot-the-vector-field-and-make-videos" title="Link to this heading">¶</a></h3>
 <p>Now we can check the deformation field by plotting the vectorfield along with the images to see the deformation.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Make video registered</span>
-<span class="n">viewer</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
-<span class="n">viewer</span><span class="o">.</span><span class="n">dims</span><span class="o">.</span><span class="n">ndisplay</span> <span class="o">=</span> <span class="mi">3</span> <span class="c1">#Set the viewer to 3D mode</span>
-<span class="n">rt_vis</span><span class="o">.</span><span class="n">plot_images</span><span class="p">(</span><span class="n">viewer</span><span class="p">,</span> <span class="n">registered_dataset</span><span class="p">)</span>
-<span class="n">rt_vis</span><span class="o">.</span><span class="n">plot_vectorfield</span><span class="p">(</span><span class="n">viewer</span><span class="p">,</span> <span class="n">registered_dataset</span><span class="p">)</span>
-
-<span class="n">rt_vis</span><span class="o">.</span><span class="n">make_video</span><span class="p">(</span>
+<p>In order to represent the vectorfield around the region of interest, we will provide a mask around the ball. We provide handy functions to process in batch large datasets without loading all in memory.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">mask</span> <span class="o">=</span> <span class="n">rt_utils</span><span class="o">.</span><span class="n">apply_function_in_time</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="n">new_axis</span><span class="o">=</span><span class="s2">&quot;TXYZ&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>Applying function: 100%|██████████| 10/10 [00:00&lt;00:00, 93.09it/s]
+</pre></div>
+</div>
+<p>With the mask computed, we can compute the compute the vectorfield.</p>
+<blockquote>
+<div><p><strong>Note</strong> The vectorfield returned has the shape of Napari vectors (vectors x (point,$\Delta$point) x (t,spatial)) and is already in physical units.</p>
+</div></blockquote>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">vect</span> <span class="o">=</span> <span class="n">registration</span><span class="o">.</span><span class="n">vectorfield</span><span class="p">(</span>
+    <span class="n">mask</span><span class="p">,</span>        <span class="c1">#mask</span>
+    <span class="n">n_points</span><span class="o">=</span><span class="mi">50</span>  <span class="c1">#n of points per dimension to plot the vectorfield</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>Computing vectorfield: 100%|██████████| 9/9 [00:02&lt;00:00,  4.26/s]
+</pre></div>
+</div>
+<p>Finally we add it to the viewer,</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">viewer</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span> <span class="c1"># Clear the viewer from other images</span>
+<span class="n">rt_vis</span><span class="o">.</span><span class="n">add_image</span><span class="p">(</span><span class="n">viewer</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;dataset&quot;</span><span class="p">,</span> <span class="n">channel_axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">viewer</span><span class="o">.</span><span class="n">add_vectors</span><span class="p">(</span><span class="n">vect</span><span class="p">)</span>
+<span class="n">viewer</span><span class="o">.</span><span class="n">dims</span><span class="o">.</span><span class="n">ndisplay</span> <span class="o">=</span> <span class="mi">3</span>
+</pre></div>
+</div>
+<p>and make a video.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">rt_vis</span><span class="o">.</span><span class="n">make_video</span><span class="p">(</span>
     <span class="n">viewer</span><span class="o">=</span><span class="n">viewer</span><span class="p">,</span>
-    <span class="n">save_file</span><span class="o">=</span><span class="s1">&#39;sphere_growing_dataset_registered.gif&#39;</span><span class="p">,</span>
+    <span class="n">save_file</span><span class="o">=</span><span class="s1">&#39;sphere_registered_vectorfield.gif&#39;</span><span class="p">,</span>
     <span class="n">fps</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
 <span class="p">)</span>
 </pre></div>
 </div>
-<p><img alt="../assets/sphere_growing_dataset_registered.gif" src="_images/sphere_growing_dataset_registered.gif" /></p>
+<p><img alt="../assets/sphere_registered_vectorfield.gif" src="_images/sphere_registered_vectorfield.gif" /></p>
+</section>
+<section id="plot-the-trajectories">
+<h3>Plot the trajectories<a class="headerlink" href="#plot-the-trajectories" title="Link to this heading">¶</a></h3>
+<p>Alternatively to the vectorfield between time points, you can also integrate a set of points over all the transformations to have an idea of the trajectories of the flow over longer times.</p>
+<p>For that we just need a mask in one single time point. Since the vectorfield we compute it forward, it makes sense that we pass the pask of the first time point.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1">#Mask of just initial time point</span>
+<span class="n">mask</span> <span class="o">=</span> <span class="n">dataset</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="c1">#[time][channel]</span>
+</pre></div>
+</div>
+<p>And with the mask, we compute the tracks.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">tracks</span> <span class="o">=</span> <span class="n">registration</span><span class="o">.</span><span class="n">trajectories</span><span class="p">(</span><span class="n">mask</span><span class="p">,</span> <span class="n">n_points</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="s2">&quot;XYZ&quot;</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="n">dataset</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">&quot;scale&quot;</span><span class="p">])</span>
+</pre></div>
+</div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>Computing trajectories: 100%|██████████| 9/9 [00:00&lt;00:00, 14.98/s]
+</pre></div>
+</div>
+<p>Finally, we upload the images in napari,</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">viewer</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span> <span class="c1"># Clear the viewer from other images</span>
+<span class="n">rt_vis</span><span class="o">.</span><span class="n">add_image</span><span class="p">(</span><span class="n">viewer</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;dataset&quot;</span><span class="p">,</span> <span class="n">channel_axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">opacity</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+<span class="n">viewer</span><span class="o">.</span><span class="n">add_tracks</span><span class="p">(</span><span class="n">tracks</span><span class="p">)</span>
+<span class="n">viewer</span><span class="o">.</span><span class="n">dims</span><span class="o">.</span><span class="n">ndisplay</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="n">viewer</span><span class="o">.</span><span class="n">camera</span><span class="o">.</span><span class="n">angles</span> <span class="o">=</span> <span class="p">(</span><span class="o">-</span><span class="mf">0.5812613950187316</span><span class="p">,</span> <span class="mf">21.01903309215726</span><span class="p">,</span> <span class="o">-</span><span class="mf">7.504582808602566</span><span class="p">)</span> <span class="c1"># Set camera angles to make the video look better</span>
+</pre></div>
+</div>
+<p>and make the video</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">rt_vis</span><span class="o">.</span><span class="n">make_video</span><span class="p">(</span>
+    <span class="n">viewer</span><span class="o">=</span><span class="n">viewer</span><span class="p">,</span>
+    <span class="n">save_file</span><span class="o">=</span><span class="s1">&#39;sphere_registered_trajectories.gif&#39;</span><span class="p">,</span>
+    <span class="n">fps</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p><img alt="../assets/sphere_registered_trajectories.gif" src="_images/sphere_registered_trajectories.gif" /></p>
+</section>
 </section>
 </section>
 
@@ -174,7 +242,7 @@
 <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="usage.html">Usage</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="examples.html">Examples</a><ul class="current">
-<li class="toctree-l2"><a class="reference internal" href="examples_spheres.html">Rigid Registration of a sphere</a></li>
+<li class="toctree-l2"><a class="reference internal" href="examples_spheres.html">Rigid Registration of Spheres</a></li>
 <li class="toctree-l2 current"><a class="current reference internal" href="#">Non-linear registration of growing spheres</a></li>
 </ul>
 </li>
@@ -186,7 +254,7 @@
 <ul>
   <li><a href="index.html">Documentation overview</a><ul>
   <li><a href="examples.html">Examples</a><ul>
-      <li>Previous: <a href="examples_spheres.html" title="previous chapter">Rigid Registration of a sphere</a></li>
+      <li>Previous: <a href="examples_spheres.html" title="previous chapter">Rigid Registration of Spheres</a></li>
       <li>Next: <a href="API.html" title="next chapter">API Reference</a></li>
   </ul></li>
   </ul></li>
