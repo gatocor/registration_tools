@@ -1,1 +1,1 @@
-from .visualization import plot_images, plot_projections, plot_projections_difference, plot_vectorfield, make_video
+from .napari import add_image, add_image_difference, add_vectorfield, make_video

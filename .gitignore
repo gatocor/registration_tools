@@ -147,6 +147,10 @@ $RECYCLE.BIN/
 .settings/
 
 # Examples
+tests/*
+!tests/*.py
+
+# Examples
 examples/*
 !examples/*.py
 !examples/*.ipynb

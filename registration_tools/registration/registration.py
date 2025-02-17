@@ -2,15 +2,28 @@ import os
 import re
 import numpy as np
 from skimage.io import imread, imsave
+from skimage.measure import label, regionprops
 import shutil
 import vt
-from ..dataset import Dataset, load_dataset
+from ..dataset.dataset import Dataset
 import json
 import atexit
 from tqdm import tqdm
 import time
 import copy
 import warnings  # Add this import
+from copy import deepcopy
+import zarr
+from ..utils.auxiliar import _get_axis_scale, _make_index, _shape_downsampled, _dict_axis_shape
+
+def _get_vtImage(dataset, t, scale, axis, use_channel, downsample):
+    img = dataset[_make_index(t, axis, use_channel, downsample)]
+    imsave("__file__.tiff", img)
+    img = vt.vtImage("__file__.tiff")
+    # img = vt.vtImage(img.copy()) #Ideal but runs all the time in problems
+    img.setSpacing(scale[::-1])
+    os.remove("__file__.tiff")
+    return img
 
 def get_pyramid_levels(dataset, maximum_size = 100, verbose = True):
     """
@@ -40,574 +53,686 @@ def get_pyramid_levels(dataset, maximum_size = 100, verbose = True):
 
     return ll_threshold, level - 1
 
-def register(
-    dataset,
-    save_path,
-    use_channel = 0,
-    numbers = None,
-    save_behavior = "Continue",
-    perfom_global_trnsf = None,
-    apply_registration = True,
-    registration_type = "rigid",
-    pyramid_lowest_level = 0,
-    pyramid_highest_level = 3,
-    registration_direction = None,
-    padding = True,
-    downsample = None,
-    verbose = False,
-    debug = 0,
-    args_registration = "",
-    plot_old_projections = True,
-    plot_projections = True,
-    make_vectorfield = None,
-    vectorfield_threshold = 1.,
-    vectorfield_spacing = 1,
-):
+def load_registration(out):
     """
-    Registers a dataset and saves the results to the specified path.
-    
-    Parameters:
-        dataset (Dataset): The dataset to be registered. Must be an instance of the Dataset class.
-        save_path (str): The directory where the registration results will be saved.
-        use_channel (int, optional): The channel to use for registration. Default is 0.
-        numbers (list, optional): List of numbers to register. If None, all numbers in the dataset will be used. Default is None.
-        save_behavior (str, optional): Behavior for saving files. Options are "NotOverwrite", "Continue". Default is "Continue".
-        perfom_global_trnsf (bool, optional): Whether to perform global transformation. Default is None.
-        apply_registration (bool, optional): Whether to apply the registration. Default is True.
-        registration_type (str, optional): Type of registration to perform. Default is "rigid". Select among:
-            translation2D, translation3D, translation-scaling2D, translation-scaling3D,
-            rigid2D, rigid3D, rigid, similitude2D, similitude3D, similitude,
-            affine2D, affine3D, affine, vectorfield2D, vectorfield3D, vectorfield, vector
+    Loads a registration object from a save path.
 
-        pyramid_lowest_level (int, optional): pyramid lowest level. Default is 0.
-        pyramid_highest_level: pyramid highest level. Default is 3: it corresponds to 32x32x32 for an original 256x256x256 image.
-        registration_direction (str, optional): Direction of registration. Options are "forward", "backward". Default is None.
-        padding (bool, optional): Whether to apply padding. Default is True.
-        downsample (tuple, optional): Downsample factor for the images. Default is None.
-        debug (int, optional): Debug level. Default is 1.
-        args_registration (str, optional) : Additional arguments for the blockmatching algorithm. These can be (from vt-python documentation):
-    
-    Parameters for the blockmatching algorithm:
-        ### image geometry ### 
-        [-reference-voxel %lf %lf [%lf]]:
-        changes/sets the voxel sizes of the reference image
-        [-floating-voxel %lf %lf [%lf]]:
-        changes/sets the voxel sizes of the floating image
-        ### pre-processing ###
-        [-normalisation|-norma|-rescale] # input images are normalized on one byte
-        before matching (this may be the default behavior)
-        [-no-normalisation|-no-norma|-no-rescale] # input images are not normalized on
-        one byte before matching
-        ### post-processing ###
-        [-no-composition-with-left] # the written result transformation is only the
-        computed one, ie it is not composed with the left/initial one (thus does not allow
-        to resample the floating image if an left/initial transformation is given) [default]
-        [-composition-with-left] # the written result transformation is the
-        computed one composed with the left/initial one (thus allows to resample the
-        floating image if an left/initial transformation is given) 
-        ### pyramid building ###
-        [-pyramid-gaussian-filtering | -py-gf] # before subsampling, the images 
-        are filtered (ie smoothed) by a gaussian kernel.
-        ### block geometry (floating image) ###
-        -block-size|-bl-size %d %d %d       # size of the block along X, Y, Z
-        -block-spacing|-bl-space %d %d %d   # block spacing in the floating image
-        -block-border|-bl-border %d %d %d   # block borders: to be added twice at
-        each dimension for statistics computation
-        ### block selection ###
-        [-floating-low-threshold | -flo-lt %d]     # values <= low threshold are not
-        considered
-        [-floating-high-threshold | -flo-ht %d]    # values >= high threshold are not
-        considered
-        [-floating-removed-fraction | -flo-rf %f]  # maximal fraction of removed points
-        because of the threshold. If too many points are removed, the block is
-        discarded
-        [-reference-low-threshold | -ref-lt %d]    # values <= low threshold are not
-        considered
-        [-reference-high-threshold | -ref-ht %d]   # values >= high threshold are not
-        considered
-        [-reference-removed-fraction | -ref-rf %f] # maximal fraction of removed points
-        because of the threshold. If too many points are removed, the block is
-        discarded
-        [-floating-selection-fraction[-ll|-hl] | -flo-frac[-ll|-hl] %lf] # fraction of
-        blocks from the floating image kept at a pyramid level, the blocks being
-        sorted w.r.t their variance (see note (1) for [-ll|-hl])
-        ### pairing ###
-        [-search-neighborhood-half-size | -se-hsize %d %d %d] # half size of the search
-        neighborhood in the reference when looking for similar blocks
-        [-search-neighborhood-step | -se-step %d %d %d] # step between blocks to be
-        tested in the search neighborhood
-        [-similarity-measure | -similarity | -si [cc|ecc|ssd|sad]]  # similarity measure
-        cc: correlation coefficient
-        ecc: extended correlation coefficient
-        [-similarity-measure-threshold | -si-th %lf]    # threshold on the similarity
-        measure: pairings below that threshold are discarded
-        ### transformation regularization ###
-        [-elastic-regularization-sigma[-ll|-hl] | -elastic-sigma[-ll|-hl]  %lf %lf %lf]
-        # sigma for elastic regularization (only for vector field) (see note (1) for
-        [-ll|-hl])
-        ### transformation estimation ###
-        [-estimator-type|-estimator|-es-type %s] # transformation estimator
-        wlts: weighted least trimmed squares
-        lts: least trimmed squares
-        wls: weighted least squares
-        ls: least squares
-        [-lts-cut|-lts-fraction %lf] # for trimmed estimations, fraction of pairs that are kept
-        [-lts-deviation %lf] # for trimmed estimations, defines the threshold to discard
-        pairings, ie 'average + this_value * standard_deviation'
-        [-lts-iterations %d] # for trimmed estimations, the maximal number of iterations
-        [-fluid-sigma|-lts-sigma[-ll|-hl] %lf %lf %lf] # sigma for fluid regularization,
-        ie field interpolation and regularization for pairings (only for vector field)
-        (see note (1) for [-ll|-hl])
-        [-vector-propagation-distance|-propagation-distance|-pdistance %f] # 
-        distance propagation of initial pairings (ie displacements)
-        this implies the same displacement for the spanned sphere
-        (only for vectorfield)
-        [-vector-fading-distance|-fading-distance|-fdistance %f] # 
-        area of fading for initial pairings (ie displacements)
-        this allows progressive transition towards null displacements
-        and thus avoid discontinuites
-        ### end conditions for matching loop ###
-        [-max-iteration[-ll|-hl]|-max-iterations[-ll|-hl]|-max-iter[-ll|-hl] %d]|...
-        ...|-iterations[-ll|-hl] %d]   # maximal number of iteration
-        (see note (1) for [-ll|-hl])
-        [-corner-ending-condition|-rms] # evolution of image corners
-        ### filter type ###
-        [-gaussian-filter-type|-filter-type deriche|fidrich|young-1995|young-2002|...
-        ...|gabor-young-2002|convolution] # type of filter for image/vector field
-        smoothing
-        ### misc writing stuff ###
-        [-default-filenames|-df]     # use default filename names
-        [-no-default-filenames|-ndf] # do not use default filename names
-        [-command-line %s]           # write the command line
-        [-logfile %s]                # write some output in this logfile
-        [-vischeck]  # write an image with 'active' blocks
-        [-write_def] # id. 
-        ### parallelism ###
-        [-parallel|-no-parallel] # use parallelism (or not)
-        [-parallelism-type|-parallel-type default|none|openmp|omp|pthread|thread]
-        [-max-chunks %d] # maximal number of chunks
-        [-parallel-scheduling|-ps default|static|dynamic-one|dynamic|guided] # type
-        of scheduling for open mp
-        ### general parameters ###
-        -verbose|-v: increase verboseness parameters being read several time, use '-nv -v -v ...' to set the verboseness level
-        -debug|-D: increase debug level
-        -no-debug|-nodebug: no debug indication
-        -trace:
-        -no-trace:
-        -print-parameters|-param:
-        -print-time|-time:
-        -no-time|-notime:
-        -trace-memory|-memory: keep trace of allocated pointers (in instrumented procedures)
-        display some information about memory consumption
-        Attention: it disables the parallel mode, because of concurrent access to memory parallel mode may be restored by specifying '-parallel' after '-memory' but unexpected crashes may be experienced
-        -no-memory|-nomemory:
-        -h: print option list
-        -help: print option list + details
-        
-        Notes
-        (1) If -ll or -hl are respectively added to the option, this specifies only the
-        value for respectively the lowest or the highest level of the pyramid (recall
-        that the most lowest level, ie #0, refers to the original image). For
-        intermediary levels, values are linearly interpolated.
-     
+    Args:
+        out (str): The path to the registration object.
+
     Returns:
-    None
+        Registration: The registration object.
     """
 
-    save_behaviors = [
-        "NotOverwrite",
-        "Continue",
-        "Overwrite"
-    ]
+    if not os.path.exists(f"{out}/parameters.json"):
+        raise ValueError("The registration object does not exist.")
 
-    # Check dataset is an instance of Dataset
-    if not isinstance(dataset, Dataset):
-        raise ValueError("dataset must be an instance of the Dataset class.")
+    with open(f"{out}/parameters.json", "r") as f:
+        parameters = json.load(f)
+    registration = Registration()
+    for i,j in parameters.items():
+        setattr(registration, i, j)
+    registration._out = out
+    return registration
 
-    # Check save_path is a directory and create if it does not exist
-    if isinstance(save_path, str):
-        if not os.path.exists(save_path):
-            os.makedirs(save_path)
-        elif not os.path.isdir(save_path):
-            raise ValueError("save_path must be a directory.")
-        elif len(os.listdir(save_path)) > 0 and save_behavior == "NotOverwrite":
-            raise ValueError("save_path must be an empty directory.")
-    else:
-        raise ValueError("save_path must be a string representing a directory path.")
+class Registration:
+    """
+    A class to perform image registration.
+    Attributes:
+        registration_type (str): The type of registration to perform.
+        perfom_global_trnsf (bool): Whether to perform global transformation.
+        pyramid_lowest_level (int): The lowest level of the pyramid.
+        pyramid_highest_level (int): The highest level of the pyramid.
+        registration_direction (str): The direction of registration.
+        args_registration (str): Additional arguments for registration.
+        _physical_space (None): Placeholder for physical space.
+        _n_spatial (None): Placeholder for number of spatial dimensions.
+        _fitted (bool): Whether the registration object has been fitted.
+        _box (None): Placeholder for the bounding box.
+        _t_max (None): Placeholder for the maximum time point.
+        _origin (None): Placeholder for the origin.
+        _transfs (dict): Dictionary to store transformations.
+    Methods:
+        save(out=None, overwrite=False):
+        load(out):
+        _create_folder():
+            Creates the necessary folders for saving the registration object.
+        _save_transformation_relative(trnsf, pos_float, pos_ref):
+            Saves the relative transformation.
+        _save_transformation_global(trnsf, pos_float, pos_ref):
+            Saves the global transformation.
+        _load_transformation_relative(pos_float, pos_ref):
+            Loads the relative transformation.
+        _load_transformation_global(pos_float, pos_ref):
+            Loads the global transformation.
+        _trnsf_exists_relative(pos_float, pos_ref):
+            Checks if the relative transformation exists.
+        _trnsf_exists_global(pos_float, pos_ref):
+            Checks if the global transformation exists.
+        fit(dataset, use_channel=None, axis=None, scale=None, downsample=None, save_behavior="Continue", verbose=False):
+        apply(dataset, out=None, axis=None, scale=None, downsample=None, save_behavior="Continue", transformation="global", verbose=False, **kwargs):
+            Applies the registration to a dataset and saves the results to the specified path.
+        fit_apply(dataset, out=None, use_channel=None, axis=None, scale=None, downsample=None, save_behavior="Continue", transformation="global", verbose=False):
+            Fits and applies the registration to a dataset and saves the results to the specified path.
+        vectorfield(mask=None, axis=None, scale=None, out=None, n_points=20, transformation="relative", **kwargs):
+            Computes the vector field of the registration.
+        trajectories(mask=None, axis=None, scale=None, out=None, n_points=20, transformation="relative", **kwargs):
+            Computes the trajectories of the registration.
+    """
 
-    # Check use_channel is a number between 0 and the number of channels in the dataset
-    if not isinstance(use_channel, int) or use_channel < 0 or use_channel > dataset._nchannels-1:
-        raise ValueError(f"use_channel must be an integer between 0 and {dataset._nchannels - 1}.")
+    def __init__(self, 
+            out=None, 
+            registration_type="rigid", 
+            perfom_global_trnsf=None, 
+            pyramid_lowest_level=0, 
+            pyramid_highest_level=3, 
+            registration_direction="backward", 
+            args_registration=""
+        ):
         
-    # Check numbers
-    if numbers is None:
-        numbers = dataset._numbers
-    else:
-        if not all(num in dataset._numbers for num in numbers):
-            raise ValueError("All elements in numbers must be present in dataset._numbers.")
+        rigid_transformations = ["translation2D", "translation3D", "translation", "rigid2D", "rigid3D", "rigid"]
+        registration_directions = ["forward", "backward"]
 
-    # Check save behavior
-    if save_behavior not in save_behaviors:
-        raise ValueError(f"save_behavior should be one of the following: {save_behaviors}.")
-    
-    # Check downsample
-    if downsample is None:
-        downsample = (1,) * dataset._ndim_spatial
-    elif not all(isinstance(d, int) for d in downsample):
-        raise ValueError("All elements in downsample must be integers.")
-    elif len(downsample) != dataset._ndim_spatial:
-        raise ValueError(f"downsample must have the same length as the number of spatial dimensions ({dataset._ndim_spatial}).")
-    
-    new_scale = tuple([i*j for i,j in zip(dataset._scale, downsample)])
+        self._registration_type = registration_type
+        if self._registration_type in rigid_transformations and perfom_global_trnsf is None:
+            self._perfom_global_trnsf = True
+        elif perfom_global_trnsf is None:
+            self._perfom_global_trnsf = False
+        else:
+            self._perfom_global_trnsf = perfom_global_trnsf
+        self._pyramid_lowest_level = pyramid_lowest_level
+        self._pyramid_highest_level = pyramid_highest_level
+        if registration_direction not in registration_directions:
+            raise ValueError(f"registration_direction must be either of the following: {registration_directions}")
+        self._registration_direction = registration_direction
+        self._args_registration = args_registration
 
-    # Save parameters to JSON file
-    transformation_metadata = {
-        "use_channel": use_channel,
-        "numbers": list(numbers),
-        "registration_type": registration_type,
-        "registration_direction": registration_direction,
-        "args_registration": args_registration,
-        "padding": padding,
-        "downsample": list(downsample),
-        "pyramid_lowest_level": pyramid_lowest_level,
-        "pyramid_highest_level": pyramid_highest_level,
-        "perfom_global_trnsf": perfom_global_trnsf,
-        "apply_registration": apply_registration,
-        "save_behavior": save_behavior,
-        "plot_old_projections": plot_old_projections,
-        "plot_projections": plot_projections,
-        "make_vectorfield": make_vectorfield,
-        "vectorfield_threshold": vectorfield_threshold,
-        "vectorfield_spacing": vectorfield_spacing,
-    }
+        self._out = None
+        self._physical_space = None
+        self._n_spatial = None
+        self._fitted = False
+        self._box = None
+        self._t_max = None
+        self._origin = None
+        self._transfs = {}
 
-    metadata = copy.deepcopy(dataset.get_metadata())
-    metadata["data"] = [os.path.join(save_path,f"files_ch{ch}","registered_files_{:04d}.tiff") for ch in range(dataset._nchannels)]
-    metadata["dtype"] = "regex"
-    metadata["transformations"] = transformation_metadata
-    metadata["scale"] = new_scale
-    metadata["shape"] = [len(list(range(i))[::j]) for i,j in zip(dataset._shape, downsample)]
-    metadata["numbers"] = list(numbers)
-
-    # Check continue
-    if save_behavior == "Continue":
-        ignore = ["numbers"]
-        # Check if dataset.json exists and load it
-        dataset_json_path = os.path.join(save_path, "dataset.json")
-        if os.path.exists(dataset_json_path):
-            with open(dataset_json_path, "r") as f:
-                existing_metadata = json.load(f)
-            
-            # Check if all metadata is preserved
-            for key, value in transformation_metadata.items():
-                if key in existing_metadata["transformations"] and key not in ignore:
-                    if existing_metadata["transformations"][key] != value:
-                        raise ValueError(f"Metadata mismatch for key '{key}': {existing_metadata['transformations'][key]} != {value}")
-                elif key in ignore:
-                    None
-                else:
-                    raise ValueError(f"Metadata key '{key}' is missing in the existing dataset.json. This indicates that this is not the same project. Please change the save_path or delete the content before proceeding.")
+        if out is not None:
+            self.save(out=out)
         
-            print("Continuing registration from existing dataset skiping the registered positions.")
+    def save(self, out=None, overwrite=False):
+        """
+        Saves the registration object to the specified path.
 
-    with open(f"{save_path}/dataset.json", "w") as f:
-        json.dump(metadata, f, indent=4)
-
-    # Perform global transformation
-    if perfom_global_trnsf == None and registration_type in ["translation2D", "translation3D", "translation", "rigid2D", "rigid3D", "rigid"]:
-        perfom_global_trnsf = True
-    
-    #Define registration_direction
-    if registration_direction == None:
-        if registration_type == "rigid":
-            registration_direction = "backward"
+        Args:
+            out (str): The path to save the registration object.
+        """
+        if self._out is not None and out is None:
+            metadata = deepcopy(self.__dict__)
+            del metadata["_out"]
+            del metadata["_transfs"]
+            metadata_path = os.path.join(self._out, "parameters.json")
+            with open(metadata_path, "w") as f:
+                json.dump(metadata, f, indent=4)
+        elif self._out is not None and out is not None:
+            raise ValueError("The save path is already defined. Please specify a new path or set out to None.")
+        elif self._out is None and out is None:
+            raise ValueError("The save path must be specified.")
         else:
-            registration_direction = "forward"
-    elif registration_direction not in ["forward", "backward"]:
-        raise ValueError("registration_direction must be either None or 'forward' or 'backward'.")
-    
-    # Check if dataset spatial dimensions are not 3, set plot projections to False
-    if dataset._ndim_spatial != 3:
-        plot_old_projections = False
-        plot_projections = False
-        print("Warning: Dataset spatial dimensions are not 3. Plot projections have been disabled.")
+            self._out = out
 
-    # Check make_vectorfield
-    if make_vectorfield is None and registration_type not in ["translation2D", "translation3D", "translation", "rigid2D", "rigid3D", "rigid"]:
-        make_vectorfield = True
+        self._create_folder()
 
-    #Create directories
-    os.makedirs(save_path, exist_ok=True)
-    directory_trnsf_relative = f"{save_path}/trnsf_relative"
-    os.makedirs(directory_trnsf_relative, exist_ok=True)
-    if perfom_global_trnsf:
-        directory_trnsf_global = f"{save_path}/trnsf_global"
-        os.makedirs(directory_trnsf_global, exist_ok=True)
-    if apply_registration:
-        for ch in range(dataset._nchannels):
-            directory_register_files = f"{save_path}/files_ch{ch}"
-            os.makedirs(directory_register_files, exist_ok=True)
-    if plot_old_projections or plot_projections:
-        directory_projections = f"{save_path}/projections"
-        os.makedirs(directory_projections, exist_ok=True)
-        if plot_old_projections:    
-            for ch in range(dataset._nchannels):
-                directory_old_projections = f"{directory_projections}/old_projections_ch{ch}"
-                os.makedirs(directory_old_projections, exist_ok=True)
-        if plot_projections:
-            for ch in range(dataset._nchannels):
-                directory_new_projections = f"{directory_projections}/projections_ch{ch}"
-                os.makedirs(directory_new_projections, exist_ok=True)
-    if make_vectorfield:
-        directory_vectorfield = f"{save_path}/vectorfield"
-        os.makedirs(directory_vectorfield, exist_ok=True)
+        metadata = deepcopy(self.__dict__)
+        del metadata["_out"]
+        del metadata["_transfs"]
+        metadata_path = os.path.join(self._out, "parameters.json")
+        with open(metadata_path, "w") as f:
+            json.dump(metadata, f, indent=4)
 
-    directory_tmp = f"{save_path}/.tmp_files"
-    os.makedirs(directory_tmp, exist_ok=True)
+        for name, trnsf in self._transfs.items():
+            if "global" in name:
+                trnsf.write(f"{self._out}/trnsf_global/{name}.trnsf")
+            elif "relative" in name:
+                trnsf.write(f"{self._out}/trnsf/{name}.trnsf")
 
-    # Register cleanup function to remove the temporary directory
-    def cleanup():
-        if debug == 0 and os.path.exists(directory_tmp):
-            shutil.rmtree(directory_tmp)
-        warnings.filterwarnings("default", category=UserWarning, message=".*low contrast image.*")
-    atexit.register(cleanup)
+    def load(self, out):
+        """
+        Loads a registration object from the specified path.
 
-    # Suppress skimage warnings for low contrast images
-    warnings.filterwarnings("ignore", category=UserWarning, message=".*low contrast image.*")
+        Args:
+            out (str): The path to the registration object.
+        """
+        if not os.path.exists(f"{out}/parameters.json"):
+            raise ValueError("The registration object does not exist.")
 
-    #Check file is not too heavy
-    tmp_file = dataset.get_time_file(os.path.join(directory_tmp, "ref.tiff"), 0, 0, downsample)
-    try:
-        l = np.prod(imread(tmp_file).shape)
-        l2 = np.prod(vt.vtImage(tmp_file).shape())
-    except:
-        raise ValueError("The images are too big to be handled by the registration package (vt). The only way around so far is to define a downsample factor for the images.")
+        with open(f"{out}/parameters.json", "r") as f:
+            parameters = json.load(f)
+        self.__dict__.update(parameters)
+        self._out = out
 
-    if l != l2:
-        raise ValueError("The images are too big to be handled by the registration package (vt). The only way around so far is to define a downsample factor for the images.")
+    def _create_folder(self):
 
-    if registration_direction == "backward":
-        origin = numbers[0]
-        iterator = zip(
-            range(len(numbers)-1),
-            range(1,len(numbers)),
-            numbers[:-1],
-            numbers[1:]
-        )
-    else:
-        origin = numbers[-1]
-        iterator = zip(
-            range(len(numbers), 1, -1),
-            range(len(numbers)-1, 0, -1),
-            numbers[1:][::-1],
-            numbers[:-1][::-1]
-        )
+        os.makedirs(f"{self._out}", exist_ok=True)
+        os.makedirs(f"{self._out}/trnsf_relative", exist_ok=True)
+        if self._perfom_global_trnsf:
+            os.makedirs(f"{self._out}/trnsf_global", exist_ok=True)
 
-    load_ref = True
-    make_ref_proj = True
-    skip = True
-    for pos_ref, pos_float, file_ref, file_float in tqdm(iterator, desc=f"Registering images using channel {use_channel}", unit="", total=len(numbers)-1):
-
-        # Load reference image
-        # time.sleep(5)
-
-        if save_behavior == "Continue" and os.path.exists(f"{save_path}/files_ch{use_channel}/registered_files_{file_float:04d}.tiff") and skip:
-            continue
+    def _save_transformation_relative(self, trnsf, pos_float, pos_ref):
+        if self._out is None:
+            self._transfs[f"trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf"] = trnsf
         else:
-            skip = False
+            trnsf.write(f"{self._out}/trnsf_relative/trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf")
 
-        if load_ref:
-            tmp_file_ref = dataset.get_time_file(os.path.join(directory_tmp, "ref.tiff"), pos_ref, use_channel, downsample)
-            img_ref = vt.vtImage(tmp_file_ref)
-            img_ref.setSpacing(new_scale[::-1])
-            load_ref = False
+    def _save_transformation_global(self, trnsf, pos_float, pos_ref):
+        if self._out is None:
+            self._transfs[f"trnsf_global_{pos_float:04d}_{pos_ref:04d}.trnsf"] = trnsf
         else:
-            img_ref = img_float
+            trnsf.write(f"{self._out}/trnsf_global/trnsf_global_{pos_float:04d}_{pos_ref:04d}.trnsf")
 
-        tmp_file_float = dataset.get_time_file(os.path.join(directory_tmp, "float.tiff"), pos_float, use_channel, downsample)
-        img_float = vt.vtImage(tmp_file_float)
-        img_float.setSpacing(new_scale[::-1])
-
-        add = ""
-        if not verbose:
-            add = " -no-verbose"
-        add += f" -transformation-type {registration_type} -pyramid-lowest-level {pyramid_lowest_level} -pyramid-highest-level {pyramid_highest_level}"
-
-        trnsf = vt.blockmatching(img_float, image_ref = img_ref, params=args_registration+add)
-        trnsf.write(f"{save_path}/trnsf_relative/trnsf_relative_{file_float:04d}_{file_ref:04d}.trnsf")
-
-        if make_vectorfield:
-            vectors = transformation_to_vectorfield(
-                img_ref.to_array() > vectorfield_threshold,
-                trnsf,
-                new_scale,
-                vectorfield_spacing,
-                pos_ref
-            )
-            np.save(f"{directory_vectorfield}/vectorfield_{file_float:04d}_{file_ref:04d}.npy", vectors)
-
-        if perfom_global_trnsf:
-            if file_ref != origin:
-                trnsf = vt.compose_trsf([
-                    vt.vtTransformation(f"{save_path}/trnsf_global/trnsf_global_{file_ref:04d}_{origin:04d}.trnsf"),
-                    trnsf
-                ])
-                trnsf.write(f"{save_path}/trnsf_global/trnsf_global_{file_float:04d}_{origin:04d}.trnsf")
+    def _load_transformation_relative(self, pos_float, pos_ref):
+        if self._out is None:
+            if f"trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf" not in self._transfs:
+                raise ValueError(f"The transformation between {pos_float:04d} and {pos_ref:04d} the specified positions does not exist.")
             else:
-                trnsf.write(f"{save_path}/trnsf_global/trnsf_global_{file_float:04d}_{origin:04d}.trnsf")
+                return self._transfs[f"trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf"]
+        else:
+            if not os.path.exists(f"{self._out}/trnsf_relative/trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf"):
+                raise ValueError("The transformation between the specified positions does not exist.")
+            else:
+                return vt.vtTransformation(f"{self._out}/trnsf_relative/trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf")
+
+    def _load_transformation_global(self, pos_float, pos_ref):
+        if self._out is None:
+            if f"trnsf_global_{pos_float:04d}_{pos_ref:04d}.trnsf" not in self._transfs:
+                raise ValueError("The transformation between the specified positions does not exist.")
+            else:
+                return self._transfs[f"trnsf_global_{pos_float:04d}_{pos_ref:04d}.trnsf"]
+        else:
+            if not os.path.exists(f"{self._out}/trnsf_global/trnsf_global_{pos_float:04d}_{pos_ref:04d}.trnsf"):
+                raise ValueError("The transformation between the specified positions does not exist.")
+            else:
+                return vt.vtTransformation(f"{self._out}/trnsf_global/trnsf_global_{pos_float:04d}_{pos_ref:04d}.trnsf")
+
+    def _trnsf_exists_relative(self, pos_float, pos_ref):
+        if self._out is None:
+            return f"trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf" in self._transfs.keys()   
+        else:
+            return os.path.exists(f"{self._out}/trnsf_relative/trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf")
+    
+    def _trnsf_exists_global(self, pos_float, pos_ref):
+        if self._out is None:
+            return f"trnsf_global_{pos_float:04d}_{pos_ref:04d}.trnsf" in self._transfs.keys()
+        else:
+            return os.path.exists(f"{self._out}/trnsf_global/trnsf_global_{pos_float:04d}_{pos_ref:04d}.trnsf")
+    
+    def fit(self, dataset, use_channel=None, axis=None, scale=None, downsample=None, save_behavior="Continue", verbose=False):
+        """
+        Registers a dataset and saves the results to the specified path.
+        """
+
+        save_behaviors = ["NotOverwrite", "Continue"]
+
+        # Check inputs
+        axis, scale = _get_axis_scale(dataset, axis, scale)
         
-        if apply_registration:
-            if make_ref_proj:
-                img_ref_ = img_ref.to_array()
-                imsave(f"{save_path}/files_ch{use_channel}/registered_files_{file_ref:04d}.tiff", img_ref_)            
-                if plot_old_projections:
-                    for dim in range(dataset._ndim_spatial):
-                        imsave(f"{directory_projections}/old_projections_ch{use_channel}/old_projections_{dim}_{file_ref:04d}.tiff", img_ref_.max(axis=dim))
-                if plot_projections:
-                    for dim in range(dataset._ndim_spatial):
-                        imsave(f"{directory_projections}/projections_ch{use_channel}/projections_{dim}_{file_ref:04d}.tiff", img_ref_.max(axis=dim))
-                make_ref_proj = False
+        if len(axis) != len(dataset.shape):
+            raise ValueError("The axis must have the same length as the dataset shape.")
+        
+        if "T" not in axis:
+            raise ValueError("The axis must contain the time dimension 'T'.")
+        
+        use_channel = use_channel
+        if "C" in axis and use_channel is None:
+            raise ValueError("The axis contains the channel dimension 'C'. The channel to use must be specified.")
+        elif "C" in axis and dataset.shape[np.where([i == "C" for i in axis])[0][0]] < use_channel:
+            raise ValueError("The specified channel does not exist in the dataset.")
+                
+        if save_behavior not in save_behaviors:
+            raise ValueError(f"save_behavior should be one of the following: {save_behaviors}.")
 
-            img_corr = vt.apply_trsf(img_float, trnsf).to_array()
-            imsave(f"{save_path}/files_ch{use_channel}/registered_files_{file_float:04d}.tiff", img_corr)
-            if plot_old_projections:
-                for dim in range(dataset._ndim_spatial):
-                    imsave(f"{directory_projections}/old_projections_ch{use_channel}/old_projections_{dim}_{file_float:04d}.tiff", imread(tmp_file_float).max(axis=dim))
-            if plot_projections:
-                for dim in range(dataset._ndim_spatial):
-                    imsave(f"{directory_projections}/projections_ch{use_channel}/projections_{dim}_{file_float:04d}.tiff", img_corr.max(axis=dim))
+        # Check downsample
+        self._n_spatial = len([i for i in axis if i in "XYZ"])
+        if downsample is None:
+            downsample = (1,) * self._n_spatial
+        else:
+            downsample = downsample
 
-    # Apply registration to all other channels if apply_registration is True
-    if apply_registration:
-        for ch in range(dataset._nchannels):
-            if ch != use_channel:
+        if not all(isinstance(d, int) for d in downsample):
+            raise ValueError("All elements in downsample must be integers.")
+        elif len(downsample) != self._n_spatial:
+            raise ValueError(f"downsample must have the same length as the number of spatial dimensions ({self._n_spatial}).")
 
-                iterator = zip(
-                    range(len(numbers)-1),
-                    range(1,len(numbers)),
-                    numbers[:-1],
-                    numbers[1:]
-                ) if registration_direction == "backward" else zip(
-                    range(len(numbers), 1, -1),
-                    range(len(numbers)-1, 0, -1),
-                    numbers[1:][::-1],
-                    numbers[:-1][::-1]
-                )
+        # Scale
+        new_scale = tuple([i * j for i, j in zip(scale, downsample)])
 
-                skip = True
-                for pos_ref, pos_float, file_ref, file_float in tqdm(iterator, desc=f"Applying registration to channel {ch}", unit="", total=len(numbers)-1):
+        # Compute box
+        self._box = tuple([int(i) for i in np.array(dataset.shape)[[axis.index(ax) for ax in axis if ax in "XYZ"]] * np.array(new_scale)])
 
-                    if save_behavior == "Continue" and os.path.exists(f"{save_path}/files_ch{ch}/registered_files_{file_float:04d}.tiff") and skip:
-                        continue
+        # Setup arguments
+        registration_args = ""
+        if not verbose:
+            registration_args = " -no-verbose"
+        registration_args += f" -transformation-type {self._registration_type} -pyramid-lowest-level {self._pyramid_lowest_level} -pyramid-highest-level {self._pyramid_highest_level} "
+        registration_args += self._args_registration
+
+        # Suppress skimage warnings for low contrast images
+        warnings.filterwarnings("ignore", category=UserWarning, message=".*low contrast image.*")
+
+        # Set registration direction
+        self._t_max = _dict_axis_shape(axis, dataset.shape)["T"]
+        if self._registration_direction == "backward":
+            origin = 0
+            iterator = zip(
+                range(self._t_max-1),
+                range(1,self._t_max)
+            )
+        else:
+            origin = self._t_max - 1
+            iterator = zip(
+                range(self._t_max-1, 0, -1),
+                range(self._t_max-2, -1, -1)
+            )
+        self._origin = origin
+
+        img_ref = None
+        trnsf_global = None
+        for pos_ref, pos_float in tqdm(iterator, desc=f"Registering images using channel {use_channel}", unit="", total=self._t_max-1):
+
+            if self._trnsf_exists_relative(pos_float, pos_ref):
+                if save_behavior == "NotOverwrite":
+                    raise ValueError("The relative transformation already exists. If you want to overwrite it, set save_behavior='Overwrite'.")
+                elif save_behavior == "Continue":
+                    None
+            else:
+                if img_ref is None:
+                    img_ref = _get_vtImage(dataset, pos_ref, scale, axis, use_channel, downsample)
+                else:
+                    img_ref = img_float
+
+                img_float = _get_vtImage(dataset, pos_float, scale, axis, use_channel, downsample)
+
+                trnsf = vt.blockmatching(img_float, image_ref = img_ref, params=registration_args)
+                self._save_transformation_relative(trnsf, pos_float, pos_ref)
+
+            if self._perfom_global_trnsf:
+
+                if self._trnsf_exists_global(pos_float, origin):
+                    if save_behavior == "NotOverwrite":
+                        raise ValueError("The global transformation already exists. If you want to overwrite it, set save_behavior='Overwrite'.")
+                    elif save_behavior == "Continue":
+                        None
+                else:
+                    if trnsf_global is None and pos_ref != origin:
+                        trnsf_global = self._load_transformation_global(pos_ref, origin)
+                    elif trnsf_global is None:
+                        trnsf_global = trnsf
+                        self._save_transformation_global(trnsf_global, pos_float, origin)
                     else:
-                        skip = False
+                        trnsf_global = vt.compose_trsf([
+                            trnsf_global,
+                            trnsf
+                        ])
+                        self._save_transformation_global(trnsf_global, pos_float, origin)
 
-                    if file_ref == origin:
-                        img_corr_ch = dataset.get_time_data(pos_ref, ch, downsample)
-                        imsave(f"{save_path}/files_ch{ch}/registered_files_{file_ref:04d}.tiff", img_corr_ch)
+        self._fitted = True
+        if self._out is not None:
+            self.save()
 
-                        if plot_old_projections:
-                            for dim in range(dataset._ndim_spatial):
-                                imsave(f"{directory_projections}/old_projections_ch{ch}/old_projections_{dim}_{file_ref:04d}.tiff", img_corr_ch.max(axis=dim))
+    def apply(self, dataset, out=None, axis=None, scale=None, downsample=None, save_behavior="Continue", transformation="global", verbose=False, **kwargs):
+        """
+        Registers a dataset and saves the results to the specified path.
+        """
 
-                        if plot_projections:
-                            for dim in range(dataset._ndim_spatial):
-                                imsave(f"{directory_projections}/projections_ch{ch}/projections_{dim}_{file_ref:04d}.tiff", img_corr_ch.max(axis=dim))
+        save_behaviors = ["NotOverwrite", "Continue"]
 
-                    tmp_file_float_ch = dataset.get_time_file(os.path.join(directory_tmp, f"float_ch{ch}.tiff"), pos_float, ch, downsample)
-                    img_float_ch = vt.vtImage(tmp_file_float_ch)
-                    img_float_ch.setSpacing(new_scale[::-1])
+        if not self._fitted:
+            raise ValueError("The registration object has not been fitted. Please fit the registration object before applying it.")
+
+        # Check inputs
+        axis, scale = _get_axis_scale(dataset, axis, scale)
+        
+        if len(axis) != len(dataset.shape):
+            raise ValueError("The axis must have the same length as the dataset shape.")
+        
+        if "T" not in axis:
+            raise ValueError("The axis must contain the time dimension 'T'.")
                         
-                    if perfom_global_trnsf:
-                        trnsf_global = vt.vtTransformation(f"{save_path}/trnsf_global/trnsf_global_{file_float:04d}_{origin:04d}.trnsf")
-                        img_corr_ch = vt.apply_trsf(img_float_ch, trnsf_global).to_array()
-                    else:
-                        trnsf_relative = vt.vtTransformation(f"{save_path}/trnsf_relative/trnsf_relative_{file_float:04d}_{file_ref:04d}.trnsf")
-                        img_corr_ch = vt.apply_trsf(img_float_ch, trnsf_relative).to_array()
+        if save_behavior not in save_behaviors:
+            raise ValueError(f"save_behavior should be one of the following: {save_behaviors}.")
 
-                    imsave(f"{save_path}/files_ch{ch}/registered_files_{file_float:04d}.tiff", img_corr_ch)
+        # Check downsample
+        self._n_spatial = len([i for i in axis if i in "XYZ"])
+        if downsample is None:
+            downsample = (1,) * self._n_spatial
+        else:
+            downsample = downsample
 
-                    if plot_old_projections:
-                        for dim in range(dataset._ndim_spatial):
-                            imsave(f"{directory_projections}/old_projections_ch{ch}/old_projections_{dim}_{file_float:04d}.tiff", img_corr_ch.max(axis=dim))
+        if not all(isinstance(d, int) for d in downsample):
+            raise ValueError("All elements in downsample must be integers.")
+        elif len(downsample) != self._n_spatial:
+            raise ValueError(f"downsample must have the same length as the number of spatial dimensions ({self._n_spatial}).")
 
-                    if plot_projections:
-                        for dim in range(dataset._ndim_spatial):
-                            imsave(f"{directory_projections}/projections_ch{ch}/projections_{dim}_{file_float:04d}.tiff", img_corr_ch.max(axis=dim))
+        # Scale
+        new_scale = tuple([i * j for i, j in zip(scale, downsample)])
 
-        # Joint all vectorfields into a single file
-        if make_vectorfield:
-            vectorfield_files = [f"{directory_vectorfield}/vectorfield_{num:04d}_{num-1:04d}.npy" for num in numbers if num != origin]
-            vectorfields = [np.load(file) for file in vectorfield_files]
-            vectorfield = np.concatenate(vectorfields, axis=0)
-            np.save(f"{directory_vectorfield}/vectorfield.npy", vectorfield)
+        # Suppress skimage warnings for low contrast images
+        warnings.filterwarnings("ignore", category=UserWarning, message=".*low contrast image.*")
+        
+        if out is None:
+            data = np.zeros(_shape_downsampled(dataset.shape, axis, downsample), dtype=dataset.dtype)
+        elif isinstance(out, str) and out.endswith(".zarr"):
+            data = zarr.create_array(
+                store=out,
+                shape=dataset.shape,
+                dtype=dataset.dtype,
+                **kwargs
+            )
+            data.attrs["axis"] = axis
+            data.attrs["scale"] = new_scale
+        else:
+            raise ValueError("The output must be None or a the name to a zarr file.")
 
-            # Remove original vectorfield files
-            for file in vectorfield_files:
-                os.remove(file)
+        if self._registration_direction == "backward":
+            origin = 0
+            iterator = range(1, dataset.shape[np.where([i == "T" for i in axis])[0][0]])
+            if "C" in axis:
+                for ch in range(dataset.shape[np.where([i == "C" for i in axis])[0][0]]):
+                    img = _get_vtImage(dataset, 0, new_scale, axis, ch, downsample)
+                    data[_make_index(0, axis, ch, downsample)] = img.copy_to_array()
+            else:
+                data[_make_index(0, axis, None, downsample)] = dataset[_make_index(0, axis, None, downsample)]
+        else:
+            origin = dataset.shape[np.where([i == "T" for i in axis])[0][0]] - 1
+            iterator = range(dataset.shape[np.where([i == "T" for i in axis])[0][0]] - 1, 0, -1)
+            if "C" in axis:
+                for ch in range(dataset.shape[np.where([i == "C" for i in axis])[0][0]]):
+                    img = _get_vtImage(dataset, origin, new_scale, axis, ch, downsample)
+                    data[_make_index(dataset.shape[np.where([i == "T" for i in axis])[0][0]] - 1, axis, ch, downsample)] = img.copy_to_array()
+            else:
+                data[_make_index(dataset.shape[np.where([i == "T" for i in axis])[0][0]] - 1, axis, None, downsample)] = dataset[_make_index(dataset.shape[np.where([i == "T" for i in axis])[0][0]] - 1, axis, None, downsample)]
 
-        # Joint all projections from one axis into a single file
-        if plot_projections:
-            for ch in range(dataset._nchannels):
-                for dim in range(dataset._ndim_spatial):
-                    projection_files = [f"{directory_projections}/projections_ch{ch}/projections_{dim}_{num:04d}.tiff" for num in numbers]
-                    projections = [imread(file)[np.newaxis,:,:] for file in projection_files]
-                    projection = np.concatenate(projections, axis=0)
-                    imsave(f"{directory_projections}/projections_ch{ch}/projections_{dim}.tiff", projection)
+        for t in tqdm(iterator, desc=f"Applying registration to images", unit="", total=self._t_max-1):
+            if transformation == "global":
+                if not self._trnsf_exists_global(t, origin):
+                    raise ValueError("The global transformation does not exist.")
+                trnsf = self._load_transformation_global(t, origin)
+            else:
+                if not self._trnsf_exists_relative(t, origin):
+                    raise ValueError("The relative transformation does not exist.")
+                trnsf = self._load_transformation_relative(t, origin)
+
+            if "C" in axis:
+                for ch in range(dataset.shape[np.where([i == "C" for i in axis])[0][0]]):
+                    img = _get_vtImage(dataset, t, new_scale, axis, ch, downsample)
+                    data[_make_index(t, axis, ch, downsample)] = vt.apply_trsf(img, trnsf).copy_to_array()
+            else:
+                img = _get_vtImage(dataset, t, new_scale, axis, None, downsample)
+                data[_make_index(t, axis, None, downsample)] = vt.apply_trsf(img, trnsf).copy_to_array()
+
+        return data
+
+    def fit_apply(self, dataset, out=None, use_channel=None, axis=None, scale=None, downsample=None, save_behavior="Continue", transformation="global", verbose=False):
+
+        self.fit(dataset, use_channel=use_channel, axis=axis, scale=scale, downsample=downsample, save_behavior=save_behavior, verbose=verbose)
+        return self.apply(dataset, out=out, axis=axis, scale=scale, downsample=downsample, save_behavior=save_behavior, transformation=transformation, verbose=verbose)
+
+    def vectorfield(self, mask=None, axis=None, scale=None, out=None, n_points=20, transformation="relative", **kwargs):
+
+        if not self._fitted:
+            raise ValueError("The registration object has not been fitted. Please fit the registration object before applying it.")
+
+        # Check inputs
+        mesh = np.meshgrid(*[np.linspace(0, i, n_points) for i in self._box])
+        points = np.vstack([i.ravel() for i in mesh]).T
+
+        if mask is not None:
+            axis, scale = _get_axis_scale(mask, axis, scale)
+            d = _dict_axis_shape(axis, mask.shape)
+            mesh_mask = np.meshgrid(*[np.round(np.linspace(0, j-1, n_points)).astype(int) for i, j in d.items() if i in "XYZ"])
+            # mesh_mask = np.concatenate([i.reshape(-1,1) for i in mesh_mask],axis=1)
+            if "T" not in axis:
+                keep_points = points[mask[*mesh_mask].flatten()][:,::-1]
+        else:
+            keep_points = points[:,::-1]
+
+        n_spatial = len([i for i in axis if i in "XYZ"])
+        if out is None:
+            store = zarr.storage.MemoryStore()
+            data = zarr.create_array(store=store, shape=(0,2,n_spatial+1), dtype=float, **kwargs)
+        elif isinstance(out, str) and out.endswith(".zarr"):
+            data = zarr.create_array(
+                store=out,
+                shape=(0,2,n_spatial+1),
+                dtype=float,
+                **kwargs
+            )
+        else:
+            raise ValueError("The output must be None or a the name to a zarr file.")
+
+        if self._registration_direction == "backward":
+            iterator = range(1, self._t_max)
+            iterator_next = range(0, self._t_max-1)
+        else:
+            iterator = range(self._t_max-2, -1, -1)
+            iterator_next = range(self._t_max-1, 0, -1)
+
+        for t, t_next in tqdm(zip(iterator, iterator_next), desc=f"Computing vectorfield", unit="", total=self._t_max-1):
+            if mask is not None and "T" in axis:
+                keep_points = points[mask[_make_index(t,axis)][*mesh_mask].flatten()][:,::-1]
+
+            if transformation == "global":
+                trnsf = self._load_transformation_global(t, self._origin)
+            elif transformation == "relative":
+                trnsf = self._load_transformation_relative(t, t_next)
+             
+            points_vt = vt.vtPointList(keep_points)
+            points_vt_out = vt.apply_trsf_to_points(points_vt, trnsf)
+            vectorfield = points_vt_out.copy_to_array() - keep_points
+            l = vectorfield.shape[0]
+            data_add = np.zeros((l,2,n_spatial+1))
+            data_add[:,0,0] = t
+            data_add[:,1,0] = 0
+            data_add[:,0,1:] = keep_points[:,::-1]
+            data_add[:,1,1:] = -vectorfield[:,::-1]
+
+            data.append(data_add, axis=0)
+
+        # Return data
+        if out is None:
+            return data
+
+    def trajectories(self, mask=None, axis=None, scale=None, out=None, n_points=20, transformation="relative", **kwargs):
+
+        if not self._fitted:
+            raise ValueError("The registration object has not been fitted. Please fit the registration object before applying it.")
+
+        # Check inputs
+        mesh = np.meshgrid(*[np.linspace(0, i, n_points) for i in self._box])
+        points = np.vstack([i.ravel() for i in mesh]).T
+
+        if mask is not None:
+            axis, scale = _get_axis_scale(mask, axis, scale)
+            d = _dict_axis_shape(axis, mask.shape)
+            mesh_mask = np.meshgrid(*[np.round(np.linspace(0, j-1, n_points)).astype(int) for i, j in d.items() if i in "XYZ"])
+            # mesh_mask = np.concatenate([i.reshape(-1,1) for i in mesh_mask],axis=1)
+            if "T" not in axis:
+                keep_points = points[mask[*mesh_mask].flatten()][:,::-1]
+            else:
+                raise ValueError("The mask cannot contain the time dimension 'T'.")
+        else:
+            keep_points = points[:,::-1]
+
+        n_spatial = len([i for i in axis if i in "XYZ"])
+        if out is None:
+            store = zarr.storage.MemoryStore()
+            data = zarr.create_array(store=store, shape=(0,n_spatial+2), dtype=float, **kwargs)
+        elif isinstance(out, str) and out.endswith(".zarr"):
+            data = zarr.create_array(
+                store=out,
+                shape=(0,n_spatial+2),
+                dtype=float,
+                **kwargs
+            )
+        else:
+            raise ValueError("The output must be None or a the name to a zarr file.")
+
+        if self._registration_direction == "backward":
+            iterator = range(self._t_max-1, 0, -1)
+            iterator_next = range(self._t_max-2, -1, -1)
+            t = self._t_max-1
+        else:
+            iterator = range(0, self._t_max-1)
+            iterator_next = range(1, self._t_max)
+            t = 0
                     
-                    # # Remove original projection files
-                    # for file in projection_files:
-                    #     os.remove(file)
+        l = keep_points.shape[0]
+        data_add = np.zeros((l,n_spatial+2))
+        data_add[:,0] = range(len(keep_points))
+        data_add[:,1] = t
+        data_add[:,2:] = keep_points[:,::-1]
+        data.append(data_add, axis=0)
 
-        # Joint all old projections from one axis into a single file
-        if plot_old_projections:
-            for ch in range(dataset._nchannels):
-                for dim in range(dataset._ndim_spatial):
-                    old_projection_files = [f"{directory_projections}/old_projections_ch{ch}/old_projections_{dim}_{num:04d}.tiff" for num in numbers]
-                    old_projections = [imread(file)[np.newaxis,:,:] for file in old_projection_files]
-                    old_projection = np.concatenate(old_projections, axis=0)
-                    imsave(f"{directory_projections}/old_projections_ch{ch}/old_projections_{dim}.tiff", old_projection)
+        for t, t_next in tqdm(zip(iterator, iterator_next), desc=f"Computing trajectories", unit="", total=self._t_max-1):
 
-                    # # Remove original old projection files
-                    # for file in old_projection_files:
-                    #     os.remove(file)
+            if transformation == "global":
+                trnsf = self._load_transformation_global(t, self._origin)
+            elif transformation == "relative":
+                trnsf = self._load_transformation_relative(t, t_next)
+             
+            points_vt = vt.vtPointList(keep_points)
+            points_vt_out = vt.apply_trsf_to_points(points_vt, trnsf)
+            keep_points = keep_points - (points_vt_out.copy_to_array()-keep_points)
+            l = keep_points.shape[0]
+            data_add = np.zeros((l,n_spatial+2))
+            data_add[:,0] = range(len(keep_points))
+            data_add[:,1] = t_next
+            data_add[:,2:] = keep_points[:,::-1]
 
-    # Remove temporary directory if it exists
-    if os.path.exists(directory_tmp):
-        shutil.rmtree(directory_tmp)
+            data.append(data_add, axis=0)
 
-    return load_dataset(save_path)
-
-def transformation_to_vectorfield(mask, transformation, spacing, separation, time):
-    """
-    Create points from a mask, apply a transformation, and return the transformed points.
-
-    Parameters:
-    mask (np.ndarray): Binary mask where points will be created.
-    transformation (vt.vtTransformation): Transformation to apply to the points.
-    spacing (tuple): Spacing of the mask in each dimension.
-    separation (float): Minimum separation between points.
-    Returns:
-    np.ndarray: Transformed points.
-    """
-
-    # Create points from the mask
-    slices = tuple(slice(None, None, separation) for i in range(mask.ndim))
-    points = np.argwhere(mask[slices])*separation
-    sp = np.array(spacing).reshape(1,-1)
-    points = (points*sp)[:,::-1]
-    points_vt = vt.vtPointList(points)
-
-    # Apply transformation
-    transformed_points = vt.apply_trsf_to_points(points_vt, transformation).copy_to_array()
-    points = points[:,::-1]/sp
-    transformed_points = transformed_points[:,::-1]/sp
-
-    # Convert points and transformed points to napari vector format
-    vectors = np.zeros((len(points), 2, mask.ndim + 1))
-    vectors[:, 0, 1:] = (points)
-    vectors[:, 1, 1:] = (transformed_points-points)
-    vectors[:, 0, 0] = time
-    vectors[:, 1, 0] = 0
-
-    return vectors
+        # Return data
+        if out is None:
+            return data
+    
+#     Parameters for the blockmatching algorithm:
+#         ### image geometry ### 
+#         [-reference-voxel %lf %lf [%lf]]:
+#         changes/sets the voxel sizes of the reference image
+#         [-floating-voxel %lf %lf [%lf]]:
+#         changes/sets the voxel sizes of the floating image
+#         ### pre-processing ###
+#         [-normalisation|-norma|-rescale] # input images are normalized on one byte
+#         before matching (this may be the default behavior)
+#         [-no-normalisation|-no-norma|-no-rescale] # input images are not normalized on
+#         one byte before matching
+#         ### post-processing ###
+#         [-no-composition-with-left] # the written result transformation is only the
+#         computed one, ie it is not composed with the left/initial one (thus does not allow
+#         to resample the floating image if an left/initial transformation is given) [default]
+#         [-composition-with-left] # the written result transformation is the
+#         computed one composed with the left/initial one (thus allows to resample the
+#         floating image if an left/initial transformation is given) 
+#         ### pyramid building ###
+#         [-pyramid-gaussian-filtering | -py-gf] # before subsampling, the images 
+#         are filtered (ie smoothed) by a gaussian kernel.
+#         ### block geometry (floating image) ###
+#         -block-size|-bl-size %d %d %d       # size of the block along X, Y, Z
+#         -block-spacing|-bl-space %d %d %d   # block spacing in the floating image
+#         -block-border|-bl-border %d %d %d   # block borders: to be added twice at
+#         each dimension for statistics computation
+#         ### block selection ###
+#         [-floating-low-threshold | -flo-lt %d]     # values <= low threshold are not
+#         considered
+#         [-floating-high-threshold | -flo-ht %d]    # values >= high threshold are not
+#         considered
+#         [-floating-removed-fraction | -flo-rf %f]  # maximal fraction of removed points
+#         because of the threshold. If too many points are removed, the block is
+#         discarded
+#         [-reference-low-threshold | -ref-lt %d]    # values <= low threshold are not
+#         considered
+#         [-reference-high-threshold | -ref-ht %d]   # values >= high threshold are not
+#         considered
+#         [-reference-removed-fraction | -ref-rf %f] # maximal fraction of removed points
+#         because of the threshold. If too many points are removed, the block is
+#         discarded
+#         [-floating-selection-fraction[-ll|-hl] | -flo-frac[-ll|-hl] %lf] # fraction of
+#         blocks from the floating image kept at a pyramid level, the blocks being
+#         sorted w.r.t their variance (see note (1) for [-ll|-hl])
+#         ### pairing ###
+#         [-search-neighborhood-half-size | -se-hsize %d %d %d] # half size of the search
+#         neighborhood in the reference when looking for similar blocks
+#         [-search-neighborhood-step | -se-step %d %d %d] # step between blocks to be
+#         tested in the search neighborhood
+#         [-similarity-measure | -similarity | -si [cc|ecc|ssd|sad]]  # similarity measure
+#         cc: correlation coefficient
+#         ecc: extended correlation coefficient
+#         [-similarity-measure-threshold | -si-th %lf]    # threshold on the similarity
+#         measure: pairings below that threshold are discarded
+#         ### transformation regularization ###
+#         [-elastic-regularization-sigma[-ll|-hl] | -elastic-sigma[-ll|-hl]  %lf %lf %lf]
+#         # sigma for elastic regularization (only for vector field) (see note (1) for
+#         [-ll|-hl])
+#         ### transformation estimation ###
+#         [-estimator-type|-estimator|-es-type %s] # transformation estimator
+#         wlts: weighted least trimmed squares
+#         lts: least trimmed squares
+#         wls: weighted least squares
+#         ls: least squares
+#         [-lts-cut|-lts-fraction %lf] # for trimmed estimations, fraction of pairs that are kept
+#         [-lts-deviation %lf] # for trimmed estimations, defines the threshold to discard
+#         pairings, ie 'average + this_value * standard_deviation'
+#         [-lts-iterations %d] # for trimmed estimations, the maximal number of iterations
+#         [-fluid-sigma|-lts-sigma[-ll|-hl] %lf %lf %lf] # sigma for fluid regularization,
+#         ie field interpolation and regularization for pairings (only for vector field)
+#         (see note (1) for [-ll|-hl])
+#         [-vector-propagation-distance|-propagation-distance|-pdistance %f] # 
+#         distance propagation of initial pairings (ie displacements)
+#         this implies the same displacement for the spanned sphere
+#         (only for vectorfield)
+#         [-vector-fading-distance|-fading-distance|-fdistance %f] # 
+#         area of fading for initial pairings (ie displacements)
+#         this allows progressive transition towards null displacements
+#         and thus avoid discontinuites
+#         ### end conditions for matching loop ###
+#         [-max-iteration[-ll|-hl]|-max-iterations[-ll|-hl]|-max-iter[-ll|-hl] %d]|...
+#         ...|-iterations[-ll|-hl] %d]   # maximal number of iteration
+#         (see note (1) for [-ll|-hl])
+#         [-corner-ending-condition|-rms] # evolution of image corners
+#         ### filter type ###
+#         [-gaussian-filter-type|-filter-type deriche|fidrich|young-1995|young-2002|...
+#         ...|gabor-young-2002|convolution] # type of filter for image/vector field
+#         smoothing
+#         ### misc writing stuff ###
+#         [-default-filenames|-df]     # use default filename names
+#         [-no-default-filenames|-ndf] # do not use default filename names
+#         [-command-line %s]           # write the command line
+#         [-logfile %s]                # write some output in this logfile
+#         [-vischeck]  # write an image with 'active' blocks
+#         [-write_def] # id. 
+#         ### parallelism ###
+#         [-parallel|-no-parallel] # use parallelism (or not)
+#         [-parallelism-type|-parallel-type default|none|openmp|omp|pthread|thread]
+#         [-max-chunks %d] # maximal number of chunks
+#         [-parallel-scheduling|-ps default|static|dynamic-one|dynamic|guided] # type
+#         of scheduling for open mp
+#         ### general parameters ###
+#         -verbose|-v: increase verboseness parameters being read several time, use '-nv -v -v ...' to set the verboseness level
+#         -debug|-D: increase debug level
+#         -no-debug|-nodebug: no debug indication
+#         -trace:
+#         -no-trace:
+#         -print-parameters|-param:
+#         -print-time|-time:
+#         -no-time|-notime:
+#         -trace-memory|-memory: keep trace of allocated pointers (in instrumented procedures)
+#         display some information about memory consumption
+#         Attention: it disables the parallel mode, because of concurrent access to memory parallel mode may be restored by specifying '-parallel' after '-memory' but unexpected crashes may be experienced
+#         -no-memory|-nomemory:
+#         -h: print option list
+#         -help: print option list + details
+        
+#         Notes
+#         (1) If -ll or -hl are respectively added to the option, this specifies only the
+#         value for respectively the lowest or the highest level of the pyramid (recall
+#         that the most lowest level, ie #0, refers to the original image). For
+#         intermediary levels, values are linearly interpolated.

@@ -1,1 +1,1 @@
-from .registration import register, get_pyramid_levels
+from .registration import Registration, get_pyramid_levels, load_registration

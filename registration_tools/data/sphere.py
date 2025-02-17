@@ -1,49 +1,56 @@
 import os
 import tifffile
 import numpy as np
-from ..dataset import Dataset, create_dataset
+from ..dataset.dataset import Dataset
+import zarr
 
-def sphere(path, num_images=10, image_size=100, num_channels=1, min_radius=5, max_radius=20, jump=2, stride=(3, 2, 1), decay_factor=0.5, verbose=False):
+def sphere(out=None, num_images=10, image_size=100, num_channels=1, min_radius=5, max_radius=20, jump=2, stride=(3, 2, 1), decay_factor=0.5, verbose=False):
     """
-    This function creates a series of 3D images a sphere moving along an L-shaped path while increasing the radius.
+    This function creates a series of 3D images of a sphere moving along an L-shaped path while increasing the radius.
     The radius of the spheres increases linearly from min_radius to max_radius across the images.
     The spheres have Gaussian intensity from the center to the border.
     The images are saved in the specified directory with a specified stride.
 
     Parameters:
-        path (str): The directory where the images will be saved. Default is "data".
+        out (str): The directory or zarr file where the images will be saved. If None, the images are stored in memory. Default is None.
         num_images (int): The number of images to generate. Default is 10.
         image_size (int): The size of each dimension of the cubic images. Default is 100.
         num_channels (int): The number of channels for the images. Default is 1.
         min_radius (int): The minimum radius of the spheres. Default is 5.
         max_radius (int): The maximum radius of the spheres. Default is 20.
         jump (int): The step size for the L-shaped path points. Default is 2.
-        stride (tuple): The stride to apply when saving the images. Default is (1, 2, 3).
+        stride (tuple): The stride to apply when saving the images. Default is (3, 2, 1).
         decay_factor (float): The exponential decay factor for the Gaussian intensity. Default is 0.5.
         verbose (bool): If True, print detailed information. Default is False.
 
     Returns:
-        Dataset object: The dataset object containing the generated images.
+        Dataset or zarr array: The dataset object containing the generated images if saved to a directory, or a zarr array if saved to a zarr file or in memory.
     """
-    # Create the directory
-    try:
-        os.makedirs(path)
-        if verbose:
-            print(f"Directory '{path}' created successfully")
-    except FileExistsError:
-        if verbose:
-            print(f"Directory '{path}' already exists")
-
-    # Create subfolders for each channel
-    for channel in range(num_channels):
-        channel_path = os.path.join(path, f"channel_{channel}")
-        try:
+    if out is None:
+        type = "zarr"
+        store = zarr.storage.MemoryStore()
+        zarr_file = zarr.create_array(store=store, shape=(num_images, num_channels, image_size//stride[0], image_size//stride[1], image_size//stride[2]), dtype=np.uint8)
+        zarr_file.attrs["axis"] = "TCZYX"
+        zarr_file.attrs["scale"] = stride
+    elif ( isinstance(out, str) and out.endswith(".zarr") ):
+        type = "zarr"
+        zarr_file = zarr.create_array(store=out, mode='w', shape=(num_images, num_channels, image_size//stride[0], image_size//stride[1], image_size//stride[2]), dtype=np.uint8)
+        zarr_file.attrs["axis"] = "TCZYX"
+        zarr_file.attrs["scale"] = stride
+    elif isinstance(out, str):
+        # Create the directory
+        type = "directory"
+        if not os.path.exists(out):
+            os.makedirs(out)
+            if verbose:
+                print(f"Directory '{out}' created successfully")
+        else:
+            raise FileExistsError(f"Directory '{out}' already exists")
+    
+        # Create subfolders for each channel
+        for channel in range(num_channels):
+            channel_path = os.path.join(out, f"channel_{channel}")
             os.makedirs(channel_path)
-            if verbose:
-                print(f"Directory '{channel_path}' created successfully")
-        except FileExistsError:
-            if verbose:
-                print(f"Directory '{channel_path}' already exists")
 
     # Create L-shaped path with jumps
     center = image_size // 2
@@ -61,14 +68,19 @@ def sphere(path, num_images=10, image_size=100, num_channels=1, min_radius=5, ma
         image[mask] = 255 * np.exp(-decay_factor * (distances[mask] / radius)**2)
         
         for channel in range(num_channels):
-            channel_path = os.path.join(path, f"channel_{channel}")
-            tifffile.imwrite(os.path.join(channel_path, f'sphere_{i:02d}.tiff'), image[::stride[0],::stride[1],::stride[2]])
-            if verbose:
-                print(f"Image 'sphere_{i:02d}.tiff' saved successfully in '{channel_path}'")
+            if type == "zarr":
+                zarr_file[i, channel] = image[::stride[0],::stride[1],::stride[2]]
+            elif type == "directory":
+                channel_path = os.path.join(out, f"channel_{channel}")
+                tifffile.imwrite(os.path.join(channel_path, f'sphere_{i:02d}.tiff'), image[::stride[0],::stride[1],::stride[2]])
 
-    # Create dataset
-    dataset = create_dataset([os.path.join(path, f"channel_{ch}", "sphere_{:02d}.tiff") for ch in range(num_channels)], "ZYX", numbers=list(range(num_images)), scale=[st for st in stride])
-    dataset.save(os.path.join(path))
-
-    return dataset
+    if type == "zarr" and out is None:
+        return zarr_file
+    elif type == "zarr":
+        zarr_file.close()
+        return zarr.open_array(store=store, mode='r')
+    else:
+        # Create dataset
+        dataset = Dataset([os.path.join(out, f"channel_{ch}", "sphere_{:02d}.tiff") for ch in range(num_channels)], "CT", "ZYX", scale=[st for st in stride])
+        return dataset
 

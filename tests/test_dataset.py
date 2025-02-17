@@ -2,9 +2,10 @@ import os
 import unittest
 import numpy as np
 from skimage.io import imsave, imread
-from registration_tools import create_dataset, load_dataset, Dataset, DataIterator, FileIterator
+from registration_tools.dataset import Dataset
 import shutil
-
+from time import sleep
+import zarr
 class TestDataset(unittest.TestCase):
 
     @classmethod
@@ -18,11 +19,21 @@ class TestDataset(unittest.TestCase):
             imsave(file_path, np.random.rand(10, 10))
             cls.file_paths.append(file_path)
 
+        cls.temp_dir2 = 'temp_test_dir2'
+        os.makedirs(cls.temp_dir2, exist_ok=True)
+        cls.file_paths2 = []
+        for i in range(3):
+            file_path = os.path.join(cls.temp_dir2, f'image_{i:03d}.tif')
+            imsave(file_path, np.random.rand(10, 10))
+            cls.file_paths2.append(file_path)
+
         cls.temp_file_monochannel = 'temp_test_file.tif'
         imsave(cls.temp_file_monochannel, np.random.rand(5, 10, 10))
 
         cls.temp_file_multichannel = 'temp_test_file2.tif'
         imsave(cls.temp_file_multichannel, np.random.rand(5, 5, 10, 10))
+
+        cls.save_zarr = 'temp_test_file.zarr'
 
     @classmethod
     def tearDownClass(cls):
@@ -30,254 +41,82 @@ class TestDataset(unittest.TestCase):
         for file_path in cls.file_paths:
             os.remove(file_path)
         shutil.rmtree(cls.temp_dir)
+        shutil.rmtree(cls.temp_dir2)
 
         os.remove(cls.temp_file_monochannel)
 
         os.remove(cls.temp_file_multichannel)
 
-        os.remove("tmp.tiff")
+        if os.path.exists('tmp.tiff'):
+            os.remove('tmp.tiff')
 
-    def test_dataset_initialization_with_monochannel_files(self):
-        dataset = create_dataset(data=self.temp_file_monochannel, format='TXY')
-        self.assertEqual(dataset._dtype, 'file')
-        self.assertEqual(dataset._format, 'TXY')
-        self.assertEqual(dataset._shape, (5, 10, 10))
-        self.assertEqual(dataset._ndim, 3)
-        self.assertEqual(dataset._nchannels, 1)
-        self.assertFalse(dataset._channels_separated)
-
-    def test_dataset_initialization_with_multichannel_files(self):
-        dataset = create_dataset(data=self.temp_file_multichannel, format='TCXY')
-        self.assertEqual(dataset._dtype, 'file')
-        self.assertEqual(dataset._format, 'TCXY')
-        self.assertEqual(dataset._shape, (5, 5, 10, 10))
-        self.assertEqual(dataset._ndim, 4)
-        self.assertEqual(dataset._nchannels, 5)
-        self.assertFalse(dataset._channels_separated)
+        if os.path.exists(cls.save_zarr):
+            shutil.rmtree(cls.save_zarr)
 
     def test_dataset_initialization_with_multiple_files(self):
-        dataset = create_dataset(data=[self.temp_file_monochannel]*2, format='TXY')
-        self.assertEqual(dataset._dtype, 'file')
-        self.assertEqual(dataset._format, 'TXY')
-        self.assertEqual(dataset._shape, (5, 10, 10))
-        self.assertEqual(dataset._ndim, 3)
-        self.assertEqual(dataset._nchannels, 2)
-        self.assertTrue(dataset._channels_separated)
+        dataset = Dataset(data=[self.temp_file_monochannel]*2, axis_data='C', axis_files='ZYX', scale=(1.,2.,3.))
+        self.assertEqual(dataset.shape, (2, 5, 10, 10))
+        self.assertEqual(dataset._axis_data, "C")
+        self.assertEqual(dataset._n_axis_data, 1)
+        self.assertEqual(dataset._axis_files, "ZYX")
+        self.assertEqual(dataset._n_axis_files, 3)
+        self.assertEqual(dataset._axis_spatial, "ZYX")
+        self.assertEqual(dataset._n_axis_spatial, 3)
+        self.assertEqual(dataset._axis, "CZYX")
+        self.assertEqual(dataset._n_axis, 4)
+        self.assertEqual(dataset.dtype, float)
+        self.assertEqual(dataset.scale, (1.,2.,3.))
 
     def test_dataset_initialization_with_regex_single_channel(self):
         regex_pattern = os.path.join(self.temp_dir, 'image_{:03d}.tif')
-        dataset = create_dataset(data=regex_pattern, format='XY', numbers=list(range(3)))
-        self.assertEqual(dataset._dtype, 'regex')
-        self.assertEqual(dataset._format, 'XY')
-        self.assertEqual(dataset._shape, (10, 10))
-        self.assertEqual(dataset._ndim, 2)
-        self.assertEqual(dataset._nchannels, 1)
-        self.assertFalse(dataset._channels_separated)
+        dataset = Dataset(data=regex_pattern, axis_data='T', axis_files='YX', scale=(2.,3.))
+        self.assertEqual(dataset.shape, (3, 10, 10))
+        self.assertEqual(dataset._axis_data, "T")
+        self.assertEqual(dataset._n_axis_data, 1)
+        self.assertEqual(dataset._axis_files, "YX")
+        self.assertEqual(dataset._n_axis_files, 2)
+        self.assertEqual(dataset._axis_spatial, "YX")
+        self.assertEqual(dataset._n_axis_spatial, 2)
+        self.assertEqual(dataset._axis, "TYX")
+        self.assertEqual(dataset._n_axis, 3)
+        self.assertEqual(dataset.dtype, float)
+        self.assertEqual(dataset.scale, (2.,3.))
 
-    def test_dataset_initialization_with_regex_pattern_multiple_channels(self):
+    def test_dataset_initialization_with_regex_single_channel(self):
         regex_pattern = os.path.join(self.temp_dir, 'image_{:03d}.tif')
-        dataset = create_dataset(data=[regex_pattern]*2, format='XY', numbers=list(range(3)))
-        self.assertEqual(dataset._dtype, 'regex')
-        self.assertEqual(dataset._format, 'XY')
-        self.assertEqual(dataset._shape, (10, 10))
-        self.assertEqual(dataset._ndim, 2)
-        self.assertEqual(dataset._nchannels, 2)
-        self.assertTrue(dataset._channels_separated)
+        regex_pattern2 = os.path.join(self.temp_dir2, 'image_{:03d}.tif')
+        dataset = Dataset(data=[regex_pattern,regex_pattern2], axis_data='CT', axis_files='YX', scale=(2.,3.))
+        self.assertEqual(dataset.shape, (2, 3, 10, 10))
+        self.assertEqual(dataset._axis_data, "CT")
+        self.assertEqual(dataset._n_axis_data, 2)
+        self.assertEqual(dataset._axis_files, "YX")
+        self.assertEqual(dataset._n_axis_files, 2)
+        self.assertEqual(dataset._axis_spatial, "YX")
+        self.assertEqual(dataset._n_axis_spatial, 2)
+        self.assertEqual(dataset._axis, "CTYX")
+        self.assertEqual(dataset._n_axis, 4)
+        self.assertEqual(dataset.dtype, float)
+        self.assertEqual(dataset.scale, (2.,3.))
 
-    def test_dataset_initialization_with_numpy_array_single_channel(self):
-        data = np.random.rand(3, 10, 10)
-        dataset = create_dataset(data=data, format='TXY')
-        self.assertEqual(dataset._dtype, 'array')
-        self.assertEqual(dataset._format, 'TXY')
-        self.assertEqual(dataset._shape, (3, 10, 10))
-        self.assertEqual(dataset._ndim, 3)
-        self.assertEqual(dataset._nchannels, 1)
-        self.assertFalse(dataset._channels_separated)
-
-    def test_dataset_initialization_with_numpy_array_multiple_channels(self):
-        data = np.random.rand(3, 10, 10)
-        dataset = create_dataset(data=[data]*2, format='TXY')
-        self.assertEqual(dataset._dtype, 'array')
-        self.assertEqual(dataset._format, 'TXY')
-        self.assertEqual(dataset._shape, (3, 10, 10))
-        self.assertEqual(dataset._ndim, 3)
-        self.assertEqual(dataset._nchannels, 2)
-        self.assertTrue(dataset._channels_separated)
-
-    def test_load_dataset_with_monochannel_files(self):
-        dataset = create_dataset(data=self.temp_file_monochannel, format='TXY')
-        dataset.save(self.temp_dir)
-        loaded_dataset = load_dataset(self.temp_dir)
-        self.assertEqual(dataset._dtype, loaded_dataset._dtype)
-        self.assertEqual(dataset._format, loaded_dataset._format)
-        self.assertEqual(dataset._shape, loaded_dataset._shape)
-        self.assertEqual(dataset._ndim, loaded_dataset._ndim)
-        self.assertEqual(dataset._nchannels, loaded_dataset._nchannels)
-        self.assertEqual(dataset._channels_separated, loaded_dataset._channels_separated)
-
-    def test_load_dataset_with_multichannel_files(self):
-        dataset = create_dataset(data=self.temp_file_multichannel, format='TCXY')
-        dataset.save(self.temp_dir)
-        loaded_dataset = load_dataset(self.temp_dir)
-        self.assertEqual(dataset._dtype, loaded_dataset._dtype)
-        self.assertEqual(dataset._format, loaded_dataset._format)
-        self.assertEqual(dataset._shape, loaded_dataset._shape)
-        self.assertEqual(dataset._ndim, loaded_dataset._ndim)
-        self.assertEqual(dataset._nchannels, loaded_dataset._nchannels)
-        self.assertEqual(dataset._channels_separated, loaded_dataset._channels_separated)
-
-    def test_load_dataset_with_multiple_files(self):
-        dataset = create_dataset(data=[self.temp_file_monochannel]*2, format='TXY')
-        dataset.save(self.temp_dir)
-        loaded_dataset = load_dataset(self.temp_dir)
-        self.assertEqual(dataset._dtype, loaded_dataset._dtype)
-        self.assertEqual(dataset._format, loaded_dataset._format)
-        self.assertEqual(dataset._shape, loaded_dataset._shape)
-        self.assertEqual(dataset._ndim, loaded_dataset._ndim)
-        self.assertEqual(dataset._nchannels, loaded_dataset._nchannels)
-        self.assertEqual(dataset._channels_separated, loaded_dataset._channels_separated)
-
-    def test_load_dataset_with_regex_single_channel(self):
+    def test_dataset_access(self):
         regex_pattern = os.path.join(self.temp_dir, 'image_{:03d}.tif')
-        dataset = create_dataset(data=regex_pattern, format='XY', numbers=list(range(3)))
-        dataset.save(self.temp_dir)
-        loaded_dataset = load_dataset(self.temp_dir)
-        self.assertEqual(dataset._dtype, loaded_dataset._dtype)
-        self.assertEqual(dataset._format, loaded_dataset._format)
-        self.assertEqual(dataset._shape, loaded_dataset._shape)
-        self.assertEqual(dataset._ndim, loaded_dataset._ndim)
-        self.assertEqual(dataset._nchannels, loaded_dataset._nchannels)
-        self.assertEqual(dataset._channels_separated, loaded_dataset._channels_separated)
+        regex_pattern2 = os.path.join(self.temp_dir2, 'image_{:03d}.tif')
+        dataset = Dataset(data=[regex_pattern,regex_pattern2], axis_data='CT', axis_files='YX', scale=(2.,3.))
 
-    def test_load_dataset_with_regex_pattern_multiple_channels(self):
+        self.assertEqual(dataset[0].shape, (3, 10, 10))
+        self.assertEqual(dataset[:,0].shape, (2, 10, 10))
+        self.assertEqual(dataset[:,:,0,:].shape, (2, 3, 10))
+        self.assertEqual(dataset[:1,1:,1:5,:].shape, (1, 2, 4, 10))
+
+    def test_dataset_to_zarr(self):
         regex_pattern = os.path.join(self.temp_dir, 'image_{:03d}.tif')
-        dataset = create_dataset(data=[regex_pattern]*2, format='XY', numbers=list(range(3)))
-        dataset.save(self.temp_dir)
-        loaded_dataset = load_dataset(self.temp_dir)
-        self.assertEqual(dataset._dtype, loaded_dataset._dtype)
-        self.assertEqual(dataset._format, loaded_dataset._format)
-        self.assertEqual(dataset._shape, loaded_dataset._shape)
-        self.assertEqual(dataset._ndim, loaded_dataset._ndim)
-        self.assertEqual(dataset._nchannels, loaded_dataset._nchannels)
-        self.assertEqual(dataset._channels_separated, loaded_dataset._channels_separated)
-
-    def test_load_dataset_with_numpy_array_single_channel(self):
-        data = np.random.rand(3, 10, 10)
-        dataset = create_dataset(data=data, format='TXY')
-        dataset.save(self.temp_dir)
-        loaded_dataset = load_dataset(self.temp_dir)
-        self.assertEqual("file", loaded_dataset._dtype)
-        self.assertEqual(dataset._format, loaded_dataset._format)
-        self.assertEqual(dataset._shape, loaded_dataset._shape)
-        self.assertEqual(dataset._ndim, loaded_dataset._ndim)
-        self.assertEqual(dataset._nchannels, loaded_dataset._nchannels)
-        self.assertEqual(dataset._channels_separated, loaded_dataset._channels_separated)
-
-    def test_load_dataset_with_numpy_array_multiple_channels(self):
-        data = np.random.rand(3, 10, 10)
-        dataset = create_dataset(data=[data]*2, format='TXY')
-        dataset.save(self.temp_dir)
-        loaded_dataset = load_dataset(self.temp_dir)
-        self.assertEqual("file", loaded_dataset._dtype)
-        self.assertEqual(dataset._format, loaded_dataset._format)
-        self.assertEqual(dataset._shape, loaded_dataset._shape)
-        self.assertEqual(dataset._ndim, loaded_dataset._ndim)
-        self.assertEqual(dataset._nchannels, loaded_dataset._nchannels)
-        self.assertEqual(dataset._channels_separated, loaded_dataset._channels_separated)
-
-    def test_get_time_data_with_monochannel_files(self):
-        dataset = create_dataset(data=self.temp_file_monochannel, format='TXY')
-        time_data = dataset.get_time_data(1)
-        expected_data = imread(self.temp_file_monochannel)[1]
-        np.testing.assert_array_equal(time_data, expected_data)
-
-    def test_get_time_data_with_multichannel_files(self):
-        dataset = create_dataset(data=self.temp_file_multichannel, format='TCXY')
-        time_data = dataset.get_time_data(1, channel=2)
-        expected_data = imread(self.temp_file_multichannel)[1, 2, :, :]
-        np.testing.assert_array_equal(time_data, expected_data)
-
-    def test_get_time_data_with_multiple_files(self):
-        dataset = create_dataset(data=[self.temp_file_monochannel]*2, format='TXY')
-        time_data = dataset.get_time_data(1, channel=1)
-        expected_data = imread(self.temp_file_monochannel)[1]
-        np.testing.assert_array_equal(time_data, expected_data)
-
-    def test_get_time_data_with_regex_single_channel(self):
-        regex_pattern = os.path.join(self.temp_dir, 'image_{:03d}.tif')
-        dataset = create_dataset(data=regex_pattern, format='XY', numbers=list(range(3)))
-        time_data = dataset.get_time_data(1)
-        expected_data = imread(regex_pattern.format(1))
-        np.testing.assert_array_equal(time_data, expected_data)
-
-    def test_get_time_data_with_regex_pattern_multiple_channels(self):
-        regex_pattern = os.path.join(self.temp_dir, 'image_{:03d}.tif')
-        dataset = create_dataset(data=[regex_pattern]*2, format='XY', numbers=list(range(3)))
-        time_data = dataset.get_time_data(1, channel=1)
-        expected_data = imread(regex_pattern.format(1))
-        np.testing.assert_array_equal(time_data, expected_data)
-
-    def test_get_time_data_with_numpy_array_single_channel(self):
-        data = np.random.rand(3, 10, 10)
-        dataset = create_dataset(data=data, format='TXY')
-        time_data = dataset.get_time_data(1)
-        np.testing.assert_array_equal(time_data, data[1])
-
-    def test_get_time_data_with_numpy_array_multiple_channels(self):
-        data = np.random.rand(3, 10, 10)
-        dataset = create_dataset(data=[data]*2, format='TXY')
-        time_data = dataset.get_time_data(1, channel=1)
-        np.testing.assert_array_equal(time_data, data[1])
-
-    def test_get_time_data_with_numpy_array_multiple_channels2(self):
-        data = np.random.rand(3, 10, 10, 3)  # 3 time points, 10x10 image, 3 channels
-        dataset = create_dataset(data=data, format='TXYC')
-        time_data = dataset.get_time_data(1, channel=2)
-        np.testing.assert_array_equal(time_data, data[1, :, :, 2])
-
-    def test_data_iterator_file(self):
-        dataset = create_dataset(data=self.temp_file_monochannel, format='TXY')
-        iterator = dataset.get_data_iterator()
-        expected_data = imread(self.temp_file_monochannel)
-        for i, data in enumerate(iterator):
-            np.testing.assert_array_equal(data, expected_data[i,:,:])
-
-    def test_data_iterator_regex(self):
-        regex_pattern = os.path.join(self.temp_dir, 'image_{:03d}.tif')
-        dataset = create_dataset(data=regex_pattern, format='XY', numbers=list(range(3)))
-        iterator = dataset.get_data_iterator()
-        for i, data in enumerate(iterator):
-            expected_data = imread(regex_pattern.format(i))
-            np.testing.assert_array_equal(data, expected_data)
-
-    def test_data_iterator_array(self):
-        data = np.random.rand(3, 10, 10)
-        dataset = create_dataset(data=data, format='TXY')
-        iterator = dataset.get_data_iterator()
-        for i, data_slice in enumerate(iterator):
-            np.testing.assert_array_equal(data_slice, data[i])
-
-    def test_data_iterator_file(self):
-        dataset = create_dataset(data=self.temp_file_monochannel, format='TXY')
-        iterator = dataset.get_file_iterator("tmp.tiff")
-        expected_data = imread(self.temp_file_monochannel)
-        for i, data in enumerate(iterator):
-            np.testing.assert_array_equal(imread(data), expected_data[i,:,:])
-
-    def test_data_iterator_regex(self):
-        regex_pattern = os.path.join(self.temp_dir, 'image_{:03d}.tif')
-        dataset = create_dataset(data=regex_pattern, format='XY', numbers=list(range(3)))
-        iterator = dataset.get_file_iterator("tmp.tiff")
-        for i, data in enumerate(iterator):
-            expected_data = imread(regex_pattern.format(i))
-            np.testing.assert_array_equal(imread(data), expected_data)
-
-    def test_data_iterator_array(self):
-        data = np.random.rand(3, 10, 10)
-        dataset = create_dataset(data=data, format='TXY')
-        iterator = dataset.get_file_iterator("tmp.tiff")
-        for i, data_slice in enumerate(iterator):
-            np.testing.assert_array_equal(imread(data_slice), data[i])
-
+        regex_pattern2 = os.path.join(self.temp_dir2, 'image_{:03d}.tif')
+        dataset = Dataset(data=[regex_pattern,regex_pattern2], axis_data='CT', axis_files='YX', scale=(2.,3.))
+        dataset.to_zarr(self.save_zarr)
+        data_zarr = zarr.open_array(self.save_zarr, mode='r')
+        self.assertEqual(data_zarr.shape, (2, 3, 10, 10))
+        self.assertEqual(data_zarr.attrs['scale'], [2.,3.])
+        self.assertEqual(data_zarr.attrs['axis'], "CTYX")
+        
 if __name__ == '__main__':
     unittest.main()
