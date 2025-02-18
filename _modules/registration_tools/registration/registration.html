@@ -48,14 +48,15 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">copy</span><span class="w"> </span><span class="kn">import</span> <span class="n">deepcopy</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">zarr</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..utils.auxiliar</span><span class="w"> </span><span class="kn">import</span> <span class="n">_get_axis_scale</span><span class="p">,</span> <span class="n">_make_index</span><span class="p">,</span> <span class="n">_shape_downsampled</span><span class="p">,</span> <span class="n">_dict_axis_shape</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_get_vtImage</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">scale</span><span class="p">,</span> <span class="n">axis</span><span class="p">,</span> <span class="n">use_channel</span><span class="p">,</span> <span class="n">downsample</span><span class="p">):</span>
     <span class="n">img</span> <span class="o">=</span> <span class="n">dataset</span><span class="p">[</span><span class="n">_make_index</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">axis</span><span class="p">,</span> <span class="n">use_channel</span><span class="p">,</span> <span class="n">downsample</span><span class="p">)]</span>
-    <span class="n">imsave</span><span class="p">(</span><span class="s2">&quot;__file__.tiff&quot;</span><span class="p">,</span> <span class="n">img</span><span class="p">)</span>
-    <span class="n">img</span> <span class="o">=</span> <span class="n">vt</span><span class="o">.</span><span class="n">vtImage</span><span class="p">(</span><span class="s2">&quot;__file__.tiff&quot;</span><span class="p">)</span>
-    <span class="c1"># img = vt.vtImage(img.copy()) #Ideal but runs all the time in problems</span>
-    <span class="n">img</span><span class="o">.</span><span class="n">setSpacing</span><span class="p">(</span><span class="n">scale</span><span class="p">[::</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
-    <span class="n">os</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="s2">&quot;__file__.tiff&quot;</span><span class="p">)</span>
+    <span class="k">with</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">NamedTemporaryFile</span><span class="p">(</span><span class="n">suffix</span><span class="o">=</span><span class="s2">&quot;.tiff&quot;</span><span class="p">,</span> <span class="n">delete</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="k">as</span> <span class="n">temp_file</span><span class="p">:</span>
+        <span class="n">imsave</span><span class="p">(</span><span class="n">temp_file</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">img</span><span class="p">)</span>
+        <span class="n">img</span> <span class="o">=</span> <span class="n">vt</span><span class="o">.</span><span class="n">vtImage</span><span class="p">(</span><span class="n">temp_file</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+        <span class="c1"># img = vt.vtImage(img.copy()) #Ideal but runs all the time in problems</span>
+        <span class="n">img</span><span class="o">.</span><span class="n">setSpacing</span><span class="p">(</span><span class="n">scale</span><span class="p">[::</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
     <span class="k">return</span> <span class="n">img</span>
 
 <div class="viewcode-block" id="get_pyramid_levels">
@@ -172,7 +173,6 @@
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> 
-
             <span class="n">out</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> 
             <span class="n">registration_type</span><span class="o">=</span><span class="s2">&quot;rigid&quot;</span><span class="p">,</span> 
             <span class="n">perfom_global_trnsf</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> 
