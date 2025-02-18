@@ -6,6 +6,23 @@ from .auxiliar import _get_axis_scale, _make_index, _get_spatial_dims, _dict_axi
 import zarr
 
 def apply_function_in_time(dataset, function, axis=None, scale=None, out=None, new_axis=None, new_scale=None, **kwargs):
+    """
+    Apply a given function to a dataset along the time dimension.
+
+    Parameters:
+
+        dataset (array-like) : The input dataset to which the function will be applied.
+        function (callable) : The function to apply to the dataset. It should accept an array-like object as its first argument.
+        axis (str, optional) : The axis labels of the dataset. Must contain the time dimension 'T'.
+        scale (list or tuple, optional) : The scale of the dataset along each axis.
+        out (out, optional) : An optional file to store the results. If not provided, a new array will be created.
+        new_axis (str, optional) : The axis labels of the modified data. Must contain the time dimension 'T'.
+        new_scale (list or tuple, optional) : The scale of the modified data along each axis.
+        **kwargs (dict) : Additional keyword arguments to pass to the function.
+
+    Returns:
+        array-like : The modified dataset with the function applied along the time dimension. If `out` is provided, the function returns None.
+    """
 
     axis, scale = _get_axis_scale(dataset, axis, scale)
 
@@ -59,6 +76,21 @@ def apply_function_in_time(dataset, function, axis=None, scale=None, out=None, n
         return
 
 def project(dataset, projection_axis, axis=None, scale=None, out=None, style="max"):
+    """
+    Project a dataset along a specified axis using either maximum or mean projection.
+    
+    Parameters:
+
+        dataset (array-like) : The input dataset to be projected.
+        projection_axis (str) : The axis along which to project the dataset. Must be one of 'X', 'Y', or 'Z'.
+        axis (str, optional) : The axis labels of the dataset. If not provided, it will be inferred.
+        scale (tuple, optional) : The scale of each axis in the dataset. If not provided, it will be inferred.
+        out (str, optional) : The output file to store the result. If not provided, a new array will be created.
+        style (str, optional) : The projection style to use. Must be either 'max' for maximum projection or 'mean' for mean projection. Default is 'max'.
+
+    Returns:
+        array-like : The projected dataset.
+    """
 
     axis, scale = _get_axis_scale(dataset, axis, scale)
 

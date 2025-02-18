@@ -6,7 +6,6 @@ from tqdm import tqdm
 import napari
 import imageio
 import zarr
-import tensorstore as ts
 import dask.array as da
 
 from skimage.io import imread, imsave

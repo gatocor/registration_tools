@@ -78,6 +78,16 @@ def load_registration(out):
 class Registration:
     """
     A class to perform image registration.
+
+    Parameters:
+        out (str, optional): Output path to save the registration results. Default is None.
+        registration_type (str, optional): Type of registration to perform. Default is "rigid".
+        perfom_global_trnsf (bool, optional): Whether to perform global transformation. Default is None.
+        pyramid_lowest_level (int, optional): Lowest level of the pyramid for multi-resolution registration. Default is 0.
+        pyramid_highest_level (int, optional): Highest level of the pyramid for multi-resolution registration. Default is 3.
+        registration_direction (str, optional): Direction of registration, either "forward" or "backward". Default is "backward".
+        args_registration (str, optional): Additional arguments for the registration process. Default is an empty string.
+
     Attributes:
         registration_type (str): The type of registration to perform.
         perfom_global_trnsf (bool): Whether to perform global transformation.
@@ -121,6 +131,7 @@ class Registration:
     """
 
     def __init__(self, 
+
             out=None, 
             registration_type="rigid", 
             perfom_global_trnsf=None, 
@@ -129,7 +140,19 @@ class Registration:
             registration_direction="backward", 
             args_registration=""
         ):
-        
+        """
+        Initialize the registration object with the specified parameters.
+
+        Parameters:
+        out (str, optional): Output path to save the registration results. Default is None.
+        registration_type (str, optional): Type of registration to perform. Default is "rigid".
+        perfom_global_trnsf (bool, optional): Whether to perform global transformation. Default is None.
+        pyramid_lowest_level (int, optional): Lowest level of the pyramid for multi-resolution registration. Default is 0.
+        pyramid_highest_level (int, optional): Highest level of the pyramid for multi-resolution registration. Default is 3.
+        registration_direction (str, optional): Direction of registration, either "forward" or "backward". Default is "backward".
+        args_registration (str, optional): Additional arguments for the registration process. Default is an empty string.
+        """
+
         rigid_transformations = ["translation2D", "translation3D", "translation", "rigid2D", "rigid3D", "rigid"]
         registration_directions = ["forward", "backward"]
 

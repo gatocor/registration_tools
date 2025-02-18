@@ -5,11 +5,14 @@ setup(
     version='0.1',
     packages=find_packages(),
     install_requires=[
-        'scikit-image'
+        'scikit-image',
+        'zarr>=3.0.3',
+        'h5py'
     ],
     extras_require={
-        'vt': ['vt-python'],
-        'napari': ['napari']
+        'vt-python': ['vt-python'],
+        'napari': ['napari'],
+        'pyqt': ['pyqt5'],
     },
     test_suite='tests',
     entry_points={
@@ -29,5 +32,5 @@ setup(
         'License :: OSI Approved :: MIT License',
         'Operating System :: OS Independent',
     ],
-    python_requires='>=3.10',
+    python_requires='>=3.11',
 )

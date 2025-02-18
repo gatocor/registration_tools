@@ -7,6 +7,117 @@ import json
 from copy import deepcopy
 import h5py
 import zarr
+from tqdm import tqdm
+
+def check_dataset_structure(data):
+    """
+    Check and print the structure of a dataset.
+
+    This function prints the shape of the dataset and checks for the presence
+    of specific attributes ('axis' and 'scale'). If these attributes are found,
+    their values are printed. If not, a message indicating their absence is printed.
+
+    Parameters:
+    data (object): The dataset to be checked. It is expected to have a 'shape' attribute
+                   and optionally 'attrs' attribute which is a dictionary containing
+                   'axis' and 'scale' keys.
+
+    Returns:
+    None
+    """
+
+    print("Shape: ", data.shape)
+    if hasattr(data, "attrs"):
+        if "axis" in data.attrs:
+            print("Axis: ", data.attrs["axis"])
+        else:
+            print("Axis attribute not found.")
+        if "scale" in data.attrs:
+            print("Scale: ", data.attrs["scale"])
+        else:
+            print("Scale attribute not found.")
+    else:
+        print("Attributes not found.")
+
+def show_dataset_structure(folder_path, indent=0, max_files=6):
+    """
+    Recursively prints the folder structure.
+
+    Parameters:
+    folder_path (str): The path to the folder to display.
+    indent (int): The indentation level for nested folders.
+    max_files (int): The maximum number of files to display per folder.
+
+    Returns:
+    None
+    """
+    for item in sorted(os.listdir(folder_path)):
+        item_path = os.path.join(folder_path, item)
+        if os.path.isdir(item_path):
+            print(' ' * indent + '|-- ' + item)
+            sub_items = sorted(os.listdir(item_path))
+            show_dataset_structure(item_path, indent + 4, max_files)
+            if len(sub_items) > max_files:
+                for sub_item in sub_items[:3]:
+                    print(' ' * (indent + 4) + '|-- ' + sub_item)
+                print(' ' * (indent + 4) + '|-- ...')
+                for sub_item in sub_items[-3:]:
+                    print(' ' * (indent + 4) + '|-- ' + sub_item)
+            else:
+                for sub_item in sub_items:
+                    print(' ' * (indent + 4) + '|-- ' + sub_item)
+
+
+def load_dataset(path, axis=None, scale=None, h5_key=None):
+    """
+    Load a dataset from a given file path.
+
+    Parameters:
+        path (str): The file path to the dataset. Supported formats are .npy, .h5, .hdf5, and image files.
+        axis (optional): The axis attribute of the dataset. If not provided, it will be read from the dataset attributes.
+        scale (optional): The scale attribute of the dataset. If not provided, it will be read from the dataset attributes.
+        h5_key (str, optional): The key to read from an h5 file. Required if the file is in .h5 or .hdf5 format.
+
+    Returns:
+        zarr.core.Array: The loaded dataset as a zarr array.
+    """
+
+    if path.endswith('.npy'):
+        data = np.load(path)
+        dataset = zarr.array(data)
+    elif path.endswith('.h5') or path.endswith('.hdf5'):
+        if h5_key is None:
+            raise ValueError("Must provide a key to read an h5 file.")
+        with h5py.File(path, 'r') as f:
+            dataset = np.array(f[h5_key])
+    else:
+        data = imread(path)
+        dataset = zarr.array(data)
+
+
+    # Check for axis and scale in dataset attributes
+    if hasattr(dataset, 'attrs'):
+        if 'axis' not in dataset.attrs:
+            if axis is None:
+                raise ValueError("Dataset is missing 'axis' attribute. Please provide it.")
+            elif len(axis) != len(dataset.shape):
+               raise ValueError("Axis must have the same length as the number of dimensions in the dataset.")
+            else:
+                dataset.attrs['axis'] = axis
+        elif 'axis' in dataset.attrs and axis is not None:
+            print("Warning: 'axis' attribute is already present in the dataset. Ignoring provided 'axis' attribute.")
+
+        if 'scale' not in dataset.attrs:
+            if scale is None:
+                dataset.attrs['scale'] = (1,) * len([i for i in dataset.attrs['axis'] if i in 'XYZ'])
+            elif len(scale) != len([i for i in dataset.attrs['axis'] if i in 'XYZ']):
+                raise ValueError("Scale must have the same length as the number of spatial dimensions in the dataset.")
+            else:
+                dataset.attrs['scale'] = scale
+    else:
+        raise ValueError("Dataset is missing attributes. Please provide 'axis' and 'scale' attributes.")
+    
+    return dataset
 
 def read_file(path, h5_key=None):
     """
@@ -46,6 +157,9 @@ def _regex_to_list(regex):
         if file in files:
             files_.append(file)
     files_.sort()
+
+    if len(files_) == 0:
+        raise FileNotFoundError(f"No files found with pattern {regex}")
     
     return files_
 
@@ -69,26 +183,35 @@ class Dataset:
     """
     A class to represent an image dataset of files saved in several folders.
 
+    Args:
+
+        data (nested list or str): The data of the dataset, which can be a list of paths with regex patterns or a numpy array.
+        axis_data (str): A string representing the format of the folder nested structure. Each character must appear only once.
+        axis_files (str): A string representing the format of the file dimensions. Each character must appear only once.
+        scale (tuple, optional): A tuple representing the scale for the spatial dimensions. Must be the same length as the number of spatial dimensions. If None, the scale is set to (1, 1, ..., 1). Defaults to None.
+        h5_key (str, optional): The key to read data from an h5 file, if applicable.
+
     Examples:
 
-        Have a dataset with the folowwing structure:
+        Having a dataset with the folowwing structure:
 
         - main_folder
             - ch1
-                - file1.tif
+                - file_t1.tif
+                - file_t2.tif
                 - ...
             - ch2
-                - file1.tif
+                - file_t1.tif
+                - file_t2.tif
                 - ...
 
-        It is 3D saved in format 'ZYX' with scale (2, 1, 1).
+        Where each file is a 3D image saved in format 'ZYX' with scale (2., 1., 1.).
         You can create a dataset object with the following code:
         
-        ```python
-            dataset = Dataset(data=['ch1/file{0:03d}.tif','ch2/file{0:03d}.tif'], axis_data='CT', axis_files='ZYX', scale=(2, 1, 1))
-        ```
+            dataset = Dataset(data=['ch1/file{0:03d}.tif','ch2/file{0:03d}.tif'], axis_data='CT', axis_files='ZYX', scale=(2., 1., 1.))
 
     Attributes:
+
         shape (tuple): The shape of the dataset including both data and file dimensions.
         scale (tuple): The scale of the spatial dimensions.
         _data (np.ndarray): The data of the dataset, expanded from regex patterns or file paths.
@@ -170,7 +293,7 @@ class Dataset:
         Returns:
             str: A string representation of the Dataset object.
         """
-        return f"Dataset(data={self._data}, axis_data={self._axis_data}, axis_files={self._axis_files}, scale={self.scale})"
+        return f"Dataset(shape={self.shape}, axis={self._axis}, scale={self.scale})"
 
     def __getitem__(self, index):
         """
@@ -224,7 +347,7 @@ class Dataset:
             **kwargs
         )
 
-        for idx in np.ndindex(self._data.shape):
+        for idx in tqdm(np.ndindex(self._data.shape), desc="Saving to Zarr", total=np.prod(self._data.shape), unit="images"):
             z[idx] = self[idx]
 
         z.attrs['axis'] = self._axis
