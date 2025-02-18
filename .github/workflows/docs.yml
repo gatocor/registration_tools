@@ -16,7 +16,7 @@ jobs:
     - name: Set up Conda
       uses: conda-incubator/setup-miniconda@v2
       with:
-        python-version: '3.10'
+        python-version: '3.11'
         activate-environment: docs-env
         environment-file: environment.yml
         auto-update-conda: true

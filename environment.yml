@@ -1,8 +1,9 @@
 name: registration_tools
 channels:
   - conda-forge
+  - morpheme
 dependencies:
-  - python==3.11.11
+  - python==3.11
   - vt-python
   - scikit-image
   - napari
