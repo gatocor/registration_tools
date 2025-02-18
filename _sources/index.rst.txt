@@ -9,6 +9,7 @@ Welcome to Registration Tools's documentation!
 .. toctree::
    :maxdepth: 2
 
+   installation.md
    usage
    examples
    API

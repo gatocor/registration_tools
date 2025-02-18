@@ -14,7 +14,7 @@
     <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Classes" href="API_dataset.html" />
+    <link rel="next" title="Dataset" href="API_dataset.html" />
     <link rel="prev" title="Non-linear registration of growing spheres" href="examples_spheres_growing.html" />
    
   <link rel="stylesheet" href="_static/custom.css" type="text/css" />
@@ -37,11 +37,34 @@
 <h1>API Reference<a class="headerlink" href="#api-reference" title="Link to this heading">¶</a></h1>
 <div class="toctree-wrapper compound">
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="API_dataset.html">Classes</a></li>
-<li class="toctree-l1"><a class="reference internal" href="API_registration.html">Registration</a></li>
-<li class="toctree-l1"><a class="reference internal" href="API_utils.html">Utils</a></li>
-<li class="toctree-l1"><a class="reference internal" href="API_visualization.html">Visualization</a></li>
-<li class="toctree-l1"><a class="reference internal" href="API_data.html">Datasets</a></li>
+<li class="toctree-l1"><a class="reference internal" href="API_dataset.html">Dataset</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="API_dataset.html#registration_tools.dataset.Dataset"><code class="docutils literal notranslate"><span class="pre">Dataset</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="API_dataset.html#registration_tools.dataset.check_dataset_structure"><code class="docutils literal notranslate"><span class="pre">check_dataset_structure()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="API_dataset.html#registration_tools.dataset.load_dataset"><code class="docutils literal notranslate"><span class="pre">load_dataset()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="API_dataset.html#registration_tools.dataset.show_dataset_structure"><code class="docutils literal notranslate"><span class="pre">show_dataset_structure()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="API_registration.html">Registration</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="API_registration.html#registration_tools.registration.Registration"><code class="docutils literal notranslate"><span class="pre">Registration</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="API_registration.html#registration_tools.registration.get_pyramid_levels"><code class="docutils literal notranslate"><span class="pre">get_pyramid_levels()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="API_registration.html#registration_tools.registration.load_registration"><code class="docutils literal notranslate"><span class="pre">load_registration()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="API_utils.html">Utils</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="API_utils.html#registration_tools.utils.apply_function_in_time"><code class="docutils literal notranslate"><span class="pre">apply_function_in_time()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="API_utils.html#registration_tools.utils.project"><code class="docutils literal notranslate"><span class="pre">project()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="API_visualization.html">Visualization</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="API_visualization.html#registration_tools.visualization.add_image"><code class="docutils literal notranslate"><span class="pre">add_image()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="API_visualization.html#registration_tools.visualization.add_image_difference"><code class="docutils literal notranslate"><span class="pre">add_image_difference()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="API_visualization.html#registration_tools.visualization.make_video"><code class="docutils literal notranslate"><span class="pre">make_video()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="API_data.html">Artificial Data</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="API_data.html#registration_tools.data.sphere"><code class="docutils literal notranslate"><span class="pre">sphere()</span></code></a></li>
+</ul>
+</li>
 </ul>
 </div>
 </section>
@@ -73,14 +96,15 @@
 </search>
 <script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
 <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="usage.html">Usage</a></li>
 <li class="toctree-l1"><a class="reference internal" href="examples.html">Examples</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">API Reference</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="API_dataset.html">Classes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="API_dataset.html">Dataset</a></li>
 <li class="toctree-l2"><a class="reference internal" href="API_registration.html">Registration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="API_utils.html">Utils</a></li>
 <li class="toctree-l2"><a class="reference internal" href="API_visualization.html">Visualization</a></li>
-<li class="toctree-l2"><a class="reference internal" href="API_data.html">Datasets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="API_data.html">Artificial Data</a></li>
 </ul>
 </li>
 </ul>
@@ -90,7 +114,7 @@
 <ul>
   <li><a href="index.html">Documentation overview</a><ul>
       <li>Previous: <a href="examples_spheres_growing.html" title="previous chapter">Non-linear registration of growing spheres</a></li>
-      <li>Next: <a href="API_dataset.html" title="next chapter">Classes</a></li>
+      <li>Next: <a href="API_dataset.html" title="next chapter">Dataset</a></li>
   </ul></li>
 </ul>
 </div>

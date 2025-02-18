@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>registration_tools.registration.registration &#8212; Registration Tools 0.1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/basic.css?v=686e5160" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/alabaster.css?v=27fed22d" />
+    <script src="../../../_static/documentation_options.js?v=2709fde1"></script>
+    <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+   
+  <link rel="stylesheet" href="../../../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for registration_tools.registration.registration</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">skimage.io</span><span class="w"> </span><span class="kn">import</span> <span class="n">imread</span><span class="p">,</span> <span class="n">imsave</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">skimage.measure</span><span class="w"> </span><span class="kn">import</span> <span class="n">label</span><span class="p">,</span> <span class="n">regionprops</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">shutil</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">vt</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..dataset.dataset</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dataset</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">atexit</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">tqdm</span><span class="w"> </span><span class="kn">import</span> <span class="n">tqdm</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">copy</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>  <span class="c1"># Add this import</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">copy</span><span class="w"> </span><span class="kn">import</span> <span class="n">deepcopy</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">zarr</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..utils.auxiliar</span><span class="w"> </span><span class="kn">import</span> <span class="n">_get_axis_scale</span><span class="p">,</span> <span class="n">_make_index</span><span class="p">,</span> <span class="n">_shape_downsampled</span><span class="p">,</span> <span class="n">_dict_axis_shape</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_get_vtImage</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">scale</span><span class="p">,</span> <span class="n">axis</span><span class="p">,</span> <span class="n">use_channel</span><span class="p">,</span> <span class="n">downsample</span><span class="p">):</span>
+    <span class="n">img</span> <span class="o">=</span> <span class="n">dataset</span><span class="p">[</span><span class="n">_make_index</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">axis</span><span class="p">,</span> <span class="n">use_channel</span><span class="p">,</span> <span class="n">downsample</span><span class="p">)]</span>
+    <span class="n">imsave</span><span class="p">(</span><span class="s2">&quot;__file__.tiff&quot;</span><span class="p">,</span> <span class="n">img</span><span class="p">)</span>
+    <span class="n">img</span> <span class="o">=</span> <span class="n">vt</span><span class="o">.</span><span class="n">vtImage</span><span class="p">(</span><span class="s2">&quot;__file__.tiff&quot;</span><span class="p">)</span>
+    <span class="c1"># img = vt.vtImage(img.copy()) #Ideal but runs all the time in problems</span>
+    <span class="n">img</span><span class="o">.</span><span class="n">setSpacing</span><span class="p">(</span><span class="n">scale</span><span class="p">[::</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+    <span class="n">os</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="s2">&quot;__file__.tiff&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">img</span>
+
+<div class="viewcode-block" id="get_pyramid_levels">
+<a class="viewcode-back" href="../../../API_registration.html#registration_tools.registration.get_pyramid_levels">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_pyramid_levels</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">maximum_size</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span> <span class="n">verbose</span> <span class="o">=</span> <span class="kc">True</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Returns the lowest and highest pyramid levels for the dataset.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        dataset (Dataset): The dataset object.</span>
+<span class="sd">        maximum_size (int, optional): The maximum size for the pyramid levels. Default is 100.</span>
+<span class="sd">        verbose (bool, optional): If True, print the pyramid levels. Default is True.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        tuple: The lowest and highest pyramid levels.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">shape</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">get_spatial_shape</span><span class="p">())</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">log2</span><span class="p">(</span><span class="n">shape</span><span class="p">))))</span>
+    <span class="n">ll_threshold</span> <span class="o">=</span> <span class="n">n</span>
+    <span class="k">for</span> <span class="n">level</span><span class="p">,</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)):</span>
+        <span class="k">if</span> <span class="mi">2</span><span class="o">**</span><span class="n">n</span> <span class="o">&lt;</span> <span class="mi">32</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Level </span><span class="si">{</span><span class="n">level</span><span class="si">}</span><span class="s2"> is below 32 per dimension. Registration will use up to level </span><span class="si">{</span><span class="n">level</span><span class="o">-</span><span class="mi">1</span><span class="si">}</span><span class="s2"> when computing.&quot;</span><span class="p">)</span>
+            <span class="k">break</span>
+        <span class="n">new_shape</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">minimum</span><span class="p">(</span><span class="mi">2</span><span class="o">**</span><span class="n">n</span><span class="p">,</span> <span class="n">shape</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Level </span><span class="si">{</span><span class="n">level</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">new_shape</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="mi">2</span><span class="o">**</span><span class="n">n</span> <span class="o">&gt;</span> <span class="n">maximum_size</span><span class="p">):</span>
+            <span class="n">ll_threshold</span> <span class="o">=</span> <span class="n">level</span>
+
+    <span class="k">return</span> <span class="n">ll_threshold</span><span class="p">,</span> <span class="n">level</span> <span class="o">-</span> <span class="mi">1</span></div>
+
+
+<div class="viewcode-block" id="load_registration">
+<a class="viewcode-back" href="../../../API_registration.html#registration_tools.registration.load_registration">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">load_registration</span><span class="p">(</span><span class="n">out</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Loads a registration object from a save path.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        out (str): The path to the registration object.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Registration: The registration object.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">out</span><span class="si">}</span><span class="s2">/parameters.json&quot;</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The registration object does not exist.&quot;</span><span class="p">)</span>
+
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">out</span><span class="si">}</span><span class="s2">/parameters.json&quot;</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">parameters</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+    <span class="n">registration</span> <span class="o">=</span> <span class="n">Registration</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span><span class="n">j</span> <span class="ow">in</span> <span class="n">parameters</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="nb">setattr</span><span class="p">(</span><span class="n">registration</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">)</span>
+    <span class="n">registration</span><span class="o">.</span><span class="n">_out</span> <span class="o">=</span> <span class="n">out</span>
+    <span class="k">return</span> <span class="n">registration</span></div>
+
+
+<div class="viewcode-block" id="Registration">
+<a class="viewcode-back" href="../../../API_registration.html#registration_tools.registration.Registration">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">Registration</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    A class to perform image registration.</span>
+
+<span class="sd">    Parameters:</span>
+<span class="sd">        out (str, optional): Output path to save the registration results. Default is None.</span>
+<span class="sd">        registration_type (str, optional): Type of registration to perform. Default is &quot;rigid&quot;.</span>
+<span class="sd">        perfom_global_trnsf (bool, optional): Whether to perform global transformation. Default is None.</span>
+<span class="sd">        pyramid_lowest_level (int, optional): Lowest level of the pyramid for multi-resolution registration. Default is 0.</span>
+<span class="sd">        pyramid_highest_level (int, optional): Highest level of the pyramid for multi-resolution registration. Default is 3.</span>
+<span class="sd">        registration_direction (str, optional): Direction of registration, either &quot;forward&quot; or &quot;backward&quot;. Default is &quot;backward&quot;.</span>
+<span class="sd">        args_registration (str, optional): Additional arguments for the registration process. Default is an empty string.</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        registration_type (str): The type of registration to perform.</span>
+<span class="sd">        perfom_global_trnsf (bool): Whether to perform global transformation.</span>
+<span class="sd">        pyramid_lowest_level (int): The lowest level of the pyramid.</span>
+<span class="sd">        pyramid_highest_level (int): The highest level of the pyramid.</span>
+<span class="sd">        registration_direction (str): The direction of registration.</span>
+<span class="sd">        args_registration (str): Additional arguments for registration.</span>
+<span class="sd">        _physical_space (None): Placeholder for physical space.</span>
+<span class="sd">        _n_spatial (None): Placeholder for number of spatial dimensions.</span>
+<span class="sd">        _fitted (bool): Whether the registration object has been fitted.</span>
+<span class="sd">        _box (None): Placeholder for the bounding box.</span>
+<span class="sd">        _t_max (None): Placeholder for the maximum time point.</span>
+<span class="sd">        _origin (None): Placeholder for the origin.</span>
+<span class="sd">        _transfs (dict): Dictionary to store transformations.</span>
+<span class="sd">    Methods:</span>
+<span class="sd">        save(out=None, overwrite=False):</span>
+<span class="sd">        load(out):</span>
+<span class="sd">        _create_folder():</span>
+<span class="sd">            Creates the necessary folders for saving the registration object.</span>
+<span class="sd">        _save_transformation_relative(trnsf, pos_float, pos_ref):</span>
+<span class="sd">            Saves the relative transformation.</span>
+<span class="sd">        _save_transformation_global(trnsf, pos_float, pos_ref):</span>
+<span class="sd">            Saves the global transformation.</span>
+<span class="sd">        _load_transformation_relative(pos_float, pos_ref):</span>
+<span class="sd">            Loads the relative transformation.</span>
+<span class="sd">        _load_transformation_global(pos_float, pos_ref):</span>
+<span class="sd">            Loads the global transformation.</span>
+<span class="sd">        _trnsf_exists_relative(pos_float, pos_ref):</span>
+<span class="sd">            Checks if the relative transformation exists.</span>
+<span class="sd">        _trnsf_exists_global(pos_float, pos_ref):</span>
+<span class="sd">            Checks if the global transformation exists.</span>
+<span class="sd">        fit(dataset, use_channel=None, axis=None, scale=None, downsample=None, save_behavior=&quot;Continue&quot;, verbose=False):</span>
+<span class="sd">        apply(dataset, out=None, axis=None, scale=None, downsample=None, save_behavior=&quot;Continue&quot;, transformation=&quot;global&quot;, verbose=False, **kwargs):</span>
+<span class="sd">            Applies the registration to a dataset and saves the results to the specified path.</span>
+<span class="sd">        fit_apply(dataset, out=None, use_channel=None, axis=None, scale=None, downsample=None, save_behavior=&quot;Continue&quot;, transformation=&quot;global&quot;, verbose=False):</span>
+<span class="sd">            Fits and applies the registration to a dataset and saves the results to the specified path.</span>
+<span class="sd">        vectorfield(mask=None, axis=None, scale=None, out=None, n_points=20, transformation=&quot;relative&quot;, **kwargs):</span>
+<span class="sd">            Computes the vector field of the registration.</span>
+<span class="sd">        trajectories(mask=None, axis=None, scale=None, out=None, n_points=20, transformation=&quot;relative&quot;, **kwargs):</span>
+<span class="sd">            Computes the trajectories of the registration.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> 
+
+            <span class="n">out</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> 
+            <span class="n">registration_type</span><span class="o">=</span><span class="s2">&quot;rigid&quot;</span><span class="p">,</span> 
+            <span class="n">perfom_global_trnsf</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> 
+            <span class="n">pyramid_lowest_level</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> 
+            <span class="n">pyramid_highest_level</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> 
+            <span class="n">registration_direction</span><span class="o">=</span><span class="s2">&quot;backward&quot;</span><span class="p">,</span> 
+            <span class="n">args_registration</span><span class="o">=</span><span class="s2">&quot;&quot;</span>
+        <span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initialize the registration object with the specified parameters.</span>
+
+<span class="sd">        Parameters:</span>
+<span class="sd">        out (str, optional): Output path to save the registration results. Default is None.</span>
+<span class="sd">        registration_type (str, optional): Type of registration to perform. Default is &quot;rigid&quot;.</span>
+<span class="sd">        perfom_global_trnsf (bool, optional): Whether to perform global transformation. Default is None.</span>
+<span class="sd">        pyramid_lowest_level (int, optional): Lowest level of the pyramid for multi-resolution registration. Default is 0.</span>
+<span class="sd">        pyramid_highest_level (int, optional): Highest level of the pyramid for multi-resolution registration. Default is 3.</span>
+<span class="sd">        registration_direction (str, optional): Direction of registration, either &quot;forward&quot; or &quot;backward&quot;. Default is &quot;backward&quot;.</span>
+<span class="sd">        args_registration (str, optional): Additional arguments for the registration process. Default is an empty string.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">rigid_transformations</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;translation2D&quot;</span><span class="p">,</span> <span class="s2">&quot;translation3D&quot;</span><span class="p">,</span> <span class="s2">&quot;translation&quot;</span><span class="p">,</span> <span class="s2">&quot;rigid2D&quot;</span><span class="p">,</span> <span class="s2">&quot;rigid3D&quot;</span><span class="p">,</span> <span class="s2">&quot;rigid&quot;</span><span class="p">]</span>
+        <span class="n">registration_directions</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;forward&quot;</span><span class="p">,</span> <span class="s2">&quot;backward&quot;</span><span class="p">]</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_registration_type</span> <span class="o">=</span> <span class="n">registration_type</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_registration_type</span> <span class="ow">in</span> <span class="n">rigid_transformations</span> <span class="ow">and</span> <span class="n">perfom_global_trnsf</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_perfom_global_trnsf</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">elif</span> <span class="n">perfom_global_trnsf</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_perfom_global_trnsf</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_perfom_global_trnsf</span> <span class="o">=</span> <span class="n">perfom_global_trnsf</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pyramid_lowest_level</span> <span class="o">=</span> <span class="n">pyramid_lowest_level</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_pyramid_highest_level</span> <span class="o">=</span> <span class="n">pyramid_highest_level</span>
+        <span class="k">if</span> <span class="n">registration_direction</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">registration_directions</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;registration_direction must be either of the following: </span><span class="si">{</span><span class="n">registration_directions</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_registration_direction</span> <span class="o">=</span> <span class="n">registration_direction</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_args_registration</span> <span class="o">=</span> <span class="n">args_registration</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_out</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_physical_space</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_n_spatial</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_fitted</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_box</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_t_max</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_origin</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_transfs</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="k">if</span> <span class="n">out</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">out</span><span class="o">=</span><span class="n">out</span><span class="p">)</span>
+        
+<div class="viewcode-block" id="Registration.save">
+<a class="viewcode-back" href="../../../API_registration.html#registration_tools.registration.Registration.save">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">save</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Saves the registration object to the specified path.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            out (str): The path to save the registration object.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_out</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">out</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">metadata</span> <span class="o">=</span> <span class="n">deepcopy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">)</span>
+            <span class="k">del</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;_out&quot;</span><span class="p">]</span>
+            <span class="k">del</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;_transfs&quot;</span><span class="p">]</span>
+            <span class="n">metadata_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_out</span><span class="p">,</span> <span class="s2">&quot;parameters.json&quot;</span><span class="p">)</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">metadata_path</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="n">json</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">metadata</span><span class="p">,</span> <span class="n">f</span><span class="p">,</span> <span class="n">indent</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_out</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">out</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The save path is already defined. Please specify a new path or set out to None.&quot;</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_out</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">out</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The save path must be specified.&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_out</span> <span class="o">=</span> <span class="n">out</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_create_folder</span><span class="p">()</span>
+
+        <span class="n">metadata</span> <span class="o">=</span> <span class="n">deepcopy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">)</span>
+        <span class="k">del</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;_out&quot;</span><span class="p">]</span>
+        <span class="k">del</span> <span class="n">metadata</span><span class="p">[</span><span class="s2">&quot;_transfs&quot;</span><span class="p">]</span>
+        <span class="n">metadata_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_out</span><span class="p">,</span> <span class="s2">&quot;parameters.json&quot;</span><span class="p">)</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">metadata_path</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">json</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">metadata</span><span class="p">,</span> <span class="n">f</span><span class="p">,</span> <span class="n">indent</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">trnsf</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transfs</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="s2">&quot;global&quot;</span> <span class="ow">in</span> <span class="n">name</span><span class="p">:</span>
+                <span class="n">trnsf</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_out</span><span class="si">}</span><span class="s2">/trnsf_global/</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">.trnsf&quot;</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="s2">&quot;relative&quot;</span> <span class="ow">in</span> <span class="n">name</span><span class="p">:</span>
+                <span class="n">trnsf</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_out</span><span class="si">}</span><span class="s2">/trnsf/</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">.trnsf&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Registration.load">
+<a class="viewcode-back" href="../../../API_registration.html#registration_tools.registration.Registration.load">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">load</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">out</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Loads a registration object from the specified path.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            out (str): The path to the registration object.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">out</span><span class="si">}</span><span class="s2">/parameters.json&quot;</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The registration object does not exist.&quot;</span><span class="p">)</span>
+
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">out</span><span class="si">}</span><span class="s2">/parameters.json&quot;</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">parameters</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">parameters</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_out</span> <span class="o">=</span> <span class="n">out</span></div>
+
+
+<div class="viewcode-block" id="Registration._create_folder">
+<a class="viewcode-back" href="../../../API_registration.html#registration_tools.registration.Registration._create_folder">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_create_folder</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+
+        <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_out</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_out</span><span class="si">}</span><span class="s2">/trnsf_relative&quot;</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_perfom_global_trnsf</span><span class="p">:</span>
+            <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_out</span><span class="si">}</span><span class="s2">/trnsf_global&quot;</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Registration._save_transformation_relative">
+<a class="viewcode-back" href="../../../API_registration.html#registration_tools.registration.Registration._save_transformation_relative">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_save_transformation_relative</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">trnsf</span><span class="p">,</span> <span class="n">pos_float</span><span class="p">,</span> <span class="n">pos_ref</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_out</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_transfs</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;trnsf_relative_</span><span class="si">{</span><span class="n">pos_float</span><span class="si">:</span><span class="s2">04d</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">pos_ref</span><span class="si">:</span><span class="s2">04d</span><span class="si">}</span><span class="s2">.trnsf&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">trnsf</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">trnsf</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_out</span><span class="si">}</span><span class="s2">/trnsf_relative/trnsf_relative_</span><span class="si">{</span><span class="n">pos_float</span><span class="si">:</span><span class="s2">04d</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">pos_ref</span><span class="si">:</span><span class="s2">04d</span><span class="si">}</span><span class="s2">.trnsf&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Registration._save_transformation_global">
+<a class="viewcode-back" href="../../../API_registration.html#registration_tools.registration.Registration._save_transformation_global">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_save_transformation_global</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">trnsf</span><span class="p">,</span> <span class="n">pos_float</span><span class="p">,</span> <span class="n">pos_ref</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_out</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_transfs</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;trnsf_global_</span><span class="si">{</span><span class="n">pos_float</span><span class="si">:</span><span class="s2">04d</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">pos_ref</span><span class="si">:</span><span class="s2">04d</span><span class="si">}</span><span class="s2">.trnsf&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">trnsf</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">trnsf</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_out</span><span class="si">}</span><span class="s2">/trnsf_global/trnsf_global_</span><span class="si">{</span><span class="n">pos_float</span><span class="si">:</span><span class="s2">04d</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">pos_ref</span><span class="si">:</span><span class="s2">04d</span><span class="si">}</span><span class="s2">.trnsf&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Registration._load_transformation_relative">
+<a class="viewcode-back" href="../../../API_registration.html#registration_tools.registration.Registration._load_transformation_relative">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_load_transformation_relative</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pos_float</span><span class="p">,</span> <span class="n">pos_ref</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_out</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="sa">f</span><span class="s2">&quot;trnsf_relative_</span><span class="si">{</span><span class="n">pos_float</span><span class="si">:</span><span class="s2">04d</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">pos_ref</span><span class="si">:</span><span class="s2">04d</span><span class="si">}</span><span class="s2">.trnsf&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transfs</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;The transformation between </span><span class="si">{</span><span class="n">pos_float</span><span class="si">:</span><span class="s2">04d</span><span class="si">}</span><span class="s2"> and </span><span class="si">{</span><span class="n">pos_ref</span><span class="si">:</span><span class="s2">04d</span><span class="si">}</span><span class="s2"> the specified positions does not exist.&quot;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transfs</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;trnsf_relative_</span><span class="si">{</span><span class="n">pos_float</span><span class="si">:</span><span class="s2">04d</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">pos_ref</span><span class="si">:</span><span class="s2">04d</span><span class="si">}</span><span class="s2">.trnsf&quot;</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_out</span><span class="si">}</span><span class="s2">/trnsf_relative/trnsf_relative_</span><span class="si">{</span><span class="n">pos_float</span><span class="si">:</span><span class="s2">04d</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">pos_ref</span><span class="si">:</span><span class="s2">04d</span><span class="si">}</span><span class="s2">.trnsf&quot;</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The transformation between the specified positions does not exist.&quot;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">vt</span><span class="o">.</span><span class="n">vtTransformation</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_out</span><span class="si">}</span><span class="s2">/trnsf_relative/trnsf_relative_</span><span class="si">{</span><span class="n">pos_float</span><span class="si">:</span><span class="s2">04d</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">pos_ref</span><span class="si">:</span><span class="s2">04d</span><span class="si">}</span><span class="s2">.trnsf&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Registration._load_transformation_global">
+<a class="viewcode-back" href="../../../API_registration.html#registration_tools.registration.Registration._load_transformation_global">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_load_transformation_global</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pos_float</span><span class="p">,</span> <span class="n">pos_ref</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_out</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="sa">f</span><span class="s2">&quot;trnsf_global_</span><span class="si">{</span><span class="n">pos_float</span><span class="si">:</span><span class="s2">04d</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">pos_ref</span><span class="si">:</span><span class="s2">04d</span><span class="si">}</span><span class="s2">.trnsf&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transfs</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The transformation between the specified positions does not exist.&quot;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transfs</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;trnsf_global_</span><span class="si">{</span><span class="n">pos_float</span><span class="si">:</span><span class="s2">04d</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">pos_ref</span><span class="si">:</span><span class="s2">04d</span><span class="si">}</span><span class="s2">.trnsf&quot;</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_out</span><span class="si">}</span><span class="s2">/trnsf_global/trnsf_global_</span><span class="si">{</span><span class="n">pos_float</span><span class="si">:</span><span class="s2">04d</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">pos_ref</span><span class="si">:</span><span class="s2">04d</span><span class="si">}</span><span class="s2">.trnsf&quot;</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The transformation between the specified positions does not exist.&quot;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">vt</span><span class="o">.</span><span class="n">vtTransformation</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_out</span><span class="si">}</span><span class="s2">/trnsf_global/trnsf_global_</span><span class="si">{</span><span class="n">pos_float</span><span class="si">:</span><span class="s2">04d</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">pos_ref</span><span class="si">:</span><span class="s2">04d</span><span class="si">}</span><span class="s2">.trnsf&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Registration._trnsf_exists_relative">
+<a class="viewcode-back" href="../../../API_registration.html#registration_tools.registration.Registration._trnsf_exists_relative">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_trnsf_exists_relative</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pos_float</span><span class="p">,</span> <span class="n">pos_ref</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_out</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;trnsf_relative_</span><span class="si">{</span><span class="n">pos_float</span><span class="si">:</span><span class="s2">04d</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">pos_ref</span><span class="si">:</span><span class="s2">04d</span><span class="si">}</span><span class="s2">.trnsf&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transfs</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>   
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_out</span><span class="si">}</span><span class="s2">/trnsf_relative/trnsf_relative_</span><span class="si">{</span><span class="n">pos_float</span><span class="si">:</span><span class="s2">04d</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">pos_ref</span><span class="si">:</span><span class="s2">04d</span><span class="si">}</span><span class="s2">.trnsf&quot;</span><span class="p">)</span></div>
+
+    
+<div class="viewcode-block" id="Registration._trnsf_exists_global">
+<a class="viewcode-back" href="../../../API_registration.html#registration_tools.registration.Registration._trnsf_exists_global">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_trnsf_exists_global</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pos_float</span><span class="p">,</span> <span class="n">pos_ref</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_out</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;trnsf_global_</span><span class="si">{</span><span class="n">pos_float</span><span class="si">:</span><span class="s2">04d</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">pos_ref</span><span class="si">:</span><span class="s2">04d</span><span class="si">}</span><span class="s2">.trnsf&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_transfs</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_out</span><span class="si">}</span><span class="s2">/trnsf_global/trnsf_global_</span><span class="si">{</span><span class="n">pos_float</span><span class="si">:</span><span class="s2">04d</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">pos_ref</span><span class="si">:</span><span class="s2">04d</span><span class="si">}</span><span class="s2">.trnsf&quot;</span><span class="p">)</span></div>
+
+    
+<div class="viewcode-block" id="Registration.fit">
+<a class="viewcode-back" href="../../../API_registration.html#registration_tools.registration.Registration.fit">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">use_channel</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">downsample</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">save_behavior</span><span class="o">=</span><span class="s2">&quot;Continue&quot;</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Registers a dataset and saves the results to the specified path.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">save_behaviors</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;NotOverwrite&quot;</span><span class="p">,</span> <span class="s2">&quot;Continue&quot;</span><span class="p">]</span>
+
+        <span class="c1"># Check inputs</span>
+        <span class="n">axis</span><span class="p">,</span> <span class="n">scale</span> <span class="o">=</span> <span class="n">_get_axis_scale</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">axis</span><span class="p">,</span> <span class="n">scale</span><span class="p">)</span>
+        
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">axis</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">shape</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The axis must have the same length as the dataset shape.&quot;</span><span class="p">)</span>
+        
+        <span class="k">if</span> <span class="s2">&quot;T&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">axis</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The axis must contain the time dimension &#39;T&#39;.&quot;</span><span class="p">)</span>
+        
+        <span class="n">use_channel</span> <span class="o">=</span> <span class="n">use_channel</span>
+        <span class="k">if</span> <span class="s2">&quot;C&quot;</span> <span class="ow">in</span> <span class="n">axis</span> <span class="ow">and</span> <span class="n">use_channel</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The axis contains the channel dimension &#39;C&#39;. The channel to use must be specified.&quot;</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="s2">&quot;C&quot;</span> <span class="ow">in</span> <span class="n">axis</span> <span class="ow">and</span> <span class="n">dataset</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">([</span><span class="n">i</span> <span class="o">==</span> <span class="s2">&quot;C&quot;</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">axis</span><span class="p">])[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]]</span> <span class="o">&lt;</span> <span class="n">use_channel</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The specified channel does not exist in the dataset.&quot;</span><span class="p">)</span>
+                
+        <span class="k">if</span> <span class="n">save_behavior</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">save_behaviors</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;save_behavior should be one of the following: </span><span class="si">{</span><span class="n">save_behaviors</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Check downsample</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_n_spatial</span> <span class="o">=</span> <span class="nb">len</span><span class="p">([</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">axis</span> <span class="k">if</span> <span class="n">i</span> <span class="ow">in</span> <span class="s2">&quot;XYZ&quot;</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">downsample</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">downsample</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span><span class="p">,)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_n_spatial</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">downsample</span> <span class="o">=</span> <span class="n">downsample</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">downsample</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;All elements in downsample must be integers.&quot;</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">downsample</span><span class="p">)</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_n_spatial</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;downsample must have the same length as the number of spatial dimensions (</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_n_spatial</span><span class="si">}</span><span class="s2">).&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Scale</span>
+        <span class="n">new_scale</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">([</span><span class="n">i</span> <span class="o">*</span> <span class="n">j</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">scale</span><span class="p">,</span> <span class="n">downsample</span><span class="p">)])</span>
+
+        <span class="c1"># Compute box</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_box</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">([</span><span class="nb">int</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">shape</span><span class="p">)[[</span><span class="n">axis</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">ax</span><span class="p">)</span> <span class="k">for</span> <span class="n">ax</span> <span class="ow">in</span> <span class="n">axis</span> <span class="k">if</span> <span class="n">ax</span> <span class="ow">in</span> <span class="s2">&quot;XYZ&quot;</span><span class="p">]]</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">new_scale</span><span class="p">)])</span>
+
+        <span class="c1"># Setup arguments</span>
+        <span class="n">registration_args</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">verbose</span><span class="p">:</span>
+            <span class="n">registration_args</span> <span class="o">=</span> <span class="s2">&quot; -no-verbose&quot;</span>
+        <span class="n">registration_args</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot; -transformation-type </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_registration_type</span><span class="si">}</span><span class="s2"> -pyramid-lowest-level </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_pyramid_lowest_level</span><span class="si">}</span><span class="s2"> -pyramid-highest-level </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_pyramid_highest_level</span><span class="si">}</span><span class="s2"> &quot;</span>
+        <span class="n">registration_args</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_args_registration</span>
+
+        <span class="c1"># Suppress skimage warnings for low contrast images</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">filterwarnings</span><span class="p">(</span><span class="s2">&quot;ignore&quot;</span><span class="p">,</span> <span class="n">category</span><span class="o">=</span><span class="ne">UserWarning</span><span class="p">,</span> <span class="n">message</span><span class="o">=</span><span class="s2">&quot;.*low contrast image.*&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Set registration direction</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_t_max</span> <span class="o">=</span> <span class="n">_dict_axis_shape</span><span class="p">(</span><span class="n">axis</span><span class="p">,</span> <span class="n">dataset</span><span class="o">.</span><span class="n">shape</span><span class="p">)[</span><span class="s2">&quot;T&quot;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_registration_direction</span> <span class="o">==</span> <span class="s2">&quot;backward&quot;</span><span class="p">:</span>
+            <span class="n">origin</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="n">iterator</span> <span class="o">=</span> <span class="nb">zip</span><span class="p">(</span>
+                <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_t_max</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span>
+                <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="bp">self</span><span class="o">.</span><span class="n">_t_max</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">origin</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_t_max</span> <span class="o">-</span> <span class="mi">1</span>
+            <span class="n">iterator</span> <span class="o">=</span> <span class="nb">zip</span><span class="p">(</span>
+                <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_t_max</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span>
+                <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_t_max</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_origin</span> <span class="o">=</span> <span class="n">origin</span>
+
+        <span class="n">img_ref</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">trnsf_global</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">for</span> <span class="n">pos_ref</span><span class="p">,</span> <span class="n">pos_float</span> <span class="ow">in</span> <span class="n">tqdm</span><span class="p">(</span><span class="n">iterator</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Registering images using channel </span><span class="si">{</span><span class="n">use_channel</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">total</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_t_max</span><span class="o">-</span><span class="mi">1</span><span class="p">):</span>
+
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_trnsf_exists_relative</span><span class="p">(</span><span class="n">pos_float</span><span class="p">,</span> <span class="n">pos_ref</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">save_behavior</span> <span class="o">==</span> <span class="s2">&quot;NotOverwrite&quot;</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The relative transformation already exists. If you want to overwrite it, set save_behavior=&#39;Overwrite&#39;.&quot;</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="n">save_behavior</span> <span class="o">==</span> <span class="s2">&quot;Continue&quot;</span><span class="p">:</span>
+                    <span class="kc">None</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">img_ref</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="n">img_ref</span> <span class="o">=</span> <span class="n">_get_vtImage</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">pos_ref</span><span class="p">,</span> <span class="n">scale</span><span class="p">,</span> <span class="n">axis</span><span class="p">,</span> <span class="n">use_channel</span><span class="p">,</span> <span class="n">downsample</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">img_ref</span> <span class="o">=</span> <span class="n">img_float</span>
+
+                <span class="n">img_float</span> <span class="o">=</span> <span class="n">_get_vtImage</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">pos_float</span><span class="p">,</span> <span class="n">scale</span><span class="p">,</span> <span class="n">axis</span><span class="p">,</span> <span class="n">use_channel</span><span class="p">,</span> <span class="n">downsample</span><span class="p">)</span>
+
+                <span class="n">trnsf</span> <span class="o">=</span> <span class="n">vt</span><span class="o">.</span><span class="n">blockmatching</span><span class="p">(</span><span class="n">img_float</span><span class="p">,</span> <span class="n">image_ref</span> <span class="o">=</span> <span class="n">img_ref</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="n">registration_args</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_save_transformation_relative</span><span class="p">(</span><span class="n">trnsf</span><span class="p">,</span> <span class="n">pos_float</span><span class="p">,</span> <span class="n">pos_ref</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_perfom_global_trnsf</span><span class="p">:</span>
+
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_trnsf_exists_global</span><span class="p">(</span><span class="n">pos_float</span><span class="p">,</span> <span class="n">origin</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="n">save_behavior</span> <span class="o">==</span> <span class="s2">&quot;NotOverwrite&quot;</span><span class="p">:</span>
+                        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The global transformation already exists. If you want to overwrite it, set save_behavior=&#39;Overwrite&#39;.&quot;</span><span class="p">)</span>
+                    <span class="k">elif</span> <span class="n">save_behavior</span> <span class="o">==</span> <span class="s2">&quot;Continue&quot;</span><span class="p">:</span>
+                        <span class="kc">None</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">trnsf_global</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">pos_ref</span> <span class="o">!=</span> <span class="n">origin</span><span class="p">:</span>
+                        <span class="n">trnsf_global</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_load_transformation_global</span><span class="p">(</span><span class="n">pos_ref</span><span class="p">,</span> <span class="n">origin</span><span class="p">)</span>
+                    <span class="k">elif</span> <span class="n">trnsf_global</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="n">trnsf_global</span> <span class="o">=</span> <span class="n">trnsf</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_save_transformation_global</span><span class="p">(</span><span class="n">trnsf_global</span><span class="p">,</span> <span class="n">pos_float</span><span class="p">,</span> <span class="n">origin</span><span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">trnsf_global</span> <span class="o">=</span> <span class="n">vt</span><span class="o">.</span><span class="n">compose_trsf</span><span class="p">([</span>
+                            <span class="n">trnsf_global</span><span class="p">,</span>
+                            <span class="n">trnsf</span>
+                        <span class="p">])</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">_save_transformation_global</span><span class="p">(</span><span class="n">trnsf_global</span><span class="p">,</span> <span class="n">pos_float</span><span class="p">,</span> <span class="n">origin</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_fitted</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_out</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">save</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="Registration.apply">
+<a class="viewcode-back" href="../../../API_registration.html#registration_tools.registration.Registration.apply">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">apply</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">downsample</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">save_behavior</span><span class="o">=</span><span class="s2">&quot;Continue&quot;</span><span class="p">,</span> <span class="n">transformation</span><span class="o">=</span><span class="s2">&quot;global&quot;</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Registers a dataset and saves the results to the specified path.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">save_behaviors</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;NotOverwrite&quot;</span><span class="p">,</span> <span class="s2">&quot;Continue&quot;</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fitted</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The registration object has not been fitted. Please fit the registration object before applying it.&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Check inputs</span>
+        <span class="n">axis</span><span class="p">,</span> <span class="n">scale</span> <span class="o">=</span> <span class="n">_get_axis_scale</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">axis</span><span class="p">,</span> <span class="n">scale</span><span class="p">)</span>
+        
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">axis</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">shape</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The axis must have the same length as the dataset shape.&quot;</span><span class="p">)</span>
+        
+        <span class="k">if</span> <span class="s2">&quot;T&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">axis</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The axis must contain the time dimension &#39;T&#39;.&quot;</span><span class="p">)</span>
+                        
+        <span class="k">if</span> <span class="n">save_behavior</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">save_behaviors</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;save_behavior should be one of the following: </span><span class="si">{</span><span class="n">save_behaviors</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Check downsample</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_n_spatial</span> <span class="o">=</span> <span class="nb">len</span><span class="p">([</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">axis</span> <span class="k">if</span> <span class="n">i</span> <span class="ow">in</span> <span class="s2">&quot;XYZ&quot;</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">downsample</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">downsample</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span><span class="p">,)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_n_spatial</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">downsample</span> <span class="o">=</span> <span class="n">downsample</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">downsample</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;All elements in downsample must be integers.&quot;</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">downsample</span><span class="p">)</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_n_spatial</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;downsample must have the same length as the number of spatial dimensions (</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_n_spatial</span><span class="si">}</span><span class="s2">).&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Scale</span>
+        <span class="n">new_scale</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">([</span><span class="n">i</span> <span class="o">*</span> <span class="n">j</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">scale</span><span class="p">,</span> <span class="n">downsample</span><span class="p">)])</span>
+
+        <span class="c1"># Suppress skimage warnings for low contrast images</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">filterwarnings</span><span class="p">(</span><span class="s2">&quot;ignore&quot;</span><span class="p">,</span> <span class="n">category</span><span class="o">=</span><span class="ne">UserWarning</span><span class="p">,</span> <span class="n">message</span><span class="o">=</span><span class="s2">&quot;.*low contrast image.*&quot;</span><span class="p">)</span>
+        
+        <span class="k">if</span> <span class="n">out</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">_shape_downsampled</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">axis</span><span class="p">,</span> <span class="n">downsample</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dataset</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="n">out</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;.zarr&quot;</span><span class="p">):</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">zarr</span><span class="o">.</span><span class="n">create_array</span><span class="p">(</span>
+                <span class="n">store</span><span class="o">=</span><span class="n">out</span><span class="p">,</span>
+                <span class="n">shape</span><span class="o">=</span><span class="n">dataset</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="n">dataset</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">kwargs</span>
+            <span class="p">)</span>
+            <span class="n">data</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">&quot;axis&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">axis</span>
+            <span class="n">data</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">&quot;scale&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">new_scale</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The output must be None or a the name to a zarr file.&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_registration_direction</span> <span class="o">==</span> <span class="s2">&quot;backward&quot;</span><span class="p">:</span>
+            <span class="n">origin</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="n">iterator</span> <span class="o">=</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">dataset</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">([</span><span class="n">i</span> <span class="o">==</span> <span class="s2">&quot;T&quot;</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">axis</span><span class="p">])[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]])</span>
+            <span class="k">if</span> <span class="s2">&quot;C&quot;</span> <span class="ow">in</span> <span class="n">axis</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">ch</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">([</span><span class="n">i</span> <span class="o">==</span> <span class="s2">&quot;C&quot;</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">axis</span><span class="p">])[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]]):</span>
+                    <span class="n">img</span> <span class="o">=</span> <span class="n">_get_vtImage</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">new_scale</span><span class="p">,</span> <span class="n">axis</span><span class="p">,</span> <span class="n">ch</span><span class="p">,</span> <span class="n">downsample</span><span class="p">)</span>
+                    <span class="n">data</span><span class="p">[</span><span class="n">_make_index</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">axis</span><span class="p">,</span> <span class="n">ch</span><span class="p">,</span> <span class="n">downsample</span><span class="p">)]</span> <span class="o">=</span> <span class="n">img</span><span class="o">.</span><span class="n">copy_to_array</span><span class="p">()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">data</span><span class="p">[</span><span class="n">_make_index</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">axis</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">downsample</span><span class="p">)]</span> <span class="o">=</span> <span class="n">dataset</span><span class="p">[</span><span class="n">_make_index</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">axis</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">downsample</span><span class="p">)]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">origin</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">([</span><span class="n">i</span> <span class="o">==</span> <span class="s2">&quot;T&quot;</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">axis</span><span class="p">])[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]]</span> <span class="o">-</span> <span class="mi">1</span>
+            <span class="n">iterator</span> <span class="o">=</span> <span class="nb">range</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">([</span><span class="n">i</span> <span class="o">==</span> <span class="s2">&quot;T&quot;</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">axis</span><span class="p">])[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="k">if</span> <span class="s2">&quot;C&quot;</span> <span class="ow">in</span> <span class="n">axis</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">ch</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">([</span><span class="n">i</span> <span class="o">==</span> <span class="s2">&quot;C&quot;</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">axis</span><span class="p">])[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]]):</span>
+                    <span class="n">img</span> <span class="o">=</span> <span class="n">_get_vtImage</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">origin</span><span class="p">,</span> <span class="n">new_scale</span><span class="p">,</span> <span class="n">axis</span><span class="p">,</span> <span class="n">ch</span><span class="p">,</span> <span class="n">downsample</span><span class="p">)</span>
+                    <span class="n">data</span><span class="p">[</span><span class="n">_make_index</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">([</span><span class="n">i</span> <span class="o">==</span> <span class="s2">&quot;T&quot;</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">axis</span><span class="p">])[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">axis</span><span class="p">,</span> <span class="n">ch</span><span class="p">,</span> <span class="n">downsample</span><span class="p">)]</span> <span class="o">=</span> <span class="n">img</span><span class="o">.</span><span class="n">copy_to_array</span><span class="p">()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">data</span><span class="p">[</span><span class="n">_make_index</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">([</span><span class="n">i</span> <span class="o">==</span> <span class="s2">&quot;T&quot;</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">axis</span><span class="p">])[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">axis</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">downsample</span><span class="p">)]</span> <span class="o">=</span> <span class="n">dataset</span><span class="p">[</span><span class="n">_make_index</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">([</span><span class="n">i</span> <span class="o">==</span> <span class="s2">&quot;T&quot;</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">axis</span><span class="p">])[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]]</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">axis</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">downsample</span><span class="p">)]</span>
+
+        <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">tqdm</span><span class="p">(</span><span class="n">iterator</span><span class="p">,</span> <span class="n">desc</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Applying registration to images&quot;</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">total</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_t_max</span><span class="o">-</span><span class="mi">1</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">transformation</span> <span class="o">==</span> <span class="s2">&quot;global&quot;</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_trnsf_exists_global</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">origin</span><span class="p">):</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The global transformation does not exist.&quot;</span><span class="p">)</span>
+                <span class="n">trnsf</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_load_transformation_global</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">origin</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_trnsf_exists_relative</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">origin</span><span class="p">):</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The relative transformation does not exist.&quot;</span><span class="p">)</span>
+                <span class="n">trnsf</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_load_transformation_relative</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">origin</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="s2">&quot;C&quot;</span> <span class="ow">in</span> <span class="n">axis</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">ch</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">([</span><span class="n">i</span> <span class="o">==</span> <span class="s2">&quot;C&quot;</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">axis</span><span class="p">])[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]]):</span>
+                    <span class="n">img</span> <span class="o">=</span> <span class="n">_get_vtImage</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">new_scale</span><span class="p">,</span> <span class="n">axis</span><span class="p">,</span> <span class="n">ch</span><span class="p">,</span> <span class="n">downsample</span><span class="p">)</span>
+                    <span class="n">data</span><span class="p">[</span><span class="n">_make_index</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">axis</span><span class="p">,</span> <span class="n">ch</span><span class="p">,</span> <span class="n">downsample</span><span class="p">)]</span> <span class="o">=</span> <span class="n">vt</span><span class="o">.</span><span class="n">apply_trsf</span><span class="p">(</span><span class="n">img</span><span class="p">,</span> <span class="n">trnsf</span><span class="p">)</span><span class="o">.</span><span class="n">copy_to_array</span><span class="p">()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">img</span> <span class="o">=</span> <span class="n">_get_vtImage</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">new_scale</span><span class="p">,</span> <span class="n">axis</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">downsample</span><span class="p">)</span>
+                <span class="n">data</span><span class="p">[</span><span class="n">_make_index</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">axis</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">downsample</span><span class="p">)]</span> <span class="o">=</span> <span class="n">vt</span><span class="o">.</span><span class="n">apply_trsf</span><span class="p">(</span><span class="n">img</span><span class="p">,</span> <span class="n">trnsf</span><span class="p">)</span><span class="o">.</span><span class="n">copy_to_array</span><span class="p">()</span>
+
+        <span class="k">return</span> <span class="n">data</span></div>
+
+
+<div class="viewcode-block" id="Registration.fit_apply">
+<a class="viewcode-back" href="../../../API_registration.html#registration_tools.registration.Registration.fit_apply">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fit_apply</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">use_channel</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">downsample</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">save_behavior</span><span class="o">=</span><span class="s2">&quot;Continue&quot;</span><span class="p">,</span> <span class="n">transformation</span><span class="o">=</span><span class="s2">&quot;global&quot;</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">use_channel</span><span class="o">=</span><span class="n">use_channel</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="n">axis</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="n">scale</span><span class="p">,</span> <span class="n">downsample</span><span class="o">=</span><span class="n">downsample</span><span class="p">,</span> <span class="n">save_behavior</span><span class="o">=</span><span class="n">save_behavior</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="n">verbose</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="n">out</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="n">axis</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="n">scale</span><span class="p">,</span> <span class="n">downsample</span><span class="o">=</span><span class="n">downsample</span><span class="p">,</span> <span class="n">save_behavior</span><span class="o">=</span><span class="n">save_behavior</span><span class="p">,</span> <span class="n">transformation</span><span class="o">=</span><span class="n">transformation</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="n">verbose</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Registration.vectorfield">
+<a class="viewcode-back" href="../../../API_registration.html#registration_tools.registration.Registration.vectorfield">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">vectorfield</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">n_points</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">transformation</span><span class="o">=</span><span class="s2">&quot;relative&quot;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fitted</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The registration object has not been fitted. Please fit the registration object before applying it.&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Check inputs</span>
+        <span class="n">mesh</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="o">*</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="n">n_points</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_box</span><span class="p">])</span>
+        <span class="n">points</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">vstack</span><span class="p">([</span><span class="n">i</span><span class="o">.</span><span class="n">ravel</span><span class="p">()</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">mesh</span><span class="p">])</span><span class="o">.</span><span class="n">T</span>
+
+        <span class="k">if</span> <span class="n">mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">axis</span><span class="p">,</span> <span class="n">scale</span> <span class="o">=</span> <span class="n">_get_axis_scale</span><span class="p">(</span><span class="n">mask</span><span class="p">,</span> <span class="n">axis</span><span class="p">,</span> <span class="n">scale</span><span class="p">)</span>
+            <span class="n">d</span> <span class="o">=</span> <span class="n">_dict_axis_shape</span><span class="p">(</span><span class="n">axis</span><span class="p">,</span> <span class="n">mask</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+            <span class="n">mesh_mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="o">*</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">j</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">n_points</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">j</span> <span class="ow">in</span> <span class="n">d</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">i</span> <span class="ow">in</span> <span class="s2">&quot;XYZ&quot;</span><span class="p">])</span>
+            <span class="c1"># mesh_mask = np.concatenate([i.reshape(-1,1) for i in mesh_mask],axis=1)</span>
+            <span class="k">if</span> <span class="s2">&quot;T&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">axis</span><span class="p">:</span>
+                <span class="n">keep_points</span> <span class="o">=</span> <span class="n">points</span><span class="p">[</span><span class="n">mask</span><span class="p">[</span><span class="o">*</span><span class="n">mesh_mask</span><span class="p">]</span><span class="o">.</span><span class="n">flatten</span><span class="p">()][:,::</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">keep_points</span> <span class="o">=</span> <span class="n">points</span><span class="p">[:,::</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+        <span class="n">n_spatial</span> <span class="o">=</span> <span class="nb">len</span><span class="p">([</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">axis</span> <span class="k">if</span> <span class="n">i</span> <span class="ow">in</span> <span class="s2">&quot;XYZ&quot;</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">out</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">store</span> <span class="o">=</span> <span class="n">zarr</span><span class="o">.</span><span class="n">storage</span><span class="o">.</span><span class="n">MemoryStore</span><span class="p">()</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">zarr</span><span class="o">.</span><span class="n">create_array</span><span class="p">(</span><span class="n">store</span><span class="o">=</span><span class="n">store</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="n">n_spatial</span><span class="o">+</span><span class="mi">1</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="n">out</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;.zarr&quot;</span><span class="p">):</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">zarr</span><span class="o">.</span><span class="n">create_array</span><span class="p">(</span>
+                <span class="n">store</span><span class="o">=</span><span class="n">out</span><span class="p">,</span>
+                <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="n">n_spatial</span><span class="o">+</span><span class="mi">1</span><span class="p">),</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">kwargs</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The output must be None or a the name to a zarr file.&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_registration_direction</span> <span class="o">==</span> <span class="s2">&quot;backward&quot;</span><span class="p">:</span>
+            <span class="n">iterator</span> <span class="o">=</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_t_max</span><span class="p">)</span>
+            <span class="n">iterator_next</span> <span class="o">=</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_t_max</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">iterator</span> <span class="o">=</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_t_max</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">iterator_next</span> <span class="o">=</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_t_max</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">t</span><span class="p">,</span> <span class="n">t_next</span> <span class="ow">in</span> <span class="n">tqdm</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">iterator</span><span class="p">,</span> <span class="n">iterator_next</span><span class="p">),</span> <span class="n">desc</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Computing vectorfield&quot;</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">total</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_t_max</span><span class="o">-</span><span class="mi">1</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="s2">&quot;T&quot;</span> <span class="ow">in</span> <span class="n">axis</span><span class="p">:</span>
+                <span class="n">keep_points</span> <span class="o">=</span> <span class="n">points</span><span class="p">[</span><span class="n">mask</span><span class="p">[</span><span class="n">_make_index</span><span class="p">(</span><span class="n">t</span><span class="p">,</span><span class="n">axis</span><span class="p">)][</span><span class="o">*</span><span class="n">mesh_mask</span><span class="p">]</span><span class="o">.</span><span class="n">flatten</span><span class="p">()][:,::</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+            <span class="k">if</span> <span class="n">transformation</span> <span class="o">==</span> <span class="s2">&quot;global&quot;</span><span class="p">:</span>
+                <span class="n">trnsf</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_load_transformation_global</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_origin</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">transformation</span> <span class="o">==</span> <span class="s2">&quot;relative&quot;</span><span class="p">:</span>
+                <span class="n">trnsf</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_load_transformation_relative</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">t_next</span><span class="p">)</span>
+             
+            <span class="n">points_vt</span> <span class="o">=</span> <span class="n">vt</span><span class="o">.</span><span class="n">vtPointList</span><span class="p">(</span><span class="n">keep_points</span><span class="p">)</span>
+            <span class="n">points_vt_out</span> <span class="o">=</span> <span class="n">vt</span><span class="o">.</span><span class="n">apply_trsf_to_points</span><span class="p">(</span><span class="n">points_vt</span><span class="p">,</span> <span class="n">trnsf</span><span class="p">)</span>
+            <span class="n">vectorfield</span> <span class="o">=</span> <span class="n">points_vt_out</span><span class="o">.</span><span class="n">copy_to_array</span><span class="p">()</span> <span class="o">-</span> <span class="n">keep_points</span>
+            <span class="n">l</span> <span class="o">=</span> <span class="n">vectorfield</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">data_add</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">l</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="n">n_spatial</span><span class="o">+</span><span class="mi">1</span><span class="p">))</span>
+            <span class="n">data_add</span><span class="p">[:,</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">t</span>
+            <span class="n">data_add</span><span class="p">[:,</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="n">data_add</span><span class="p">[:,</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">:]</span> <span class="o">=</span> <span class="n">keep_points</span><span class="p">[:,::</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">data_add</span><span class="p">[:,</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">:]</span> <span class="o">=</span> <span class="o">-</span><span class="n">vectorfield</span><span class="p">[:,::</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+            <span class="n">data</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">data_add</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="c1"># Return data</span>
+        <span class="k">if</span> <span class="n">out</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">data</span></div>
+
+
+<div class="viewcode-block" id="Registration.trajectories">
+<a class="viewcode-back" href="../../../API_registration.html#registration_tools.registration.Registration.trajectories">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">trajectories</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mask</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">n_points</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">transformation</span><span class="o">=</span><span class="s2">&quot;relative&quot;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_fitted</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The registration object has not been fitted. Please fit the registration object before applying it.&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Check inputs</span>
+        <span class="n">mesh</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="o">*</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="n">n_points</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_box</span><span class="p">])</span>
+        <span class="n">points</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">vstack</span><span class="p">([</span><span class="n">i</span><span class="o">.</span><span class="n">ravel</span><span class="p">()</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">mesh</span><span class="p">])</span><span class="o">.</span><span class="n">T</span>
+
+        <span class="k">if</span> <span class="n">mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">axis</span><span class="p">,</span> <span class="n">scale</span> <span class="o">=</span> <span class="n">_get_axis_scale</span><span class="p">(</span><span class="n">mask</span><span class="p">,</span> <span class="n">axis</span><span class="p">,</span> <span class="n">scale</span><span class="p">)</span>
+            <span class="n">d</span> <span class="o">=</span> <span class="n">_dict_axis_shape</span><span class="p">(</span><span class="n">axis</span><span class="p">,</span> <span class="n">mask</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+            <span class="n">mesh_mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="o">*</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">j</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">n_points</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">j</span> <span class="ow">in</span> <span class="n">d</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">i</span> <span class="ow">in</span> <span class="s2">&quot;XYZ&quot;</span><span class="p">])</span>
+            <span class="c1"># mesh_mask = np.concatenate([i.reshape(-1,1) for i in mesh_mask],axis=1)</span>
+            <span class="k">if</span> <span class="s2">&quot;T&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">axis</span><span class="p">:</span>
+                <span class="n">keep_points</span> <span class="o">=</span> <span class="n">points</span><span class="p">[</span><span class="n">mask</span><span class="p">[</span><span class="o">*</span><span class="n">mesh_mask</span><span class="p">]</span><span class="o">.</span><span class="n">flatten</span><span class="p">()][:,::</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The mask cannot contain the time dimension &#39;T&#39;.&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">keep_points</span> <span class="o">=</span> <span class="n">points</span><span class="p">[:,::</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+        <span class="n">n_spatial</span> <span class="o">=</span> <span class="nb">len</span><span class="p">([</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">axis</span> <span class="k">if</span> <span class="n">i</span> <span class="ow">in</span> <span class="s2">&quot;XYZ&quot;</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">out</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">store</span> <span class="o">=</span> <span class="n">zarr</span><span class="o">.</span><span class="n">storage</span><span class="o">.</span><span class="n">MemoryStore</span><span class="p">()</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">zarr</span><span class="o">.</span><span class="n">create_array</span><span class="p">(</span><span class="n">store</span><span class="o">=</span><span class="n">store</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="n">n_spatial</span><span class="o">+</span><span class="mi">2</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="n">out</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;.zarr&quot;</span><span class="p">):</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">zarr</span><span class="o">.</span><span class="n">create_array</span><span class="p">(</span>
+                <span class="n">store</span><span class="o">=</span><span class="n">out</span><span class="p">,</span>
+                <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="n">n_spatial</span><span class="o">+</span><span class="mi">2</span><span class="p">),</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">,</span>
+                <span class="o">**</span><span class="n">kwargs</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The output must be None or a the name to a zarr file.&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_registration_direction</span> <span class="o">==</span> <span class="s2">&quot;backward&quot;</span><span class="p">:</span>
+            <span class="n">iterator</span> <span class="o">=</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_t_max</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">iterator_next</span> <span class="o">=</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_t_max</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">t</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_t_max</span><span class="o">-</span><span class="mi">1</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">iterator</span> <span class="o">=</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_t_max</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">iterator_next</span> <span class="o">=</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_t_max</span><span class="p">)</span>
+            <span class="n">t</span> <span class="o">=</span> <span class="mi">0</span>
+                    
+        <span class="n">l</span> <span class="o">=</span> <span class="n">keep_points</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">data_add</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">l</span><span class="p">,</span><span class="n">n_spatial</span><span class="o">+</span><span class="mi">2</span><span class="p">))</span>
+        <span class="n">data_add</span><span class="p">[:,</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">keep_points</span><span class="p">))</span>
+        <span class="n">data_add</span><span class="p">[:,</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">t</span>
+        <span class="n">data_add</span><span class="p">[:,</span><span class="mi">2</span><span class="p">:]</span> <span class="o">=</span> <span class="n">keep_points</span><span class="p">[:,::</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">data</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">data_add</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">t</span><span class="p">,</span> <span class="n">t_next</span> <span class="ow">in</span> <span class="n">tqdm</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">iterator</span><span class="p">,</span> <span class="n">iterator_next</span><span class="p">),</span> <span class="n">desc</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Computing trajectories&quot;</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">total</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_t_max</span><span class="o">-</span><span class="mi">1</span><span class="p">):</span>
+
+            <span class="k">if</span> <span class="n">transformation</span> <span class="o">==</span> <span class="s2">&quot;global&quot;</span><span class="p">:</span>
+                <span class="n">trnsf</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_load_transformation_global</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_origin</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">transformation</span> <span class="o">==</span> <span class="s2">&quot;relative&quot;</span><span class="p">:</span>
+                <span class="n">trnsf</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_load_transformation_relative</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">t_next</span><span class="p">)</span>
+             
+            <span class="n">points_vt</span> <span class="o">=</span> <span class="n">vt</span><span class="o">.</span><span class="n">vtPointList</span><span class="p">(</span><span class="n">keep_points</span><span class="p">)</span>
+            <span class="n">points_vt_out</span> <span class="o">=</span> <span class="n">vt</span><span class="o">.</span><span class="n">apply_trsf_to_points</span><span class="p">(</span><span class="n">points_vt</span><span class="p">,</span> <span class="n">trnsf</span><span class="p">)</span>
+            <span class="n">keep_points</span> <span class="o">=</span> <span class="n">keep_points</span> <span class="o">-</span> <span class="p">(</span><span class="n">points_vt_out</span><span class="o">.</span><span class="n">copy_to_array</span><span class="p">()</span><span class="o">-</span><span class="n">keep_points</span><span class="p">)</span>
+            <span class="n">l</span> <span class="o">=</span> <span class="n">keep_points</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">data_add</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">l</span><span class="p">,</span><span class="n">n_spatial</span><span class="o">+</span><span class="mi">2</span><span class="p">))</span>
+            <span class="n">data_add</span><span class="p">[:,</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">keep_points</span><span class="p">))</span>
+            <span class="n">data_add</span><span class="p">[:,</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">t_next</span>
+            <span class="n">data_add</span><span class="p">[:,</span><span class="mi">2</span><span class="p">:]</span> <span class="o">=</span> <span class="n">keep_points</span><span class="p">[:,::</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+            <span class="n">data</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">data_add</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="c1"># Return data</span>
+        <span class="k">if</span> <span class="n">out</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">data</span></div>
+</div>
+
+    
+<span class="c1">#     Parameters for the blockmatching algorithm:</span>
+<span class="c1">#         ### image geometry ### </span>
+<span class="c1">#         [-reference-voxel %lf %lf [%lf]]:</span>
+<span class="c1">#         changes/sets the voxel sizes of the reference image</span>
+<span class="c1">#         [-floating-voxel %lf %lf [%lf]]:</span>
+<span class="c1">#         changes/sets the voxel sizes of the floating image</span>
+<span class="c1">#         ### pre-processing ###</span>
+<span class="c1">#         [-normalisation|-norma|-rescale] # input images are normalized on one byte</span>
+<span class="c1">#         before matching (this may be the default behavior)</span>
+<span class="c1">#         [-no-normalisation|-no-norma|-no-rescale] # input images are not normalized on</span>
+<span class="c1">#         one byte before matching</span>
+<span class="c1">#         ### post-processing ###</span>
+<span class="c1">#         [-no-composition-with-left] # the written result transformation is only the</span>
+<span class="c1">#         computed one, ie it is not composed with the left/initial one (thus does not allow</span>
+<span class="c1">#         to resample the floating image if an left/initial transformation is given) [default]</span>
+<span class="c1">#         [-composition-with-left] # the written result transformation is the</span>
+<span class="c1">#         computed one composed with the left/initial one (thus allows to resample the</span>
+<span class="c1">#         floating image if an left/initial transformation is given) </span>
+<span class="c1">#         ### pyramid building ###</span>
+<span class="c1">#         [-pyramid-gaussian-filtering | -py-gf] # before subsampling, the images </span>
+<span class="c1">#         are filtered (ie smoothed) by a gaussian kernel.</span>
+<span class="c1">#         ### block geometry (floating image) ###</span>
+<span class="c1">#         -block-size|-bl-size %d %d %d       # size of the block along X, Y, Z</span>
+<span class="c1">#         -block-spacing|-bl-space %d %d %d   # block spacing in the floating image</span>
+<span class="c1">#         -block-border|-bl-border %d %d %d   # block borders: to be added twice at</span>
+<span class="c1">#         each dimension for statistics computation</span>
+<span class="c1">#         ### block selection ###</span>
+<span class="c1">#         [-floating-low-threshold | -flo-lt %d]     # values &lt;= low threshold are not</span>
+<span class="c1">#         considered</span>
+<span class="c1">#         [-floating-high-threshold | -flo-ht %d]    # values &gt;= high threshold are not</span>
+<span class="c1">#         considered</span>
+<span class="c1">#         [-floating-removed-fraction | -flo-rf %f]  # maximal fraction of removed points</span>
+<span class="c1">#         because of the threshold. If too many points are removed, the block is</span>
+<span class="c1">#         discarded</span>
+<span class="c1">#         [-reference-low-threshold | -ref-lt %d]    # values &lt;= low threshold are not</span>
+<span class="c1">#         considered</span>
+<span class="c1">#         [-reference-high-threshold | -ref-ht %d]   # values &gt;= high threshold are not</span>
+<span class="c1">#         considered</span>
+<span class="c1">#         [-reference-removed-fraction | -ref-rf %f] # maximal fraction of removed points</span>
+<span class="c1">#         because of the threshold. If too many points are removed, the block is</span>
+<span class="c1">#         discarded</span>
+<span class="c1">#         [-floating-selection-fraction[-ll|-hl] | -flo-frac[-ll|-hl] %lf] # fraction of</span>
+<span class="c1">#         blocks from the floating image kept at a pyramid level, the blocks being</span>
+<span class="c1">#         sorted w.r.t their variance (see note (1) for [-ll|-hl])</span>
+<span class="c1">#         ### pairing ###</span>
+<span class="c1">#         [-search-neighborhood-half-size | -se-hsize %d %d %d] # half size of the search</span>
+<span class="c1">#         neighborhood in the reference when looking for similar blocks</span>
+<span class="c1">#         [-search-neighborhood-step | -se-step %d %d %d] # step between blocks to be</span>
+<span class="c1">#         tested in the search neighborhood</span>
+<span class="c1">#         [-similarity-measure | -similarity | -si [cc|ecc|ssd|sad]]  # similarity measure</span>
+<span class="c1">#         cc: correlation coefficient</span>
+<span class="c1">#         ecc: extended correlation coefficient</span>
+<span class="c1">#         [-similarity-measure-threshold | -si-th %lf]    # threshold on the similarity</span>
+<span class="c1">#         measure: pairings below that threshold are discarded</span>
+<span class="c1">#         ### transformation regularization ###</span>
+<span class="c1">#         [-elastic-regularization-sigma[-ll|-hl] | -elastic-sigma[-ll|-hl]  %lf %lf %lf]</span>
+<span class="c1">#         # sigma for elastic regularization (only for vector field) (see note (1) for</span>
+<span class="c1">#         [-ll|-hl])</span>
+<span class="c1">#         ### transformation estimation ###</span>
+<span class="c1">#         [-estimator-type|-estimator|-es-type %s] # transformation estimator</span>
+<span class="c1">#         wlts: weighted least trimmed squares</span>
+<span class="c1">#         lts: least trimmed squares</span>
+<span class="c1">#         wls: weighted least squares</span>
+<span class="c1">#         ls: least squares</span>
+<span class="c1">#         [-lts-cut|-lts-fraction %lf] # for trimmed estimations, fraction of pairs that are kept</span>
+<span class="c1">#         [-lts-deviation %lf] # for trimmed estimations, defines the threshold to discard</span>
+<span class="c1">#         pairings, ie &#39;average + this_value * standard_deviation&#39;</span>
+<span class="c1">#         [-lts-iterations %d] # for trimmed estimations, the maximal number of iterations</span>
+<span class="c1">#         [-fluid-sigma|-lts-sigma[-ll|-hl] %lf %lf %lf] # sigma for fluid regularization,</span>
+<span class="c1">#         ie field interpolation and regularization for pairings (only for vector field)</span>
+<span class="c1">#         (see note (1) for [-ll|-hl])</span>
+<span class="c1">#         [-vector-propagation-distance|-propagation-distance|-pdistance %f] # </span>
+<span class="c1">#         distance propagation of initial pairings (ie displacements)</span>
+<span class="c1">#         this implies the same displacement for the spanned sphere</span>
+<span class="c1">#         (only for vectorfield)</span>
+<span class="c1">#         [-vector-fading-distance|-fading-distance|-fdistance %f] # </span>
+<span class="c1">#         area of fading for initial pairings (ie displacements)</span>
+<span class="c1">#         this allows progressive transition towards null displacements</span>
+<span class="c1">#         and thus avoid discontinuites</span>
+<span class="c1">#         ### end conditions for matching loop ###</span>
+<span class="c1">#         [-max-iteration[-ll|-hl]|-max-iterations[-ll|-hl]|-max-iter[-ll|-hl] %d]|...</span>
+<span class="c1">#         ...|-iterations[-ll|-hl] %d]   # maximal number of iteration</span>
+<span class="c1">#         (see note (1) for [-ll|-hl])</span>
+<span class="c1">#         [-corner-ending-condition|-rms] # evolution of image corners</span>
+<span class="c1">#         ### filter type ###</span>
+<span class="c1">#         [-gaussian-filter-type|-filter-type deriche|fidrich|young-1995|young-2002|...</span>
+<span class="c1">#         ...|gabor-young-2002|convolution] # type of filter for image/vector field</span>
+<span class="c1">#         smoothing</span>
+<span class="c1">#         ### misc writing stuff ###</span>
+<span class="c1">#         [-default-filenames|-df]     # use default filename names</span>
+<span class="c1">#         [-no-default-filenames|-ndf] # do not use default filename names</span>
+<span class="c1">#         [-command-line %s]           # write the command line</span>
+<span class="c1">#         [-logfile %s]                # write some output in this logfile</span>
+<span class="c1">#         [-vischeck]  # write an image with &#39;active&#39; blocks</span>
+<span class="c1">#         [-write_def] # id. </span>
+<span class="c1">#         ### parallelism ###</span>
+<span class="c1">#         [-parallel|-no-parallel] # use parallelism (or not)</span>
+<span class="c1">#         [-parallelism-type|-parallel-type default|none|openmp|omp|pthread|thread]</span>
+<span class="c1">#         [-max-chunks %d] # maximal number of chunks</span>
+<span class="c1">#         [-parallel-scheduling|-ps default|static|dynamic-one|dynamic|guided] # type</span>
+<span class="c1">#         of scheduling for open mp</span>
+<span class="c1">#         ### general parameters ###</span>
+<span class="c1">#         -verbose|-v: increase verboseness parameters being read several time, use &#39;-nv -v -v ...&#39; to set the verboseness level</span>
+<span class="c1">#         -debug|-D: increase debug level</span>
+<span class="c1">#         -no-debug|-nodebug: no debug indication</span>
+<span class="c1">#         -trace:</span>
+<span class="c1">#         -no-trace:</span>
+<span class="c1">#         -print-parameters|-param:</span>
+<span class="c1">#         -print-time|-time:</span>
+<span class="c1">#         -no-time|-notime:</span>
+<span class="c1">#         -trace-memory|-memory: keep trace of allocated pointers (in instrumented procedures)</span>
+<span class="c1">#         display some information about memory consumption</span>
+<span class="c1">#         Attention: it disables the parallel mode, because of concurrent access to memory parallel mode may be restored by specifying &#39;-parallel&#39; after &#39;-memory&#39; but unexpected crashes may be experienced</span>
+<span class="c1">#         -no-memory|-nomemory:</span>
+<span class="c1">#         -h: print option list</span>
+<span class="c1">#         -help: print option list + details</span>
+        
+<span class="c1">#         Notes</span>
+<span class="c1">#         (1) If -ll or -hl are respectively added to the option, this specifies only the</span>
+<span class="c1">#         value for respectively the lowest or the highest level of the pyramid (recall</span>
+<span class="c1">#         that the most lowest level, ie #0, refers to the original image). For</span>
+<span class="c1">#         intermediary levels, values are linearly interpolated.</span>
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../../index.html">Registration Tools</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../examples.html">Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../API.html">API Reference</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../../index.html">Documentation overview</a><ul>
+  <li><a href="../../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 8.1.3</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>

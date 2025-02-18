@@ -1,5 +1,5 @@
-Datasets
-========
+Artificial Data
+===============
 
 Functions to generate artificial datasets to test.
 

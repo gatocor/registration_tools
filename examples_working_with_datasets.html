@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="./">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Working with Datasets &#8212; Registration Tools 0.1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="_static/basic.css?v=686e5160" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=27fed22d" />
+    <script src="_static/documentation_options.js?v=2709fde1"></script>
+    <script src="_static/doctools.js?v=9bcbadda"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Rigid Registration of Spheres" href="examples_spheres.html" />
+    <link rel="prev" title="Examples" href="examples.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="working-with-datasets">
+<h1>Working with Datasets<a class="headerlink" href="#working-with-datasets" title="Link to this heading">¶</a></h1>
+<section id="index">
+<h2>Index<a class="headerlink" href="#index" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p><a class="reference internal" href="#working-with-datasets"><span class="xref myst">Working with Datasets</span></a></p>
+<ul>
+<li><p><a class="reference internal" href="index.html"><span class="doc std std-doc">Index</span></a></p></li>
+<li><p><a class="reference internal" href="#types-of-allowed-data"><span class="xref myst">Types of allowed data</span></a></p></li>
+<li><p><a class="reference internal" href="#working-with-datasets-structure"><span class="xref myst">Working with Datasets Structure</span></a></p>
+<ul>
+<li><p><a class="reference internal" href="#creating-an-artificial-dataset"><span class="xref myst">Creating an artificial Dataset</span></a></p></li>
+<li><p><a class="reference internal" href="#loading-a-dataset-of-separated-files"><span class="xref myst">Loading a dataset of separated files</span></a></p></li>
+<li><p><a class="reference internal" href="#converting-to-zarr"><span class="xref myst">Converting to zarr</span></a></p></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</section>
+<section id="types-of-allowed-data">
+<h2>Types of allowed data<a class="headerlink" href="#types-of-allowed-data" title="Link to this heading">¶</a></h2>
+<p>The basic formats allowed are indexed arrays as:</p>
+<ul class="simple">
+<li><p>numpy arrays</p></li>
+<li><p>zarr arrays</p></li>
+<li><p>h5/h5f files</p></li>
+<li><p>separated files inside folders (see next section)</p></li>
+</ul>
+<p>where we have zarr as the basic input array for its efficient manipulation using batches of data. You can upload it in any way you want. however, we also provide a function ‘load_dataset’ to read it that helps to make sure you upload it in the correct format.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">registration_tools.dataset</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">rt_dataset</span>
+</pre></div>
+</div>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1">#Generate a random dataset with 4 timepoints, 3 channels, and 10x10x10 images</span>
+<span class="n">dataset</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span><span class="mi">3</span><span class="p">,</span><span class="mi">10</span><span class="p">,</span><span class="mi">10</span><span class="p">,</span><span class="mi">10</span><span class="p">)</span>
+<span class="c1">#Save the dataset to a file</span>
+<span class="n">np</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="s1">&#39;dataset.npy&#39;</span><span class="p">,</span> <span class="n">dataset</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Check the dataset structure and ensure that necessary attributes are present.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">rt_dataset</span><span class="o">.</span><span class="n">check_dataset_structure</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>Shape:  (4, 3, 10, 10, 10)
+Attributes not found.
+</pre></div>
+</div>
+<p>You can upload with load dataset instead to make sure all necessary attributes for many functions are found.</p>
+<p><strong>Note: This does not mean that you cannot work with this data. Simnply that mostly sure this data will be asked later on for some function.</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">dataset</span> <span class="o">=</span> <span class="n">rt_dataset</span><span class="o">.</span><span class="n">load_dataset</span><span class="p">(</span>
+    <span class="s1">&#39;dataset.npy&#39;</span><span class="p">,</span>
+    <span class="n">axis</span><span class="o">=</span><span class="s2">&quot;TCZYX&quot;</span><span class="p">,</span>
+    <span class="n">scale</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">),</span>
+<span class="p">)</span>
+
+<span class="n">rt_dataset</span><span class="o">.</span><span class="n">check_dataset_structure</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>Shape:  (4, 3, 10, 10, 10)
+Axis:  TCZYX
+Scale:  (1, 1, 1)
+</pre></div>
+</div>
+</section>
+<section id="working-with-datasets-structure">
+<h2>Working with Datasets Structure<a class="headerlink" href="#working-with-datasets-structure" title="Link to this heading">¶</a></h2>
+<p>Usually datasets are found in separate files distributed over folders. Usually, datasets coming from a microscope machine have structures similar to</p>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>    - dataset
+        - ch1
+            - file_t1.tif
+            - file_t2.tif
+            - ...
+        - ch2
+            - file_t1.tif
+            - file_t2.tif
+            - ...
+</pre></div>
+</div>
+<p>In this example we show how to create the data structure <code class="docutils literal notranslate"><span class="pre">Dataset</span></code> to work with this format of data.</p>
+<section id="creating-an-artificial-dataset">
+<h3>Creating an artificial Dataset<a class="headerlink" href="#creating-an-artificial-dataset" title="Link to this heading">¶</a></h3>
+<p>We are going to generate an artificial dataset and then we will load it.</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">registration_tools.data</span></code> contains functions to generate artificial datasets to test.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">registation_tools.dataset</span></code> contains functions to load datasets.</p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">registration_tools.data</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">rt_data</span> <span class="c1">#For generating artificial datasets</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">registration_tools.dataset</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">rt_dataset</span> <span class="c1">#For generating artificial datasets</span>
+</pre></div>
+</div>
+<p>If we provide a folder, the dataset will generate a folder structure in separated files.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">dataset</span> <span class="o">=</span> <span class="n">rt_data</span><span class="o">.</span><span class="n">sphere</span><span class="p">(</span>
+    <span class="n">out</span><span class="o">=</span><span class="s1">&#39;dataset_sphere&#39;</span><span class="p">,</span>
+    <span class="n">num_channels</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+    <span class="n">image_size</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>  <span class="c1">#This indicates to make an image of size image_size x image_size x image_size</span>
+    <span class="n">stride</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">),</span>  <span class="c1">#This to downsample the image by a factor of stride per dimension</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>We can visualize the structure of our dataset:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">rt_dataset</span><span class="o">.</span><span class="n">show_dataset_structure</span><span class="p">(</span><span class="s1">&#39;dataset_sphere&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>|-- channel_0
+    |-- sphere_00.tiff
+    |-- sphere_01.tiff
+    |-- sphere_02.tiff
+    |-- ...
+    |-- sphere_07.tiff
+    |-- sphere_08.tiff
+    |-- sphere_09.tiff
+|-- channel_1
+    |-- sphere_00.tiff
+    |-- sphere_01.tiff
+    |-- sphere_02.tiff
+    |-- ...
+    |-- sphere_07.tiff
+    |-- sphere_08.tiff
+    |-- sphere_09.tiff
+|-- channel_2
+    |-- sphere_00.tiff
+    |-- sphere_01.tiff
+    |-- sphere_02.tiff
+    |-- ...
+    |-- sphere_07.tiff
+    |-- sphere_08.tiff
+    |-- sphere_09.tiff
+</pre></div>
+</div>
+</section>
+<section id="loading-a-dataset-of-separated-files">
+<h3>Loading a dataset of separated files<a class="headerlink" href="#loading-a-dataset-of-separated-files" title="Link to this heading">¶</a></h3>
+<p>Now we can load this folder structure as an object Dataset.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">dataset</span> <span class="o">=</span> <span class="n">rt_dataset</span><span class="o">.</span><span class="n">Dataset</span><span class="p">(</span>
+    <span class="p">[</span>
+        <span class="s2">&quot;dataset_sphere/channel_0/sphere_</span><span class="si">{:02d}</span><span class="s2">.tiff&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;dataset_sphere/channel_1/sphere_</span><span class="si">{:02d}</span><span class="s2">.tiff&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;dataset_sphere/channel_2/sphere_</span><span class="si">{:02d}</span><span class="s2">.tiff&quot;</span><span class="p">,</span>
+    <span class="p">],</span>
+    <span class="n">axis_data</span><span class="o">=</span><span class="s2">&quot;CT&quot;</span><span class="p">,</span>
+    <span class="n">axis_files</span><span class="o">=</span><span class="s2">&quot;XYZ&quot;</span><span class="p">,</span>
+    <span class="n">scale</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">)</span>      <span class="c1"># Scale of the dataset, is the same as the stride in the generation</span>
+<span class="p">)</span>
+
+<span class="n">dataset</span>
+</pre></div>
+</div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>Dataset(shape=(3, 10, 100, 100, 50), axis=CTXYZ, scale=(1, 1, 2))
+</pre></div>
+</div>
+</section>
+<section id="converting-to-zarr">
+<h3>Converting to zarr<a class="headerlink" href="#converting-to-zarr" title="Link to this heading">¶</a></h3>
+<p>You can work with this Dataset for most of the functions afterwards. However you may be interested in converting it to a zarr array.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">dataset</span><span class="o">.</span><span class="n">to_zarr</span><span class="p">(</span><span class="s2">&quot;dataset_spheres.zarr&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>Saving to Zarr: 100%|██████████| 30/30 [00:00&lt;00:00, 74.52images/s]
+</pre></div>
+</div>
+</section>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">Registration Tools</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="usage.html">Usage</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="examples.html">Examples</a><ul class="current">
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Working with Datasets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="examples_spheres.html">Rigid Registration of Spheres</a></li>
+<li class="toctree-l2"><a class="reference internal" href="examples_spheres_growing.html">Non-linear registration of growing spheres</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="API.html">API Reference</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+  <li><a href="examples.html">Examples</a><ul>
+      <li>Previous: <a href="examples.html" title="previous chapter">Examples</a></li>
+      <li>Next: <a href="examples_spheres.html" title="next chapter">Rigid Registration of Spheres</a></li>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 8.1.3</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+      |
+      <a href="_sources/examples_working_with_datasets.md.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

@@ -5,7 +5,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Classes &#8212; Registration Tools 0.1 documentation</title>
+    <title>Dataset &#8212; Registration Tools 0.1 documentation</title>
     <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=5ecbeea2" />
     <link rel="stylesheet" type="text/css" href="_static/basic.css?v=686e5160" />
     <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=27fed22d" />
@@ -33,9 +33,273 @@
 
           <div class="body" role="main">
             
-  <section id="classes">
-<h1>Classes<a class="headerlink" href="#classes" title="Link to this heading">¶</a></h1>
-<p>Main class objects of the package.</p>
+  <section id="dataset">
+<h1>Dataset<a class="headerlink" href="#dataset" title="Link to this heading">¶</a></h1>
+<p>Class to load datasets saved in folder structure of separated files.</p>
+<dl class="py class" id="module-registration_tools.dataset">
+<dt class="sig sig-object py" id="registration_tools.dataset.Dataset">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">registration_tools.dataset.</span></span><span class="sig-name descname"><span class="pre">Dataset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">axis_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">axis_files</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">h5_key</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/registration_tools/dataset/dataset.html#Dataset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#registration_tools.dataset.Dataset" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>A class to represent an image dataset of files saved in several folders.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data</strong> (<em>nested list</em><em> or </em><em>str</em>) – The data of the dataset, which can be a list of paths with regex patterns or a numpy array.</p></li>
+<li><p><strong>axis_data</strong> (<em>str</em>) – A string representing the format of the folder nested structure. Each character must appear only once.</p></li>
+<li><p><strong>axis_files</strong> (<em>str</em>) – A string representing the format of the file dimensions. Each character must appear only once.</p></li>
+<li><p><strong>scale</strong> (<em>tuple</em><em>, </em><em>optional</em>) – A tuple representing the scale for the spatial dimensions. Must be the same length as the number of spatial dimensions. If None, the scale is set to (1, 1, …, 1). Defaults to None.</p></li>
+<li><p><strong>h5_key</strong> (<em>str</em><em>, </em><em>optional</em>) – The key to read data from an h5 file, if applicable.</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<p>Having a dataset with the folowwing structure:</p>
+<ul class="simple">
+<li><dl class="simple">
+<dt>main_folder</dt><dd><ul>
+<li><dl class="simple">
+<dt>ch1</dt><dd><ul>
+<li><p>file_t1.tif</p></li>
+<li><p>file_t2.tif</p></li>
+<li><p>…</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><dl class="simple">
+<dt>ch2</dt><dd><ul>
+<li><p>file_t1.tif</p></li>
+<li><p>file_t2.tif</p></li>
+<li><p>…</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+</ul>
+</dd>
+</dl>
+</li>
+</ul>
+<p>Where each file is a 3D image saved in format ‘ZYX’ with scale (2., 1., 1.).
+You can create a dataset object with the following code:</p>
+<blockquote>
+<div><p>dataset = Dataset(data=[‘ch1/file{0:03d}.tif’,’ch2/file{0:03d}.tif’], axis_data=’CT’, axis_files=’ZYX’, scale=(2., 1., 1.))</p>
+</div></blockquote>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="registration_tools.dataset.Dataset.shape">
+<span class="sig-name descname"><span class="pre">shape</span></span><a class="headerlink" href="#registration_tools.dataset.Dataset.shape" title="Link to this definition">¶</a></dt>
+<dd><p>The shape of the dataset including both data and file dimensions.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="registration_tools.dataset.Dataset.scale">
+<span class="sig-name descname"><span class="pre">scale</span></span><a class="headerlink" href="#registration_tools.dataset.Dataset.scale" title="Link to this definition">¶</a></dt>
+<dd><p>The scale of the spatial dimensions.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="registration_tools.dataset.Dataset._data">
+<span class="sig-name descname"><span class="pre">_data</span></span><a class="headerlink" href="#registration_tools.dataset.Dataset._data" title="Link to this definition">¶</a></dt>
+<dd><p>The data of the dataset, expanded from regex patterns or file paths.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>np.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="registration_tools.dataset.Dataset._axis">
+<span class="sig-name descname"><span class="pre">_axis</span></span><a class="headerlink" href="#registration_tools.dataset.Dataset._axis" title="Link to this definition">¶</a></dt>
+<dd><p>The combined format of data and file dimensions.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="registration_tools.dataset.Dataset._n_axis">
+<span class="sig-name descname"><span class="pre">_n_axis</span></span><a class="headerlink" href="#registration_tools.dataset.Dataset._n_axis" title="Link to this definition">¶</a></dt>
+<dd><p>The total number of dimensions.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="registration_tools.dataset.Dataset._axis_data">
+<span class="sig-name descname"><span class="pre">_axis_data</span></span><a class="headerlink" href="#registration_tools.dataset.Dataset._axis_data" title="Link to this definition">¶</a></dt>
+<dd><p>The format of the folder structure.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="registration_tools.dataset.Dataset._n_axis_data">
+<span class="sig-name descname"><span class="pre">_n_axis_data</span></span><a class="headerlink" href="#registration_tools.dataset.Dataset._n_axis_data" title="Link to this definition">¶</a></dt>
+<dd><p>The number of data dimensions.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="registration_tools.dataset.Dataset._axis_files">
+<span class="sig-name descname"><span class="pre">_axis_files</span></span><a class="headerlink" href="#registration_tools.dataset.Dataset._axis_files" title="Link to this definition">¶</a></dt>
+<dd><p>The format of the file dimensions.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="registration_tools.dataset.Dataset._n_axis_files">
+<span class="sig-name descname"><span class="pre">_n_axis_files</span></span><a class="headerlink" href="#registration_tools.dataset.Dataset._n_axis_files" title="Link to this definition">¶</a></dt>
+<dd><p>The number of file dimensions.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="registration_tools.dataset.Dataset._axis_spatial">
+<span class="sig-name descname"><span class="pre">_axis_spatial</span></span><a class="headerlink" href="#registration_tools.dataset.Dataset._axis_spatial" title="Link to this definition">¶</a></dt>
+<dd><p>The spatial dimensions in the dataset.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="registration_tools.dataset.Dataset._n_axis_spatial">
+<span class="sig-name descname"><span class="pre">_n_axis_spatial</span></span><a class="headerlink" href="#registration_tools.dataset.Dataset._n_axis_spatial" title="Link to this definition">¶</a></dt>
+<dd><p>The number of spatial dimensions.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="registration_tools.dataset.Dataset.dtype">
+<span class="sig-name descname"><span class="pre">dtype</span></span><a class="headerlink" href="#registration_tools.dataset.Dataset.dtype" title="Link to this definition">¶</a></dt>
+<dd><p>The data type of the images.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>np.dtype</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="registration_tools.dataset.Dataset._h5_key">
+<span class="sig-name descname"><span class="pre">_h5_key</span></span><a class="headerlink" href="#registration_tools.dataset.Dataset._h5_key" title="Link to this definition">¶</a></dt>
+<dd><p>The key to read data from an h5 file, if applicable.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="registration_tools.dataset.Dataset.to_zarr">
+<span class="sig-name descname"><span class="pre">to_zarr</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">file</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/registration_tools/dataset/dataset.html#Dataset.to_zarr"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#registration_tools.dataset.Dataset.to_zarr" title="Link to this definition">¶</a></dt>
+<dd><p>Save the dataset to a Zarr array. Zarr is a format that stores multidimensional arrays in a chunked, compressed, and efficient manner.</p>
+<section id="parameters">
+<h2>Parameters:<a class="headerlink" href="#parameters" title="Link to this heading">¶</a></h2>
+<dl class="simple">
+<dt>file<span class="classifier">str or zarr.storage.Store</span></dt><dd><p>The file path or Zarr store where the array will be saved.</p>
+</dd>
+<dt><a href="#id1"><span class="problematic" id="id2">**</span></a>kwargs<span class="classifier">dict</span></dt><dd><p>Additional keyword arguments to pass to <cite>zarr.create_array</cite>.</p>
+</dd>
+</dl>
+</section>
+<section id="returns">
+<h2>Returns:<a class="headerlink" href="#returns" title="Link to this heading">¶</a></h2>
+<p>None</p>
+</section>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="registration_tools.dataset.check_dataset_structure">
+<span class="sig-prename descclassname"><span class="pre">registration_tools.dataset.</span></span><span class="sig-name descname"><span class="pre">check_dataset_structure</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/registration_tools/dataset/dataset.html#check_dataset_structure"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#registration_tools.dataset.check_dataset_structure" title="Link to this definition">¶</a></dt>
+<dd><p>Check and print the structure of a dataset.</p>
+<p>This function prints the shape of the dataset and checks for the presence
+of specific attributes (‘axis’ and ‘scale’). If these attributes are found,
+their values are printed. If not, a message indicating their absence is printed.</p>
+<p>Parameters:
+data (object): The dataset to be checked. It is expected to have a ‘shape’ attribute</p>
+<blockquote>
+<div><p>and optionally ‘attrs’ attribute which is a dictionary containing
+‘axis’ and ‘scale’ keys.</p>
+</div></blockquote>
+<p>Returns:
+None</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="registration_tools.dataset.load_dataset">
+<span class="sig-prename descclassname"><span class="pre">registration_tools.dataset.</span></span><span class="sig-name descname"><span class="pre">load_dataset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">axis</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">h5_key</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/registration_tools/dataset/dataset.html#load_dataset"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#registration_tools.dataset.load_dataset" title="Link to this definition">¶</a></dt>
+<dd><p>Load a dataset from a given file path.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>path</strong> (<em>str</em>) – The file path to the dataset. Supported formats are .npy, .h5, .hdf5, and image files.</p></li>
+<li><p><strong>axis</strong> (<em>optional</em>) – The axis attribute of the dataset. If not provided, it will be read from the dataset attributes.</p></li>
+<li><p><strong>scale</strong> (<em>optional</em>) – The scale attribute of the dataset. If not provided, it will be read from the dataset attributes.</p></li>
+<li><p><strong>h5_key</strong> (<em>str</em><em>, </em><em>optional</em>) – The key to read from an h5 file. Required if the file is in .h5 or .hdf5 format.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The loaded dataset as a zarr array.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>zarr.core.Array</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="registration_tools.dataset.show_dataset_structure">
+<span class="sig-prename descclassname"><span class="pre">registration_tools.dataset.</span></span><span class="sig-name descname"><span class="pre">show_dataset_structure</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">folder_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">indent</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_files</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">6</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/registration_tools/dataset/dataset.html#show_dataset_structure"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#registration_tools.dataset.show_dataset_structure" title="Link to this definition">¶</a></dt>
+<dd><p>Recursively prints the folder structure.</p>
+<p>Parameters:
+folder_path (str): The path to the folder to display.
+indent (int): The indentation level for nested folders.
+max_files (int): The maximum number of files to display per folder.</p>
+<p>Returns:
+None</p>
+</dd></dl>
+
 </section>
 
 
@@ -65,14 +329,15 @@
 </search>
 <script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
 <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="usage.html">Usage</a></li>
 <li class="toctree-l1"><a class="reference internal" href="examples.html">Examples</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="API.html">API Reference</a><ul class="current">
-<li class="toctree-l2 current"><a class="current reference internal" href="#">Classes</a></li>
+<li class="toctree-l2 current"><a class="current reference internal" href="#">Dataset</a></li>
 <li class="toctree-l2"><a class="reference internal" href="API_registration.html">Registration</a></li>
 <li class="toctree-l2"><a class="reference internal" href="API_utils.html">Utils</a></li>
 <li class="toctree-l2"><a class="reference internal" href="API_visualization.html">Visualization</a></li>
-<li class="toctree-l2"><a class="reference internal" href="API_data.html">Datasets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="API_data.html">Artificial Data</a></li>
 </ul>
 </li>
 </ul>
