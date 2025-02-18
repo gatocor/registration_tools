@@ -15,14 +15,15 @@ import warnings  # Add this import
 from copy import deepcopy
 import zarr
 from ..utils.auxiliar import _get_axis_scale, _make_index, _shape_downsampled, _dict_axis_shape
+import tempfile
 
 def _get_vtImage(dataset, t, scale, axis, use_channel, downsample):
     img = dataset[_make_index(t, axis, use_channel, downsample)]
-    imsave("__file__.tiff", img)
-    img = vt.vtImage("__file__.tiff")
-    # img = vt.vtImage(img.copy()) #Ideal but runs all the time in problems
-    img.setSpacing(scale[::-1])
-    os.remove("__file__.tiff")
+    with tempfile.NamedTemporaryFile(suffix=".tiff", delete=True) as temp_file:
+        imsave(temp_file.name, img)
+        img = vt.vtImage(temp_file.name)
+        # img = vt.vtImage(img.copy()) #Ideal but runs all the time in problems
+        img.setSpacing(scale[::-1])
     return img
 
 def get_pyramid_levels(dataset, maximum_size = 100, verbose = True):
@@ -131,7 +132,6 @@ class Registration:
     """
 
     def __init__(self, 
-
             out=None, 
             registration_type="rigid", 
             perfom_global_trnsf=None, 
