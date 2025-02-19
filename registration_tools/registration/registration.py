@@ -14,7 +14,7 @@ import copy
 import warnings  # Add this import
 from copy import deepcopy
 import zarr
-from ..utils.auxiliar import _get_axis_scale, _make_index, _shape_downsampled, _dict_axis_shape
+from ..utils.auxiliar import _get_axis_scale, _make_index, _shape_downsampled, _dict_axis_shape, _suppress_stdout_stderr
 import tempfile
 
 def _get_vtImage(dataset, t, scale, axis, use_channel, downsample):
@@ -178,6 +178,7 @@ class Registration:
         self._t_max = None
         self._origin = None
         self._transfs = {}
+        self._failed = {}
 
         if out is not None:
             self.save(out=out)
@@ -288,6 +289,24 @@ class Registration:
         else:
             return os.path.exists(f"{self._out}/trnsf_global/trnsf_global_{pos_float:04d}_{pos_ref:04d}.trnsf")
     
+    def _make_registration_args(self, registration_type=None, pyramid_lowest_level=None, pyramid_highest_level=None, args_registration=None, verbose=False):
+        if registration_type is None:
+            registration_type = self._registration_type
+        if pyramid_lowest_level is None:
+            pyramid_lowest_level = self._pyramid_lowest_level
+        if pyramid_highest_level is None:
+            pyramid_highest_level = self._pyramid_highest_level
+        if args_registration is None:
+            args_registration = self._args_registration
+
+        registration_args = ""
+        if not verbose:
+            registration_args = " -no-verbose"
+        registration_args += f" -transformation-type {registration_type} -pyramid-lowest-level {pyramid_lowest_level} -pyramid-highest-level {pyramid_highest_level} "
+        registration_args += args_registration
+
+        return registration_args
+
     def fit(self, dataset, use_channel=None, axis=None, scale=None, downsample=None, save_behavior="Continue", verbose=False):
         """
         Registers a dataset and saves the results to the specified path.
@@ -332,11 +351,7 @@ class Registration:
         self._box = tuple([int(i) for i in np.array(dataset.shape)[[axis.index(ax) for ax in axis if ax in "XYZ"]] * np.array(new_scale)])
 
         # Setup arguments
-        registration_args = ""
-        if not verbose:
-            registration_args = " -no-verbose"
-        registration_args += f" -transformation-type {self._registration_type} -pyramid-lowest-level {self._pyramid_lowest_level} -pyramid-highest-level {self._pyramid_highest_level} "
-        registration_args += self._args_registration
+        registration_args = self._make_registration_args(verbose=verbose)
 
         # Suppress skimage warnings for low contrast images
         warnings.filterwarnings("ignore", category=UserWarning, message=".*low contrast image.*")
@@ -374,7 +389,42 @@ class Registration:
 
                 img_float = _get_vtImage(dataset, pos_float, scale, axis, use_channel, downsample)
 
-                trnsf = vt.blockmatching(img_float, image_ref = img_ref, params=registration_args)
+                keep = True
+                counter = 0
+                failed = False
+                while keep and counter < 10:
+                    # Usage
+                    if verbose:
+                        trnsf = vt.blockmatching(img_float, image_ref=img_ref, params=registration_args)
+                    else:
+                        with _suppress_stdout_stderr():
+                            trnsf = vt.blockmatching(img_float, image_ref=img_ref, params=registration_args)
+
+                    if trnsf is None:
+                        failed = True
+                        counter += 1
+                        if self._pyramid_highest_level > 0:
+                            if verbose:
+                                print("Registration failed. Trying with a lower highest pyramid level.")
+                            pyramid_highest_level = self._pyramid_highest_level - 1
+                            registration_args = self._make_registration_args(pyramid_highest_level=pyramid_highest_level, verbose=verbose)
+                        else:
+                            if "-pyramid-gaussian-filtering" not in self._args_registration and "-py-gf" not in self._args_registration:
+                                if verbose:
+                                    print("Registration failed. Trying with pyramid gaussian filtering.")
+                                args_registration = self._args_registration + " -pyramid-gaussian-filtering"
+                                registration_args = self._make_registration_args(args_registration=args_registration, verbose=verbose)
+                            else:
+                                if verbose:
+                                    print(f"Registration failed between positions {pos_float} and {pos_ref}. Setting it to identity and continuing.")
+                                trnsf = vt.vtTransformation(np.eye(self._n_spatial+1))
+                                keep = False
+                    else:
+                        if failed:
+                            self._failed[f"{pos_float:04d}_{pos_ref:04d}"] = registration_args
+                        registration_args = self._make_registration_args(verbose=verbose)
+                        keep = False
+
                 self._save_transformation_relative(trnsf, pos_float, pos_ref)
 
             if self._perfom_global_trnsf:

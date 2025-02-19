@@ -1,3 +1,5 @@
+import os
+from contextlib import contextmanager
 import numpy as np
 import zarr
 from ..dataset import Dataset
@@ -62,3 +64,23 @@ def _create_data(shape, dtype, axis, scale, out=None):
         data.attrs["scale"] = scale
 
     return data
+
+@contextmanager
+def _suppress_stdout_stderr():
+    """Suppresses stdout and stderr, including from C extensions."""
+    # Open null files
+    with open(os.devnull, 'w') as devnull:
+        # Save the actual stdout (1) and stderr (2) file descriptors
+        old_stdout_fd = os.dup(1)
+        old_stderr_fd = os.dup(2)
+        try:
+            # Redirect stdout and stderr to devnull
+            os.dup2(devnull.fileno(), 1)
+            os.dup2(devnull.fileno(), 2)
+            yield
+        finally:
+            # Restore stdout and stderr
+            os.dup2(old_stdout_fd, 1)
+            os.dup2(old_stderr_fd, 2)
+            os.close(old_stdout_fd)
+            os.close(old_stderr_fd)
