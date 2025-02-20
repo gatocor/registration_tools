@@ -4,14 +4,6 @@ import numpy as np
 import zarr
 from ..dataset import Dataset
 
-def _shape_downsampled(shape, axis, downsample=(1,1,1)):
-    spatial_order = [i for i in axis if i in "XYZ"]
-    shape = np.array(shape)
-    for i, ax in enumerate(axis):
-        if ax in "XYZ":
-            shape[i] = shape[i] // downsample[spatial_order.index(ax)]
-    return tuple(shape)
-
 def _make_index(t, axis, use_channel=None, downsample=(1,1,1)):
     spatial_order = [i for i in axis if i in "XYZ"]
     index = [slice(None)] * len(axis)
@@ -43,6 +35,23 @@ def _get_axis_scale(mask, axis, scale):
             raise ValueError("The scale cannot be inferred from dataset data and must be specified.")
         
     return axis, scale
+
+def _shape_downsampled(shape, axis, downsample):
+
+    new_shape=[]
+    pos = 0
+    print()
+    print(shape)
+    for i,(j,k) in enumerate(zip(axis,shape)):
+        if j in "XYZ":
+            new_shape.append(int(np.ceil(k/downsample[pos])))
+            pos += 1
+        else:
+            new_shape.append(k)
+    print(new_shape)
+    print()
+
+    return new_shape
 
 def _dict_axis_shape(axis, shape):
     return {ax: shape[i] for i, ax in enumerate(axis)}

@@ -14,16 +14,24 @@ import copy
 import warnings  # Add this import
 from copy import deepcopy
 import zarr
-from ..utils.auxiliar import _get_axis_scale, _make_index, _shape_downsampled, _dict_axis_shape, _suppress_stdout_stderr
+from ..utils.auxiliar import _get_axis_scale, _make_index, _dict_axis_shape, _suppress_stdout_stderr, _shape_downsampled
 import tempfile
 
 def _get_vtImage(dataset, t, scale, axis, use_channel, downsample):
     img = dataset[_make_index(t, axis, use_channel, downsample)]
-    with tempfile.NamedTemporaryFile(suffix=".tiff", delete=True) as temp_file:
-        imsave(temp_file.name, img)
-        img = vt.vtImage(temp_file.name)
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".tiff", delete=True) as temp_file:
+            imsave(temp_file.name, img)
+            img = vt.vtImage(temp_file.name)
+            # img = vt.vtImage(img.copy()) #Ideal but runs all the time in problems
+            img.setSpacing(scale[::-1])
+    except: #In case you do not have access permissions
+        temp_file = f"temp_{np.random.randint(0,1E6)}.tiff"
+        imsave(temp_file, img)
+        img = vt.vtImage(temp_file)
         # img = vt.vtImage(img.copy()) #Ideal but runs all the time in problems
         img.setSpacing(scale[::-1])
+        os.remove(temp_file)
     return img
 
 def get_pyramid_levels(dataset, maximum_size = 100, verbose = True):
@@ -487,16 +495,25 @@ class Registration:
 
         # Scale
         new_scale = tuple([i * j for i, j in zip(scale, downsample)])
+        new_shape = _shape_downsampled(dataset.shape,axis,downsample)
 
         # Suppress skimage warnings for low contrast images
         warnings.filterwarnings("ignore", category=UserWarning, message=".*low contrast image.*")
         
         if out is None:
-            data = np.zeros(_shape_downsampled(dataset.shape, axis, downsample), dtype=dataset.dtype)
+            store = zarr.storage.MemoryStore()
+            data = zarr.create_array(
+                store=store,
+                shape=new_shape,
+                dtype=dataset.dtype,
+                **kwargs
+            )
+            data.attrs["axis"] = axis
+            data.attrs["scale"] = new_scale
         elif isinstance(out, str) and out.endswith(".zarr"):
             data = zarr.create_array(
                 store=out,
-                shape=dataset.shape,
+                shape=new_shape,
                 dtype=dataset.dtype,
                 **kwargs
             )
@@ -507,22 +524,22 @@ class Registration:
 
         if self._registration_direction == "backward":
             origin = 0
-            iterator = range(1, dataset.shape[np.where([i == "T" for i in axis])[0][0]])
+            iterator = range(1, new_shape[np.where([i == "T" for i in axis])[0][0]])
             if "C" in axis:
-                for ch in range(dataset.shape[np.where([i == "C" for i in axis])[0][0]]):
+                for ch in range(new_shape[np.where([i == "C" for i in axis])[0][0]]):
                     img = _get_vtImage(dataset, 0, new_scale, axis, ch, downsample)
-                    data[_make_index(0, axis, ch, downsample)] = img.copy_to_array()
+                    data[_make_index(0, axis, ch)] = img.copy_to_array()
             else:
-                data[_make_index(0, axis, None, downsample)] = dataset[_make_index(0, axis, None, downsample)]
+                data[_make_index(0, axis, None)] = dataset[_make_index(0, axis, None, downsample)]
         else:
-            origin = dataset.shape[np.where([i == "T" for i in axis])[0][0]] - 1
-            iterator = range(dataset.shape[np.where([i == "T" for i in axis])[0][0]] - 1, 0, -1)
+            origin = new_shape[np.where([i == "T" for i in axis])[0][0]] - 1
+            iterator = range(new_shape[np.where([i == "T" for i in axis])[0][0]] - 1, 0, -1)
             if "C" in axis:
-                for ch in range(dataset.shape[np.where([i == "C" for i in axis])[0][0]]):
+                for ch in range(new_shape[np.where([i == "C" for i in axis])[0][0]]):
                     img = _get_vtImage(dataset, origin, new_scale, axis, ch, downsample)
-                    data[_make_index(dataset.shape[np.where([i == "T" for i in axis])[0][0]] - 1, axis, ch, downsample)] = img.copy_to_array()
+                    data[_make_index(new_shape[np.where([i == "T" for i in axis])[0][0]] - 1, axis, ch)] = img.copy_to_array()
             else:
-                data[_make_index(dataset.shape[np.where([i == "T" for i in axis])[0][0]] - 1, axis, None, downsample)] = dataset[_make_index(dataset.shape[np.where([i == "T" for i in axis])[0][0]] - 1, axis, None, downsample)]
+                data[_make_index(new_shape[np.where([i == "T" for i in axis])[0][0]] - 1, axis, None)] = dataset[_make_index(dataset.shape[np.where([i == "T" for i in axis])[0][0]] - 1, axis, None, downsample)]
 
         for t in tqdm(iterator, desc=f"Applying registration to images", unit="", total=self._t_max-1):
             if transformation == "global":
@@ -535,12 +552,12 @@ class Registration:
                 trnsf = self._load_transformation_relative(t, origin)
 
             if "C" in axis:
-                for ch in range(dataset.shape[np.where([i == "C" for i in axis])[0][0]]):
+                for ch in range(new_shape[np.where([i == "C" for i in axis])[0][0]]):
                     img = _get_vtImage(dataset, t, new_scale, axis, ch, downsample)
-                    data[_make_index(t, axis, ch, downsample)] = vt.apply_trsf(img, trnsf).copy_to_array()
+                    data[_make_index(t, axis, ch)] = vt.apply_trsf(img, trnsf).copy_to_array()
             else:
                 img = _get_vtImage(dataset, t, new_scale, axis, None, downsample)
-                data[_make_index(t, axis, None, downsample)] = vt.apply_trsf(img, trnsf).copy_to_array()
+                data[_make_index(t, axis, None)] = vt.apply_trsf(img, trnsf).copy_to_array()
 
         return data
 
