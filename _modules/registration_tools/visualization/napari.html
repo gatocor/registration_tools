@@ -93,22 +93,31 @@
 
 <div class="viewcode-block" id="make_video">
 <a class="viewcode-back" href="../../../API_visualization.html#registration_tools.visualization.make_video">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">make_video</span><span class="p">(</span><span class="n">viewer</span><span class="p">,</span> <span class="n">save_file</span><span class="p">,</span> <span class="n">fps</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">zooms</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">angles</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">canvas_only</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">make_video</span><span class="p">(</span><span class="n">viewer</span><span class="p">,</span> <span class="n">save_file</span><span class="p">,</span> <span class="n">time_channel</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">fps</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">zooms</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">angles</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">canvas_only</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Creates a video from the napari viewer by taking screenshots of all time points.</span>
 
 <span class="sd">    Args:</span>
 <span class="sd">        viewer (napari.Viewer): The napari viewer instance.</span>
-<span class="sd">        save_path (str): The path to save the video.</span>
+<span class="sd">        save_file (str): The path to save the video. Must have a .gif extension.</span>
+<span class="sd">        time_channel (int, optional): The dimension index for time. Default is 0.</span>
 <span class="sd">        fps (int, optional): Frames per second for the video. Default is 10.</span>
 <span class="sd">        zooms (list, optional): List of zoom levels for each time point. If None, keep fixed.</span>
 <span class="sd">        angles (list, optional): List of camera angles for each time point. If None, keep fixed.</span>
+<span class="sd">        canvas_only (bool, optional): Whether to capture only the canvas or the entire viewer. Default is True.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        None</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">save_file</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s1">&#39;.gif&#39;</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;The save_file must have a .gif extension&quot;</span><span class="p">)</span>
+
     <span class="n">screenshots</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">num_timepoints</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">viewer</span><span class="o">.</span><span class="n">dims</span><span class="o">.</span><span class="n">range</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">])</span>
+    <span class="n">num_timepoints</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">viewer</span><span class="o">.</span><span class="n">dims</span><span class="o">.</span><span class="n">range</span><span class="p">[</span><span class="n">time_channel</span><span class="p">][</span><span class="mi">1</span><span class="p">])</span>
 
     <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_timepoints</span><span class="p">):</span>
-        <span class="n">viewer</span><span class="o">.</span><span class="n">dims</span><span class="o">.</span><span class="n">set_point</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">t</span><span class="p">)</span>
+        <span class="n">viewer</span><span class="o">.</span><span class="n">dims</span><span class="o">.</span><span class="n">set_point</span><span class="p">(</span><span class="n">time_channel</span><span class="p">,</span> <span class="n">t</span><span class="p">)</span>
         
         <span class="k">if</span> <span class="n">zooms</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">t</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">zooms</span><span class="p">):</span>
             <span class="n">viewer</span><span class="o">.</span><span class="n">camera</span><span class="o">.</span><span class="n">zoom</span> <span class="o">=</span> <span class="n">zooms</span><span class="p">[</span><span class="n">t</span><span class="p">]</span>

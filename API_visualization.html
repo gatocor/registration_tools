@@ -62,17 +62,22 @@
 
 <dl class="py function">
 <dt class="sig sig-object py" id="registration_tools.visualization.make_video">
-<span class="sig-prename descclassname"><span class="pre">registration_tools.visualization.</span></span><span class="sig-name descname"><span class="pre">make_video</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">viewer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_file</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">zooms</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">angles</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">canvas_only</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/registration_tools/visualization/napari.html#make_video"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#registration_tools.visualization.make_video" title="Link to this definition">¶</a></dt>
+<span class="sig-prename descclassname"><span class="pre">registration_tools.visualization.</span></span><span class="sig-name descname"><span class="pre">make_video</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">viewer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_file</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_channel</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fps</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">zooms</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">angles</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">canvas_only</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/registration_tools/visualization/napari.html#make_video"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#registration_tools.visualization.make_video" title="Link to this definition">¶</a></dt>
 <dd><p>Creates a video from the napari viewer by taking screenshots of all time points.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>viewer</strong> (<em>napari.Viewer</em>) – The napari viewer instance.</p></li>
-<li><p><strong>save_path</strong> (<em>str</em>) – The path to save the video.</p></li>
+<li><p><strong>save_file</strong> (<em>str</em>) – The path to save the video. Must have a .gif extension.</p></li>
+<li><p><strong>time_channel</strong> (<em>int</em><em>, </em><em>optional</em>) – The dimension index for time. Default is 0.</p></li>
 <li><p><strong>fps</strong> (<em>int</em><em>, </em><em>optional</em>) – Frames per second for the video. Default is 10.</p></li>
 <li><p><strong>zooms</strong> (<em>list</em><em>, </em><em>optional</em>) – List of zoom levels for each time point. If None, keep fixed.</p></li>
 <li><p><strong>angles</strong> (<em>list</em><em>, </em><em>optional</em>) – List of camera angles for each time point. If None, keep fixed.</p></li>
+<li><p><strong>canvas_only</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether to capture only the canvas or the entire viewer. Default is True.</p></li>
 </ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
 </dd>
 </dl>
 </dd></dl>
