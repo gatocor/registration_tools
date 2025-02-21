@@ -40,22 +40,17 @@ def _shape_downsampled(shape, axis, downsample):
 
     new_shape=[]
     pos = 0
-    print()
-    print(shape)
     for i,(j,k) in enumerate(zip(axis,shape)):
         if j in "XYZ":
             new_shape.append(int(np.ceil(k/downsample[pos])))
             pos += 1
         else:
             new_shape.append(k)
-    print(new_shape)
-    print()
 
     return new_shape
 
 def _dict_axis_shape(axis, shape):
     return {ax: shape[i] for i, ax in enumerate(axis)}
-
 
 def _get_spatial_dims(axis):
     return "".join([dim for dim in axis if dim in "XYZ"])

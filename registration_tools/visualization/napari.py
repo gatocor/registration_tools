@@ -52,22 +52,31 @@ def add_image_difference(viewer, dataset, dt=1, cmap1="red", cmap2="green", opac
     viewer.add_image(img1, scale=scale[::-1], colormap=cmap1, opacity=opacity1, **kwargs)
     viewer.add_image(img2, scale=scale[::-1], colormap=cmap2, opacity=opacity2, **kwargs)
 
-def make_video(viewer, save_file, fps=10, zooms=None, angles=None, canvas_only=True):
+def make_video(viewer, save_file, time_channel=0, fps=10, zooms=None, angles=None, canvas_only=True):
     """
     Creates a video from the napari viewer by taking screenshots of all time points.
 
     Args:
         viewer (napari.Viewer): The napari viewer instance.
-        save_path (str): The path to save the video.
+        save_file (str): The path to save the video. Must have a .gif extension.
+        time_channel (int, optional): The dimension index for time. Default is 0.
         fps (int, optional): Frames per second for the video. Default is 10.
         zooms (list, optional): List of zoom levels for each time point. If None, keep fixed.
         angles (list, optional): List of camera angles for each time point. If None, keep fixed.
-    """
-    screenshots = []
-    num_timepoints = int(viewer.dims.range[0][1])
+        canvas_only (bool, optional): Whether to capture only the canvas or the entire viewer. Default is True.
 
-    for t in range(num_timepoints):
-        viewer.dims.set_point(0, t)
+    Returns:
+        None
+    """
+
+    if not save_file.lower().endswith('.gif'):
+        raise ValueError("The save_file must have a .gif extension")
+
+    screenshots = []
+    num_timepoints = int(viewer.dims.range[time_channel][1])
+
+    for t in tqdm(range(num_timepoints), desc="Creating video: ", unit="image", total=num_timepoints-1):
+        viewer.dims.set_point(time_channel, t)
         
         if zooms is not None and t < len(zooms):
             viewer.camera.zoom = zooms[t]

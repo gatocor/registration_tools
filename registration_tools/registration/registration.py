@@ -104,7 +104,6 @@ class Registration:
         pyramid_highest_level (int): The highest level of the pyramid.
         registration_direction (str): The direction of registration.
         args_registration (str): Additional arguments for registration.
-        _physical_space (None): Placeholder for physical space.
         _n_spatial (None): Placeholder for number of spatial dimensions.
         _fitted (bool): Whether the registration object has been fitted.
         _box (None): Placeholder for the bounding box.
@@ -179,7 +178,6 @@ class Registration:
         self._args_registration = args_registration
 
         self._out = None
-        self._physical_space = None
         self._n_spatial = None
         self._fitted = False
         self._box = None
@@ -356,7 +354,7 @@ class Registration:
         new_scale = tuple([i * j for i, j in zip(scale, downsample)])
 
         # Compute box
-        self._box = tuple([int(i) for i in np.array(dataset.shape)[[axis.index(ax) for ax in axis if ax in "XYZ"]] * np.array(new_scale)])
+        self._box = tuple([int(i) for i in np.array(dataset.shape)[[axis.index(ax) for ax in axis if ax in "XYZ"]] * np.array(scale)])
 
         # Setup arguments
         registration_args = self._make_registration_args(verbose=verbose)
@@ -379,6 +377,9 @@ class Registration:
                 range(self._t_max-2, -1, -1)
             )
         self._origin = origin
+
+        if self._out is not None:
+            self.save()
 
         img_ref = None
         trnsf_global = None
@@ -464,7 +465,7 @@ class Registration:
         Registers a dataset and saves the results to the specified path.
         """
 
-        save_behaviors = ["NotOverwrite", "Continue"]
+        save_behaviors = ["NotOverwrite", "Overwrite", "Continue"]
 
         if not self._fitted:
             raise ValueError("The registration object has not been fitted. Please fit the registration object before applying it.")
@@ -510,15 +511,36 @@ class Registration:
             )
             data.attrs["axis"] = axis
             data.attrs["scale"] = new_scale
-        elif isinstance(out, str) and out.endswith(".zarr"):
-            data = zarr.create_array(
-                store=out,
-                shape=new_shape,
-                dtype=dataset.dtype,
-                **kwargs
-            )
-            data.attrs["axis"] = axis
-            data.attrs["scale"] = new_scale
+            data.attrs["computed"] = None
+        elif isinstance(out, str):# and out.endswith(".zarr"):
+            if os.path.exists(out) and save_behavior == "NotOverwrite":
+                raise ValueError("The output file already exists. If you want to overwrite it, set save_behavior='Overwrite'.")
+            elif os.path.exists(out) and save_behavior == "Continue":
+                out_path, out_file = os.path.split(out)
+                data = zarr.open_array(out_file, path=out_path)
+                if "computed" not in data.attrs:
+                    data.attrs["computed"] = None
+            elif os.path.exists(out) and save_behavior == "Overwrite":
+                shutil.rmtree(out)
+                data = zarr.create_array(
+                    store=out,
+                    shape=new_shape,
+                    dtype=dataset.dtype,
+                    **kwargs
+                )
+                data.attrs["axis"] = axis
+                data.attrs["scale"] = new_scale
+                data.attrs["computed"] = None
+            else:
+                data = zarr.create_array(
+                    store=out,
+                    shape=new_shape,
+                    dtype=dataset.dtype,
+                    **kwargs
+                )
+                data.attrs["axis"] = axis
+                data.attrs["scale"] = new_scale
+                data.attrs["computed"] = None
         else:
             raise ValueError("The output must be None or a the name to a zarr file.")
 
@@ -542,6 +564,15 @@ class Registration:
                 data[_make_index(new_shape[np.where([i == "T" for i in axis])[0][0]] - 1, axis, None)] = dataset[_make_index(dataset.shape[np.where([i == "T" for i in axis])[0][0]] - 1, axis, None, downsample)]
 
         for t in tqdm(iterator, desc=f"Applying registration to images", unit="", total=self._t_max-1):
+            #Skip is computed
+            if data.attrs["computed"] is None:
+                data.attrs["computed"] = t
+            else:
+                if t >= data.attrs["computed"] and self._registration_direction == "backward":
+                    continue
+                elif t <= data.attrs["computed"] and self._registration_direction == "forward":
+                    continue
+
             if transformation == "global":
                 if not self._trnsf_exists_global(t, origin):
                     raise ValueError("The global transformation does not exist.")
@@ -558,6 +589,8 @@ class Registration:
             else:
                 img = _get_vtImage(dataset, t, new_scale, axis, None, downsample)
                 data[_make_index(t, axis, None)] = vt.apply_trsf(img, trnsf).copy_to_array()
+
+            data.attrs["computed"] = t
 
         return data
 

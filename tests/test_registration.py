@@ -40,7 +40,7 @@ class TestRegistration(unittest.TestCase):
                 os.path.join(self.test_folder, "channel_1", "sphere_{:02d}.tiff"),
                 os.path.join(self.test_folder, "channel_2", "sphere_{:02d}.tiff")             
             ]
-            , axis_data="CT", axis_files="XYZ", scale=(3,2,1))
+            , axis_data="CT", axis_files="XYZ", scale=(1,2,3))
 
         dataset.to_zarr(self.zarr_file)
         dataset_zarr = zarr.open_array(self.zarr_file, mode="r")
@@ -90,7 +90,7 @@ class TestRegistration(unittest.TestCase):
                 os.path.join(self.test_folder, "channel_1", "sphere_{:02d}.tiff"),
                 os.path.join(self.test_folder, "channel_2", "sphere_{:02d}.tiff")             
             ]
-            , axis_data="CT", axis_files="XYZ", scale=(3,2,1))
+            , axis_data="CT", axis_files="XYZ", scale=(1,2,3))
 
         dataset.to_zarr(self.zarr_file)
         dataset_zarr = zarr.open_array(self.zarr_file, mode="r")
@@ -103,7 +103,8 @@ class TestRegistration(unittest.TestCase):
             #Dataset
             transformation.fit(dataset=dataset, use_channel=0, save_behavior="Continue")
             transformation = load_registration(self.trnsf_folder)
-            data = transformation.apply(dataset=dataset, use_channel=0, save_behavior="Continue")
+            data = transformation.apply(dataset=dataset, save_behavior="Overwrite")
+            print(data.shape, data.attrs["scale"])
 
             # Check if the max from all files is around the center of the image
             for channel in range(3):
