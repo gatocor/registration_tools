@@ -230,20 +230,62 @@ You can create a dataset object with the following code:</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="registration_tools.dataset.Dataset.to_zarr">
-<span class="sig-name descname"><span class="pre">to_zarr</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">file</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/registration_tools/dataset/dataset.html#Dataset.to_zarr"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#registration_tools.dataset.Dataset.to_zarr" title="Link to this definition">¶</a></dt>
-<dd><p>Save the dataset to a Zarr array. Zarr is a format that stores multidimensional arrays in a chunked, compressed, and efficient manner.</p>
+<span class="sig-name descname"><span class="pre">to_zarr</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">file</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">flavor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'dask'</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/registration_tools/dataset/dataset.html#Dataset.to_zarr"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#registration_tools.dataset.Dataset.to_zarr" title="Link to this definition">¶</a></dt>
+<dd><p>Save the dataset to a Zarr file.</p>
+<p>Parameters:
+file (str or store): The file path or store to save the Zarr file.
+flavor (str, optional): The method to use for saving. Options are ‘legacy’ or ‘dask’. Default is ‘dask’.
+<a href="#id1"><span class="problematic" id="id2">**</span></a>kwargs: Additional keyword arguments to pass to the respective saving method.</p>
+<p>Raises:
+ValueError: If an invalid flavor is provided.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="registration_tools.dataset.Dataset.to_zarr_dask">
+<span class="sig-name descname"><span class="pre">to_zarr_dask</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">file</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/registration_tools/dataset/dataset.html#Dataset.to_zarr_dask"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#registration_tools.dataset.Dataset.to_zarr_dask" title="Link to this definition">¶</a></dt>
+<dd><p>Save the dataset to a Zarr file using Dask for parallel processing.</p>
 <section id="parameters">
 <h2>Parameters:<a class="headerlink" href="#parameters" title="Link to this heading">¶</a></h2>
 <dl class="simple">
-<dt>file<span class="classifier">str or zarr.storage.Store</span></dt><dd><p>The file path or Zarr store where the array will be saved.</p>
+<dt>file<span class="classifier">str or MutableMapping</span></dt><dd><p>The file path or MutableMapping to save the Zarr file.</p>
 </dd>
-<dt><a href="#id1"><span class="problematic" id="id2">**</span></a>kwargs<span class="classifier">dict</span></dt><dd><p>Additional keyword arguments to pass to <cite>zarr.create_array</cite>.</p>
+<dt><a href="#id3"><span class="problematic" id="id4">**</span></a>kwargs<span class="classifier">dict</span></dt><dd><p>Additional keyword arguments to pass to the <cite>to_zarr</cite> method.</p>
 </dd>
 </dl>
 </section>
 <section id="returns">
 <h2>Returns:<a class="headerlink" href="#returns" title="Link to this heading">¶</a></h2>
 <p>None</p>
+</section>
+<section id="notes">
+<h2>Notes:<a class="headerlink" href="#notes" title="Link to this heading">¶</a></h2>
+<p>This method uses Dask to parallelize the reading and saving of images.
+The <cite>_read_image</cite> function is delayed to allow for parallel execution.
+A progress bar is displayed using <cite>_TqdmCallback</cite> to show the saving progress.</p>
+</section>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="registration_tools.dataset.Dataset.to_zarr_legacy">
+<span class="sig-name descname"><span class="pre">to_zarr_legacy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">file</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/registration_tools/dataset/dataset.html#Dataset.to_zarr_legacy"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#registration_tools.dataset.Dataset.to_zarr_legacy" title="Link to this definition">¶</a></dt>
+<dd><p>Save the dataset to a Zarr array using the legacy method.</p>
+<section id="id5">
+<h2>Parameters:<a class="headerlink" href="#id5" title="Link to this heading">¶</a></h2>
+<dl class="simple">
+<dt>file<span class="classifier">str or zarr.storage.Store</span></dt><dd><p>The file path or Zarr store where the array will be saved.</p>
+</dd>
+<dt><a href="#id6"><span class="problematic" id="id7">**</span></a>kwargs<span class="classifier">dict</span></dt><dd><p>Additional keyword arguments to pass to <cite>zarr.create</cite>.</p>
+</dd>
+</dl>
+</section>
+<section id="id8">
+<h2>Returns:<a class="headerlink" href="#id8" title="Link to this heading">¶</a></h2>
+<p>None</p>
+</section>
+<section id="id9">
+<h2>Notes:<a class="headerlink" href="#id9" title="Link to this heading">¶</a></h2>
+<p>This method saves the dataset to a Zarr array without parallel processing.
+It iterates over the dataset and saves each image sequentially.</p>
 </section>
 </dd></dl>
 

@@ -41,6 +41,22 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">h5py</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">zarr</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">tqdm</span><span class="w"> </span><span class="kn">import</span> <span class="n">tqdm</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dask</span><span class="w"> </span><span class="kn">import</span> <span class="n">delayed</span><span class="p">,</span> <span class="n">compute</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">dask.array</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">da</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dask.diagnostics</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callback</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">_TqdmCallback</span><span class="p">(</span><span class="n">Callback</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tqdm_bar</span> <span class="o">=</span> <span class="n">tqdm</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_start_state</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dsk</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tqdm_bar</span><span class="o">.</span><span class="n">reset</span><span class="p">(</span><span class="n">total</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="s1">&#39;dependencies&#39;</span><span class="p">]))</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_pretask</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">dsk</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
+        <span class="k">pass</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_posttask</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">result</span><span class="p">,</span> <span class="n">dsk</span><span class="p">,</span> <span class="n">state</span><span class="p">,</span> <span class="nb">id</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tqdm_bar</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_finish</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dsk</span><span class="p">,</span> <span class="n">state</span><span class="p">,</span> <span class="n">errored</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tqdm_bar</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
 
 <div class="viewcode-block" id="check_dataset_structure">
 <a class="viewcode-back" href="../../../API_dataset.html#registration_tools.dataset.check_dataset_structure">[docs]</a>
@@ -368,25 +384,30 @@
 
         <span class="k">return</span> <span class="n">img_total</span>
     
-<div class="viewcode-block" id="Dataset.to_zarr">
-<a class="viewcode-back" href="../../../API_dataset.html#registration_tools.dataset.Dataset.to_zarr">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">to_zarr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">file</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<div class="viewcode-block" id="Dataset.to_zarr_legacy">
+<a class="viewcode-back" href="../../../API_dataset.html#registration_tools.dataset.Dataset.to_zarr_legacy">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_zarr_legacy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">file</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Save the dataset to a Zarr array. Zarr is a format that stores multidimensional arrays in a chunked, compressed, and efficient manner.</span>
+<span class="sd">        Save the dataset to a Zarr array using the legacy method.</span>
 
 <span class="sd">        Parameters:</span>
 <span class="sd">        -----------</span>
 <span class="sd">        file : str or zarr.storage.Store</span>
 <span class="sd">            The file path or Zarr store where the array will be saved.</span>
 <span class="sd">        **kwargs : dict</span>
-<span class="sd">            Additional keyword arguments to pass to `zarr.create_array`.</span>
+<span class="sd">            Additional keyword arguments to pass to `zarr.create`.</span>
 
 <span class="sd">        Returns:</span>
 <span class="sd">        --------</span>
 <span class="sd">        None</span>
+
+<span class="sd">        Notes:</span>
+<span class="sd">        ------</span>
+<span class="sd">        This method saves the dataset to a Zarr array without parallel processing.</span>
+<span class="sd">        It iterates over the dataset and saves each image sequentially.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
 
-        <span class="n">z</span> <span class="o">=</span> <span class="n">zarr</span><span class="o">.</span><span class="n">create_array</span><span class="p">(</span>
+        <span class="n">z</span> <span class="o">=</span> <span class="n">zarr</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
             <span class="n">store</span><span class="o">=</span><span class="n">file</span><span class="p">,</span>
             <span class="n">shape</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
             <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span>
@@ -398,6 +419,66 @@
 
         <span class="n">z</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s1">&#39;axis&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_axis</span>
         <span class="n">z</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s1">&#39;scale&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Dataset.to_zarr_dask">
+<a class="viewcode-back" href="../../../API_dataset.html#registration_tools.dataset.Dataset.to_zarr_dask">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_zarr_dask</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">file</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Save the dataset to a Zarr file using Dask for parallel processing.</span>
+
+<span class="sd">        Parameters:</span>
+<span class="sd">        -----------</span>
+<span class="sd">        file : str or MutableMapping</span>
+<span class="sd">            The file path or MutableMapping to save the Zarr file.</span>
+<span class="sd">        **kwargs : dict</span>
+<span class="sd">            Additional keyword arguments to pass to the `to_zarr` method.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">        --------</span>
+<span class="sd">        None</span>
+
+<span class="sd">        Notes:</span>
+<span class="sd">        ------</span>
+<span class="sd">        This method uses Dask to parallelize the reading and saving of images.</span>
+<span class="sd">        The `_read_image` function is delayed to allow for parallel execution.</span>
+<span class="sd">        A progress bar is displayed using `_TqdmCallback` to show the saving progress.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="nd">@delayed</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">_read_image</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">idx</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">path</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+
+        <span class="n">shape</span> <span class="o">=</span> <span class="bp">self</span><span class="p">[</span><span class="nb">list</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ndindex</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="o">.</span><span class="n">shape</span><span class="p">))[</span><span class="mi">0</span><span class="p">]]</span><span class="o">.</span><span class="n">shape</span>
+        <span class="n">delayed_arrays</span> <span class="o">=</span> <span class="p">[</span><span class="n">da</span><span class="o">.</span><span class="n">from_delayed</span><span class="p">(</span><span class="n">_read_image</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">idx</span><span class="p">),</span> <span class="n">shape</span><span class="o">=</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span> <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">np</span><span class="o">.</span><span class="n">ndindex</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="o">.</span><span class="n">shape</span><span class="p">)]</span>
+        <span class="n">new_array</span> <span class="o">=</span> <span class="n">da</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">delayed_arrays</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+
+        <span class="k">with</span> <span class="n">_TqdmCallback</span><span class="p">(</span><span class="n">desc</span><span class="o">=</span><span class="s2">&quot;Saving to Zarr&quot;</span><span class="p">,</span> <span class="n">unit</span><span class="o">=</span><span class="s2">&quot;images&quot;</span><span class="p">):</span>
+            <span class="n">new_array</span><span class="o">.</span><span class="n">to_zarr</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Dataset.to_zarr">
+<a class="viewcode-back" href="../../../API_dataset.html#registration_tools.dataset.Dataset.to_zarr">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_zarr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">file</span><span class="p">,</span> <span class="n">flavor</span><span class="o">=</span><span class="s2">&quot;dask&quot;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Save the dataset to a Zarr file.</span>
+
+<span class="sd">        Parameters:</span>
+<span class="sd">        file (str or store): The file path or store to save the Zarr file.</span>
+<span class="sd">        flavor (str, optional): The method to use for saving. Options are &#39;legacy&#39; or &#39;dask&#39;. Default is &#39;dask&#39;.</span>
+<span class="sd">        **kwargs: Additional keyword arguments to pass to the respective saving method.</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">        ValueError: If an invalid flavor is provided.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="k">if</span> <span class="n">flavor</span> <span class="o">==</span> <span class="s2">&quot;legacy&quot;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">to_zarr_legacy</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">flavor</span> <span class="o">==</span> <span class="s2">&quot;dask&quot;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">to_zarr_dask</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Invalid flavor. Choose between &#39;legacy&#39; and &#39;dask&#39;.&quot;</span><span class="p">)</span></div>
 </div>
 
 </pre></div>
