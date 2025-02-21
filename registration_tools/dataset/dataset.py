@@ -8,6 +8,22 @@ from copy import deepcopy
 import h5py
 import zarr
 from tqdm import tqdm
+from dask import delayed, compute
+import dask.array as da
+from dask.diagnostics import Callback
+
+class _TqdmCallback(Callback):
+    def __init__(self, *args, **kwargs):
+        self.tqdm_bar = tqdm(*args, **kwargs)
+        super().__init__()
+    def _start_state(self, dsk, state):
+        self.tqdm_bar.reset(total=len(state['dependencies']))
+    def _pretask(self, key, dsk, state):
+        pass
+    def _posttask(self, key, result, dsk, state, id):
+        self.tqdm_bar.update(1)
+    def _finish(self, dsk, state, errored):
+        self.tqdm_bar.close()
 
 def check_dataset_structure(data):
     """
@@ -324,23 +340,28 @@ class Dataset:
 
         return img_total
     
-    def to_zarr(self, file, **kwargs):
+    def to_zarr_legacy(self, file, **kwargs):
         """
-        Save the dataset to a Zarr array. Zarr is a format that stores multidimensional arrays in a chunked, compressed, and efficient manner.
+        Save the dataset to a Zarr array using the legacy method.
 
         Parameters:
         -----------
         file : str or zarr.storage.Store
             The file path or Zarr store where the array will be saved.
         **kwargs : dict
-            Additional keyword arguments to pass to `zarr.create_array`.
+            Additional keyword arguments to pass to `zarr.create`.
 
         Returns:
         --------
         None
+
+        Notes:
+        ------
+        This method saves the dataset to a Zarr array without parallel processing.
+        It iterates over the dataset and saves each image sequentially.
         """
 
-        z = zarr.create_array(
+        z = zarr.create(
             store=file,
             shape=self.shape,
             dtype=self.dtype,
@@ -352,3 +373,57 @@ class Dataset:
 
         z.attrs['axis'] = self._axis
         z.attrs['scale'] = tuple(self.scale)
+
+    def to_zarr_dask(self, file, **kwargs):
+        """
+        Save the dataset to a Zarr file using Dask for parallel processing.
+
+        Parameters:
+        -----------
+        file : str or MutableMapping
+            The file path or MutableMapping to save the Zarr file.
+        **kwargs : dict
+            Additional keyword arguments to pass to the `to_zarr` method.
+
+        Returns:
+        --------
+        None
+
+        Notes:
+        ------
+        This method uses Dask to parallelize the reading and saving of images.
+        The `_read_image` function is delayed to allow for parallel execution.
+        A progress bar is displayed using `_TqdmCallback` to show the saving progress.
+        """
+
+        @delayed
+        def _read_image(path, idx):
+            return path[idx]
+
+        shape = self[list(np.ndindex(self._data.shape))[0]].shape
+        delayed_arrays = [da.from_delayed(_read_image(self, idx), shape=shape, dtype=self.dtype) for idx in np.ndindex(self._data.shape)]
+        new_array = da.stack(delayed_arrays).reshape(self.shape)
+
+        with _TqdmCallback(desc="Saving to Zarr", unit="images"):
+            new_array.to_zarr(file, **kwargs)
+
+    def to_zarr(self, file, flavor="dask", **kwargs):
+        """
+        Save the dataset to a Zarr file.
+
+        Parameters:
+        file (str or store): The file path or store to save the Zarr file.
+        flavor (str, optional): The method to use for saving. Options are 'legacy' or 'dask'. Default is 'dask'.
+        **kwargs: Additional keyword arguments to pass to the respective saving method.
+
+        Raises:
+        ValueError: If an invalid flavor is provided.
+
+        """
+
+        if flavor == "legacy":
+            self.to_zarr_legacy(file, **kwargs)
+        elif flavor == "dask":
+            self.to_zarr_dask(file, **kwargs)
+        else:
+            raise ValueError("Invalid flavor. Choose between 'legacy' and 'dask'.")
