@@ -407,6 +407,11 @@ class Dataset:
         with _TqdmCallback(desc="Saving to Zarr", unit="images"):
             new_array.to_zarr(file, **kwargs)
 
+        #add attributes
+        z = zarr.open_array(file, mode="r+")
+        z.attrs['axis'] = self._axis
+        z.attrs['scale'] = tuple(self.scale)
+
     def to_zarr(self, file, flavor="dask", **kwargs):
         """
         Save the dataset to a Zarr file.

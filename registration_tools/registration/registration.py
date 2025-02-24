@@ -478,17 +478,17 @@ class Registration:
 
                 #check data extremes
                 padding_reference = [(0,j) for i,j in _dict_axis_shape(axis, dataset.shape).items() if i in "XYZ"][::-1]
-                print(padding_reference)
-                print(self._padding_box_to_points(padding_reference, scale[::-1]).min(axis=0),"\n",self._padding_box_to_points(padding_reference, scale[::-1]).max(axis=0))
+                # print(padding_reference)
+                # print(self._padding_box_to_points(padding_reference, scale[::-1]).min(axis=0),"\n",self._padding_box_to_points(padding_reference, scale[::-1]).max(axis=0))
                 points_vt = vt.vtPointList(self._padding_box_to_points(padding_reference, scale[::-1]))
                 points_vt_out = vt.apply_trsf_to_points(points_vt, vt.inv_trsf(trnsf_global))
                 # for i in points_vt_out.copy_to_array():
                 #     points.append((pos_float, 0, *i[::-1]))
-                print(points_vt_out.copy_to_array())
-                print(points_vt_out.copy_to_array().min(axis=0),"\n",points_vt_out.copy_to_array().max(axis=0))
+                # print(points_vt_out.copy_to_array())
+                # print(points_vt_out.copy_to_array().min(axis=0),"\n",points_vt_out.copy_to_array().max(axis=0))
                 padding_box = self._points_to_padding_box(points_vt_out.copy_to_array(), scale[::-1])
-                print(padding_box)
-                print()
+                # print(padding_box)
+                # print()
                 self._padding_box = [(int(min(i[0], j[0])), int(max(i[1], j[1]))) for i, j in zip(self._padding_box, padding_box)]
 
             if self._out is not None:
@@ -496,7 +496,7 @@ class Registration:
                 self.save()
                 self._padding_box = self._padding_box[::-1]
         
-        print(self._padding_box)
+        # print(self._padding_box)
         self._padding_box = self._padding_box[::-1]
         self._fitted = True
         if self._out is not None:
