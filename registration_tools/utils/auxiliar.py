@@ -36,6 +36,19 @@ def _get_axis_scale(mask, axis, scale):
         
     return axis, scale
 
+def _shape_padded(shape, axis, padding):
+    
+    new_shape=[]
+    pos = 0
+    for i,(j,k) in enumerate(zip(axis,shape)):
+        if j in "XYZ":
+            new_shape.append(padding[pos][1]-padding[pos][0])
+            pos += 1
+        else:
+            new_shape.append(k)
+
+    return new_shape
+
 def _shape_downsampled(shape, axis, downsample):
 
     new_shape=[]

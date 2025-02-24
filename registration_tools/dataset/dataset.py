@@ -17,7 +17,7 @@ class _TqdmCallback(Callback):
         self.tqdm_bar = tqdm(*args, **kwargs)
         super().__init__()
     def _start_state(self, dsk, state):
-        self.tqdm_bar.reset(total=len(state['dependencies']))
+        self.tqdm_bar.reset(total=len(dsk))
     def _pretask(self, key, dsk, state):
         pass
     def _posttask(self, key, result, dsk, state, id):
