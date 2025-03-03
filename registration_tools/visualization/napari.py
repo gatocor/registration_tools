@@ -11,7 +11,7 @@ import dask.array as da
 from skimage.io import imread, imsave
 from ..utils.auxiliar import _make_index
 
-def add_image(viewer, dataset, scale=None, **kwargs):
+def add_image(viewer, dataset, split_channel=None, scale=None, **kwargs):
     """
     Plots the images in the dataset in the viewer.
 
@@ -29,7 +29,11 @@ def add_image(viewer, dataset, scale=None, **kwargs):
         axis = dataset.attrs["axis"]
         scale = dataset.attrs["scale"]
 
-    viewer.add_image(dataset, scale=scale, **kwargs)
+    if split_channel is not None:
+        for i in range(2):
+            viewer.add_image(da.from_zarr(dataset)[i,:,:,:,:])
+    else:
+        viewer.add_image(dataset, scale=scale, **kwargs)
 
 def add_image_difference(viewer, dataset, dt=1, cmap1="red", cmap2="green", opacity1=1, opacity2=0.5, scale=None, **kwargs):
 

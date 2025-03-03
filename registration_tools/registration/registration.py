@@ -164,7 +164,7 @@ class Registration:
         args_registration (str, optional): Additional arguments for the registration process. Default is an empty string.
         """
 
-        rigid_transformations = ["translation2D", "translation3D", "translation", "rigid2D", "rigid3D", "rigid"]
+        rigid_transformations = ["translation2D", "translation3D", "translation", "rigid2D", "rigid3D", "rigid", "rotation2D", "rotation3D", "rotation"]
         registration_directions = ["forward", "backward"]
 
         self._registration_type = registration_type
@@ -315,6 +315,7 @@ class Registration:
             registration_args = " -no-verbose"
         registration_args += f" -transformation-type {registration_type} -pyramid-lowest-level {pyramid_lowest_level} -pyramid-highest-level {pyramid_highest_level} "
         registration_args += args_registration
+        registration_args.replace("rotation", "rigid")
 
         return registration_args
     
@@ -427,6 +428,11 @@ class Registration:
                     else:
                         with _suppress_stdout_stderr():
                             trnsf = vt.blockmatching(img_float, image_ref=img_ref, params=registration_args)
+
+                    if "rotation" in self._registration_type:
+                        trnsf_matrix = trnsf.copy_to_array()
+                        trnsf_matrix[:self._n_spatial, -1] = 0
+                        trnsf = vt.vtTransformation(trnsf_matrix)
 
                     if trnsf is None:
                         failed = True
