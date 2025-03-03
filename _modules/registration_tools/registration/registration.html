@@ -205,7 +205,7 @@
 <span class="sd">        args_registration (str, optional): Additional arguments for the registration process. Default is an empty string.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
 
-        <span class="n">rigid_transformations</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;translation2D&quot;</span><span class="p">,</span> <span class="s2">&quot;translation3D&quot;</span><span class="p">,</span> <span class="s2">&quot;translation&quot;</span><span class="p">,</span> <span class="s2">&quot;rigid2D&quot;</span><span class="p">,</span> <span class="s2">&quot;rigid3D&quot;</span><span class="p">,</span> <span class="s2">&quot;rigid&quot;</span><span class="p">]</span>
+        <span class="n">rigid_transformations</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;translation2D&quot;</span><span class="p">,</span> <span class="s2">&quot;translation3D&quot;</span><span class="p">,</span> <span class="s2">&quot;translation&quot;</span><span class="p">,</span> <span class="s2">&quot;rigid2D&quot;</span><span class="p">,</span> <span class="s2">&quot;rigid3D&quot;</span><span class="p">,</span> <span class="s2">&quot;rigid&quot;</span><span class="p">,</span> <span class="s2">&quot;rotation2D&quot;</span><span class="p">,</span> <span class="s2">&quot;rotation3D&quot;</span><span class="p">,</span> <span class="s2">&quot;rotation&quot;</span><span class="p">]</span>
         <span class="n">registration_directions</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;forward&quot;</span><span class="p">,</span> <span class="s2">&quot;backward&quot;</span><span class="p">]</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_registration_type</span> <span class="o">=</span> <span class="n">registration_type</span>
@@ -383,6 +383,7 @@
             <span class="n">registration_args</span> <span class="o">=</span> <span class="s2">&quot; -no-verbose&quot;</span>
         <span class="n">registration_args</span> <span class="o">+=</span> <span class="sa">f</span><span class="s2">&quot; -transformation-type </span><span class="si">{</span><span class="n">registration_type</span><span class="si">}</span><span class="s2"> -pyramid-lowest-level </span><span class="si">{</span><span class="n">pyramid_lowest_level</span><span class="si">}</span><span class="s2"> -pyramid-highest-level </span><span class="si">{</span><span class="n">pyramid_highest_level</span><span class="si">}</span><span class="s2"> &quot;</span>
         <span class="n">registration_args</span> <span class="o">+=</span> <span class="n">args_registration</span>
+        <span class="n">registration_args</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot;rotation&quot;</span><span class="p">,</span> <span class="s2">&quot;rigid&quot;</span><span class="p">)</span>
 
         <span class="k">return</span> <span class="n">registration_args</span>
     
@@ -497,6 +498,11 @@
                     <span class="k">else</span><span class="p">:</span>
                         <span class="k">with</span> <span class="n">_suppress_stdout_stderr</span><span class="p">():</span>
                             <span class="n">trnsf</span> <span class="o">=</span> <span class="n">vt</span><span class="o">.</span><span class="n">blockmatching</span><span class="p">(</span><span class="n">img_float</span><span class="p">,</span> <span class="n">image_ref</span><span class="o">=</span><span class="n">img_ref</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="n">registration_args</span><span class="p">)</span>
+
+                    <span class="k">if</span> <span class="s2">&quot;rotation&quot;</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_registration_type</span><span class="p">:</span>
+                        <span class="n">trnsf_matrix</span> <span class="o">=</span> <span class="n">trnsf</span><span class="o">.</span><span class="n">copy_to_array</span><span class="p">()</span>
+                        <span class="n">trnsf_matrix</span><span class="p">[:</span><span class="bp">self</span><span class="o">.</span><span class="n">_n_spatial</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+                        <span class="n">trnsf</span> <span class="o">=</span> <span class="n">vt</span><span class="o">.</span><span class="n">vtTransformation</span><span class="p">(</span><span class="n">trnsf_matrix</span><span class="p">)</span>
 
                     <span class="k">if</span> <span class="n">trnsf</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                         <span class="n">failed</span> <span class="o">=</span> <span class="kc">True</span>
@@ -1071,7 +1077,7 @@
       &#169;.
       
       |
-      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 8.2.1</a>
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 8.2.3</a>
       &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
       
     </div>
