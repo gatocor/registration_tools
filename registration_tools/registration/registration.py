@@ -315,7 +315,7 @@ class Registration:
             registration_args = " -no-verbose"
         registration_args += f" -transformation-type {registration_type} -pyramid-lowest-level {pyramid_lowest_level} -pyramid-highest-level {pyramid_highest_level} "
         registration_args += args_registration
-        registration_args.replace("rotation", "rigid")
+        registration_args = registration_args.replace("rotation", "rigid")
 
         return registration_args
     
@@ -429,11 +429,6 @@ class Registration:
                         with _suppress_stdout_stderr():
                             trnsf = vt.blockmatching(img_float, image_ref=img_ref, params=registration_args)
 
-                    if "rotation" in self._registration_type:
-                        trnsf_matrix = trnsf.copy_to_array()
-                        trnsf_matrix[:self._n_spatial, -1] = 0
-                        trnsf = vt.vtTransformation(trnsf_matrix)
-
                     if trnsf is None:
                         failed = True
                         counter += 1
@@ -458,6 +453,13 @@ class Registration:
                             self._failed[f"{pos_float:04d}_{pos_ref:04d}"] = registration_args
                         registration_args = self._make_registration_args(verbose=verbose)
                         keep = False
+
+                if "rotation" in self._registration_type:
+                    center = vt.vtPointList([[i/2 for i in self._box[::-1]]])
+                    center_moved = vt.apply_trsf_to_points(center, trnsf)
+                    compensation = np.eye(self._n_spatial+1)
+                    compensation[:self._n_spatial, -1] = center.copy_to_array()[0] - center_moved.copy_to_array()[0]
+                    trnsf = vt.compose_trsf([vt.vtTransformation(compensation), trnsf])
 
                 self._save_transformation_relative(trnsf, pos_float, pos_ref)
 
@@ -552,7 +554,10 @@ class Registration:
 
         # Scale
         new_scale = tuple([i * j for i, j in zip(scale, downsample)])
-        padded_shape = _shape_padded(dataset.shape, axis, self._padding_box)
+        if padding:
+            padded_shape = _shape_padded(dataset.shape, axis, self._padding_box)
+        else:
+            padded_shape = dataset.shape
         new_shape = _shape_downsampled(padded_shape, axis, downsample)
 
         # Suppress skimage warnings for low contrast images
@@ -602,20 +607,23 @@ class Registration:
             raise ValueError("The output must be None or a the name to a zarr file.")
 
         mt = np.eye(4)
-        padding_drift = [i[0]*j for i,j in zip(self._padding_box, scale)][::-1]
-        mt[:3,3] = np.array(padding_drift)
-        padding_trnsf = vt.vtTransformation(mt)
+        if padding:
+            padding_drift = [i[0]*j for i,j in zip(self._padding_box, scale)][::-1]
+            mt[:3,3] = np.array(padding_drift)
+            padding_trnsf = vt.vtTransformation(mt)
 
         if self._registration_direction == "backward":
             origin = 0
             iterator = range(1, new_shape[np.where([i == "T" for i in axis])[0][0]])
             if "C" in axis:
                 for ch in range(new_shape[np.where([i == "C" for i in axis])[0][0]]):
-                    img = _get_vtImage(dataset, 0, new_scale, axis, ch, downsample, self._padding_box)
+                    img = _get_vtImage(dataset, 0, new_scale, axis, ch, downsample)
                     img_ref = vt.vtImage(np.zeros([j for i,j in _dict_axis_shape(axis, data.shape).items() if i in "XYZ"], dtype="uint8"))
                     img_ref.setSpacing(new_scale[::-1])
-                    im_trnsf = vt.apply_trsf(img, padding_trnsf, ref=img_ref)
-                    im = im_trnsf.copy_to_array()
+                    if padding:
+                        im = vt.apply_trsf(img, padding_trnsf, ref=img_ref).copy_to_array()
+                    else:
+                        im = img.copy_to_array()
                     data[_make_index(0, axis, ch)] = im
             else:
                 data[_make_index(0, axis, None)] = dataset[_make_index(0, axis, None, downsample)]
@@ -624,7 +632,7 @@ class Registration:
             iterator = range(new_shape[np.where([i == "T" for i in axis])[0][0]] - 1, 0, -1)
             if "C" in axis:
                 for ch in range(new_shape[np.where([i == "C" for i in axis])[0][0]]):
-                    img = _get_vtImage(dataset, origin, new_scale, axis, ch, downsample, self._padding_box)
+                    img = _get_vtImage(dataset, origin, new_scale, axis, ch, downsample)
                     data[_make_index(new_shape[np.where([i == "T" for i in axis])[0][0]] - 1, axis, ch)] = img.copy_to_array()
             else:
                 data[_make_index(new_shape[np.where([i == "T" for i in axis])[0][0]] - 1, axis, None)] = dataset[_make_index(dataset.shape[np.where([i == "T" for i in axis])[0][0]] - 1, axis, None, downsample)]
@@ -650,16 +658,22 @@ class Registration:
 
             if "C" in axis:
                 for ch in range(new_shape[np.where([i == "C" for i in axis])[0][0]]):
-                    img = _get_vtImage(dataset, t, new_scale, axis, ch, downsample, self._padding_box)
-                    joint_trnsf = vt.compose_trsf([trnsf,padding_trnsf])
+                    img = _get_vtImage(dataset, t, new_scale, axis, ch, downsample)
+                    if padding:
+                        joint_trnsf = vt.compose_trsf([trnsf,padding_trnsf])
+                    else:
+                        joint_trnsf = trnsf
                     img_ref = vt.vtImage(np.zeros([j for i,j in _dict_axis_shape(axis, data.shape).items() if i in "XYZ"]))
                     img_ref.setSpacing(scale[::-1])
                     im_trnsf = vt.apply_trsf(img, joint_trnsf, ref=img_ref)
                     im = im_trnsf.copy_to_array()
                     data[_make_index(t, axis, ch)] = im
             else:
-                img = _get_vtImage(dataset, t, new_scale, axis, None, downsample, self._padding_box)
-                joint_trnsf = vt.compose_trsf([trnsf,padding_trnsf])
+                img = _get_vtImage(dataset, t, new_scale, axis, None, downsample)
+                if padding:
+                    joint_trnsf = vt.compose_trsf([trnsf,padding_trnsf])
+                else:
+                    joint_trnsf = trnsf
                 img_ref = vt.vtImage(np.zeros([j for i,j in _dict_axis_shape(axis, data.shape).items() if i in "XYZ"]))
                 img_ref.setSpacing(scale[::-1])
                 im = vt.apply_trsf(img, joint_trnsf, ref=img_ref).copy_to_array()
