@@ -148,7 +148,7 @@ class Registration:
             perfom_global_trnsf=None, 
             pyramid_lowest_level=0, 
             pyramid_highest_level=3, 
-            registration_direction="backward", 
+            registration_direction="backward",
             args_registration="",
         ):
         """
@@ -188,6 +188,7 @@ class Registration:
         self._box = None
         self._t_max = None
         self._origin = None
+        self._stepping = 1
         self._transfs = {}
         self._failed = {}
 
@@ -329,7 +330,7 @@ class Registration:
             box.append((points_scaled[:, i].min(), points_scaled[:, i].max()))
         return box
 
-    def fit(self, dataset, use_channel=None, axis=None, scale=None, downsample=None, save_behavior="Continue", verbose=False):
+    def fit(self, dataset, use_channel=None, axis=None, scale=None, downsample=None, stepping=1, save_behavior="Continue", verbose=False):
         """
         Registers a dataset and saves the results to the specified path.
         """
@@ -382,20 +383,50 @@ class Registration:
         # Suppress skimage warnings for low contrast images
         warnings.filterwarnings("ignore", category=UserWarning, message=".*low contrast image.*")
 
+        # Stepping
+        self._stepping = stepping
+
         # Set registration direction
         self._t_max = _dict_axis_shape(axis, dataset.shape)["T"]
         if self._registration_direction == "backward":
             origin = 0
+            iterations = []
+            iterations_next = []
+            for i in range(stepping):
+                if i != origin:
+                    iterations.append(origin)
+                    iterations_next.append(i)
+                for j in range(i, self._t_max, stepping):
+                    if self._t_max <= stepping+j:
+                        break
+                    iterations.append(j)
+                    iterations_next.append(j+stepping)
+
+            # print([(i,j) for i,j in zip(iterations, iterations_next)])
             iterator = zip(
-                range(self._t_max-1),
-                range(1,self._t_max)
+                iterations,
+                iterations_next
             )
         else:
             origin = self._t_max - 1
+            iterations = []
+            iterations_next = []
+            for i in range(self._t_max-1, self._t_max-stepping-1, -1):
+                if i != origin:
+                    iterations.append(origin)
+                    iterations_next.append(i)
+                for j in range(i, 0, -stepping):
+                    if j-stepping < 0:
+                        break
+                    iterations.append(j)
+                    iterations_next.append(j-stepping)
+
+            # print([(i,j) for i,j in zip(iterations, iterations_next)])
             iterator = zip(
-                range(self._t_max-1, 0, -1),
-                range(self._t_max-2, -1, -1)
+                iterations,
+                iterations_next
             )
+
         self._origin = origin
 
         if self._out is not None:
@@ -486,17 +517,9 @@ class Registration:
 
                 #check data extremes
                 padding_reference = [(0,j) for i,j in _dict_axis_shape(axis, dataset.shape).items() if i in "XYZ"][::-1]
-                # print(padding_reference)
-                # print(self._padding_box_to_points(padding_reference, scale[::-1]).min(axis=0),"\n",self._padding_box_to_points(padding_reference, scale[::-1]).max(axis=0))
                 points_vt = vt.vtPointList(self._padding_box_to_points(padding_reference, scale[::-1]))
                 points_vt_out = vt.apply_trsf_to_points(points_vt, vt.inv_trsf(trnsf_global))
-                # for i in points_vt_out.copy_to_array():
-                #     points.append((pos_float, 0, *i[::-1]))
-                # print(points_vt_out.copy_to_array())
-                # print(points_vt_out.copy_to_array().min(axis=0),"\n",points_vt_out.copy_to_array().max(axis=0))
                 padding_box = self._points_to_padding_box(points_vt_out.copy_to_array(), scale[::-1])
-                # print(padding_box)
-                # print()
                 self._padding_box = [(int(min(i[0], j[0])), int(max(i[1], j[1]))) for i, j in zip(self._padding_box, padding_box)]
 
             if self._out is not None:
@@ -615,27 +638,34 @@ class Registration:
         if self._registration_direction == "backward":
             origin = 0
             iterator = range(1, new_shape[np.where([i == "T" for i in axis])[0][0]])
-            if "C" in axis:
-                for ch in range(new_shape[np.where([i == "C" for i in axis])[0][0]]):
-                    img = _get_vtImage(dataset, 0, new_scale, axis, ch, downsample)
-                    img_ref = vt.vtImage(np.zeros([j for i,j in _dict_axis_shape(axis, data.shape).items() if i in "XYZ"], dtype="uint8"))
-                    img_ref.setSpacing(new_scale[::-1])
-                    if padding:
-                        im = vt.apply_trsf(img, padding_trnsf, ref=img_ref).copy_to_array()
-                    else:
-                        im = img.copy_to_array()
-                    data[_make_index(0, axis, ch)] = im
-            else:
-                data[_make_index(0, axis, None)] = dataset[_make_index(0, axis, None, downsample)]
+            # if "C" in axis:
+            #     for ch in range(new_shape[np.where([i == "C" for i in axis])[0][0]]):
+            #         img = _get_vtImage(dataset, origin, new_scale, axis, ch, downsample)
+            #         img_ref = vt.vtImage(np.zeros([j for i,j in _dict_axis_shape(axis, data.shape).items() if i in "XYZ"], dtype="uint8"))
+            #         img_ref.setSpacing(new_scale[::-1])
+            #         if padding:
+            #             im = vt.apply_trsf(img, padding_trnsf, ref=img_ref).copy_to_array()
+            #         else:
+            #             im = img.copy_to_array()
+            #         data[_make_index(origin, axis, ch)] = im
+            # else:
+            #     data[_make_index(origin, axis, None)] = dataset[_make_index(0, axis, None, downsample)]
         else:
             origin = new_shape[np.where([i == "T" for i in axis])[0][0]] - 1
-            iterator = range(new_shape[np.where([i == "T" for i in axis])[0][0]] - 1, 0, -1)
-            if "C" in axis:
-                for ch in range(new_shape[np.where([i == "C" for i in axis])[0][0]]):
-                    img = _get_vtImage(dataset, origin, new_scale, axis, ch, downsample)
-                    data[_make_index(new_shape[np.where([i == "T" for i in axis])[0][0]] - 1, axis, ch)] = img.copy_to_array()
-            else:
-                data[_make_index(new_shape[np.where([i == "T" for i in axis])[0][0]] - 1, axis, None)] = dataset[_make_index(dataset.shape[np.where([i == "T" for i in axis])[0][0]] - 1, axis, None, downsample)]
+            iterator = range(new_shape[np.where([i == "T" for i in axis])[0][0]] - 2, -1, -1)
+
+        if "C" in axis:
+            for ch in range(new_shape[np.where([i == "C" for i in axis])[0][0]]):
+                img = _get_vtImage(dataset, origin, new_scale, axis, ch, downsample)
+                img_ref = vt.vtImage(np.zeros([j for i,j in _dict_axis_shape(axis, data.shape).items() if i in "XYZ"], dtype="uint8"))
+                img_ref.setSpacing(new_scale[::-1])
+                if padding:
+                    im = vt.apply_trsf(img, padding_trnsf, ref=img_ref).copy_to_array()
+                else:
+                    im = img.copy_to_array()
+                data[_make_index(origin, axis, ch)] = im
+        else:
+            data[_make_index(origin, axis, None)] = dataset[_make_index(dataset.shape[np.where([i == "T" for i in axis])[0][0]] - 1, axis, None, downsample)]
 
         for t in tqdm(iterator, desc=f"Applying registration to images", unit="", total=self._t_max-1):
             #Skip is computed
@@ -649,6 +679,7 @@ class Registration:
 
             if transformation == "global":
                 if not self._trnsf_exists_global(t, origin):
+                    print(t, origin)
                     raise ValueError("The global transformation does not exist.")
                 trnsf = self._load_transformation_global(t, origin)
             else:
