@@ -915,7 +915,6 @@ class Registration:
                                     print(f"Registration failed between positions {pos_float} and {pos_ref}. Setting it to identity and continuing.")
                                 keep = False
                     else:
-                        trnsf = vt.vtTransformation(np.eye(self._n_spatial+1))
                         if failed:
                             self._failed[f"{pos_float:04d}_{pos_ref:04d}"] = registration_args
                         registration_args = self._make_registration_args(verbose=verbose)
