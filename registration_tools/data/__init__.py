@@ -1,1 +1,1 @@
-from .sphere import sphere, rotating_spheres
+from .sphere import sphere, rotating_spheres, hemisphere_spheres

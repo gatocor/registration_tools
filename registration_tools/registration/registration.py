@@ -2,7 +2,8 @@ import os
 import re
 import numpy as np
 from skimage.io import imread, imsave
-from skimage.measure import label, regionprops
+from skimage.measure import centroid, inertia_tensor, moments_central
+from scipy.ndimage import affine_transform
 import shutil
 import vt
 from ..dataset.dataset import Dataset
@@ -16,77 +17,6 @@ from copy import deepcopy
 import zarr
 from ..utils.auxiliar import _get_axis_scale, _make_index, _dict_axis_shape, _suppress_stdout_stderr, _shape_downsampled, _shape_padded
 import tempfile
-
-def _get_vtImage(dataset, t, scale, axis, use_channel, downsample, padding=None):
-    img = dataset[_make_index(t, axis, use_channel, downsample)]
-    # if padding is not None:
-    #     padding_ = [(-p[0]//d, (p[1]-s)//d) for p,s,d in zip(padding, img.shape, downsample)]
-    #     # padding_ = [(0, (p[1]-s)//d-p[0]//d) for p,s,d in zip(padding, img.shape, downsample)]
-    #     img = np.pad(img, padding_, mode="constant")
-    try:
-        with tempfile.NamedTemporaryFile(suffix=".tiff", delete=True) as temp_file:
-            imsave(temp_file.name, img)
-            img = vt.vtImage(temp_file.name)
-            # img = vt.vtImage(img.copy()) #Ideal but runs all the time in problems
-            img.setSpacing(scale[::-1])
-    except: #In case you do not have access permissions
-        temp_file = f"temp_{np.random.randint(0,1E6)}.tiff"
-        imsave(temp_file, img)
-        img = vt.vtImage(temp_file)
-        # img = vt.vtImage(img.copy()) #Ideal but runs all the time in problems
-        img.setSpacing(scale[::-1])
-        os.remove(temp_file)
-    return img
-
-def get_pyramid_levels(dataset, maximum_size = 100, verbose = True):
-    """
-    Returns the lowest and highest pyramid levels for the dataset.
-
-    Args:
-        dataset (Dataset): The dataset object.
-        maximum_size (int, optional): The maximum size for the pyramid levels. Default is 100.
-        verbose (bool, optional): If True, print the pyramid levels. Default is True.
-
-    Returns:
-        tuple: The lowest and highest pyramid levels.
-    """
-
-    shape = np.array(dataset.get_spatial_shape())
-    n = int(np.ceil(np.max(np.log2(shape))))
-    ll_threshold = n
-    for level, n in enumerate(range(n, -1, -1)):
-        if 2**n < 32:
-            print(f"Level {level} is below 32 per dimension. Registration will use up to level {level-1} when computing.")
-            break
-        new_shape = np.minimum(2**n, shape)
-        if verbose:
-            print(f"Level {level}: {new_shape}")
-        if np.any(2**n > maximum_size):
-            ll_threshold = level
-
-    return ll_threshold, level - 1
-
-def load_registration(out):
-    """
-    Loads a registration object from a save path.
-
-    Args:
-        out (str): The path to the registration object.
-
-    Returns:
-        Registration: The registration object.
-    """
-
-    if not os.path.exists(f"{out}/parameters.json"):
-        raise ValueError("The registration object does not exist.")
-
-    with open(f"{out}/parameters.json", "r") as f:
-        parameters = json.load(f)
-    registration = Registration()
-    for i,j in parameters.items():
-        setattr(registration, i, j)
-    registration._out = out
-    return registration
 
 class Registration:
     """
@@ -142,45 +72,13 @@ class Registration:
             Computes the trajectories of the registration.
     """
 
-    def __init__(self, 
-            out=None, 
-            registration_type="rigid", 
-            perfom_global_trnsf=None, 
-            pyramid_lowest_level=0, 
-            pyramid_highest_level=3, 
-            registration_direction="backward",
-            args_registration="",
-        ):
+    def __init__(self):
         """
         Initialize the registration object with the specified parameters.
-
-        Parameters:
-        out (str, optional): Output path to save the registration results. Default is None.
-        registration_type (str, optional): Type of registration to perform. Default is "rigid".
-        perfom_global_trnsf (bool, optional): Whether to perform global transformation. Default is None.
-        pyramid_lowest_level (int, optional): Lowest level of the pyramid for multi-resolution registration. Default is 0.
-        pyramid_highest_level (int, optional): Highest level of the pyramid for multi-resolution registration. Default is 3.
-        registration_direction (str, optional): Direction of registration, either "forward" or "backward". Default is "backward".
-        args_registration (str, optional): Additional arguments for the registration process. Default is an empty string.
         """
 
-        rigid_transformations = ["translation2D", "translation3D", "translation", "rigid2D", "rigid3D", "rigid", "rotation2D", "rotation3D", "rotation"]
-        registration_directions = ["forward", "backward"]
-
-        self._registration_type = registration_type
-        if self._registration_type in rigid_transformations and perfom_global_trnsf is None:
-            self._perfom_global_trnsf = True
-        elif perfom_global_trnsf is None:
-            self._perfom_global_trnsf = False
-        else:
-            self._perfom_global_trnsf = perfom_global_trnsf
-        self._pyramid_lowest_level = pyramid_lowest_level
-        self._pyramid_highest_level = pyramid_highest_level
-        if registration_direction not in registration_directions:
-            raise ValueError(f"registration_direction must be either of the following: {registration_directions}")
-        self._registration_direction = registration_direction
-        self._args_registration = args_registration
-
+        self._perfom_global_trnsf = None
+        self._registration_direction = None
         self._padding_box = None
         self._out = None
         self._n_spatial = None
@@ -190,10 +88,7 @@ class Registration:
         self._origin = None
         self._stepping = 1
         self._transfs = {}
-        self._failed = {}
-
-        if out is not None:
-            self.save(out=out)
+        self._failed = []
         
     def save(self, out=None, overwrite=False):
         """
@@ -227,24 +122,32 @@ class Registration:
 
         for name, trnsf in self._transfs.items():
             if "global" in name:
-                trnsf.write(f"{self._out}/trnsf_global/{name}.trnsf")
+                self.write_trnsf(f"{self._out}/trnsf_global/{name}.trnsf")
             elif "relative" in name:
-                trnsf.write(f"{self._out}/trnsf/{name}.trnsf")
+                self.write_trnsf(f"{self._out}/trnsf/{name}.trnsf")
 
     def load(self, out):
         """
-        Loads a registration object from the specified path.
+        Loads a registration object from a save path.
 
         Args:
             out (str): The path to the registration object.
+
+        Returns:
+            Registration: The registration object.
         """
+
         if not os.path.exists(f"{out}/parameters.json"):
             raise ValueError("The registration object does not exist.")
 
         with open(f"{out}/parameters.json", "r") as f:
             parameters = json.load(f)
-        self.__dict__.update(parameters)
+
+        for i,j in parameters.items():
+            setattr(self, i, j)
         self._out = out
+
+        return
 
     def _create_folder(self):
 
@@ -257,13 +160,13 @@ class Registration:
         if self._out is None:
             self._transfs[f"trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf"] = trnsf
         else:
-            trnsf.write(f"{self._out}/trnsf_relative/trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf")
+            self.write_trnsf(trnsf, f"{self._out}/trnsf_relative/trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf")
 
     def _save_transformation_global(self, trnsf, pos_float, pos_ref):
         if self._out is None:
             self._transfs[f"trnsf_global_{pos_float:04d}_{pos_ref:04d}.trnsf"] = trnsf
         else:
-            trnsf.write(f"{self._out}/trnsf_global/trnsf_global_{pos_float:04d}_{pos_ref:04d}.trnsf")
+            self.write_trnsf(trnsf, f"{self._out}/trnsf_global/trnsf_global_{pos_float:04d}_{pos_ref:04d}.trnsf")
 
     def _load_transformation_relative(self, pos_float, pos_ref):
         if self._out is None:
@@ -275,7 +178,7 @@ class Registration:
             if not os.path.exists(f"{self._out}/trnsf_relative/trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf"):
                 raise ValueError("The transformation between the specified positions does not exist.")
             else:
-                return vt.vtTransformation(f"{self._out}/trnsf_relative/trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf")
+                return self.read_trnsf(f"{self._out}/trnsf_relative/trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf")
 
     def _load_transformation_global(self, pos_float, pos_ref):
         if self._out is None:
@@ -287,7 +190,7 @@ class Registration:
             if not os.path.exists(f"{self._out}/trnsf_global/trnsf_global_{pos_float:04d}_{pos_ref:04d}.trnsf"):
                 raise ValueError("The transformation between the specified positions does not exist.")
             else:
-                return vt.vtTransformation(f"{self._out}/trnsf_global/trnsf_global_{pos_float:04d}_{pos_ref:04d}.trnsf")
+                return self.read_trnsf(f"{self._out}/trnsf_global/trnsf_global_{pos_float:04d}_{pos_ref:04d}.trnsf")
 
     def _trnsf_exists_relative(self, pos_float, pos_ref):
         if self._out is None:
@@ -300,26 +203,7 @@ class Registration:
             return f"trnsf_global_{pos_float:04d}_{pos_ref:04d}.trnsf" in self._transfs.keys()
         else:
             return os.path.exists(f"{self._out}/trnsf_global/trnsf_global_{pos_float:04d}_{pos_ref:04d}.trnsf")
-    
-    def _make_registration_args(self, registration_type=None, pyramid_lowest_level=None, pyramid_highest_level=None, args_registration=None, verbose=False):
-        if registration_type is None:
-            registration_type = self._registration_type
-        if pyramid_lowest_level is None:
-            pyramid_lowest_level = self._pyramid_lowest_level
-        if pyramid_highest_level is None:
-            pyramid_highest_level = self._pyramid_highest_level
-        if args_registration is None:
-            args_registration = self._args_registration
-
-        registration_args = ""
-        if not verbose:
-            registration_args = " -no-verbose"
-        registration_args += f" -transformation-type {registration_type} -pyramid-lowest-level {pyramid_lowest_level} -pyramid-highest-level {pyramid_highest_level} "
-        registration_args += args_registration
-        registration_args = registration_args.replace("rotation", "rigid")
-
-        return registration_args
-    
+        
     def _padding_box_to_points(self, padding_reference, scale):
         return np.array(np.meshgrid(*[np.array(i) for i in padding_reference])).T.reshape(-1, self._n_spatial) * np.array(scale)
 
@@ -329,11 +213,20 @@ class Registration:
         for i in range(points_scaled.shape[1]):
             box.append((points_scaled[:, i].min(), points_scaled[:, i].max()))
         return box
-
-    def fit(self, dataset, use_channel=None, axis=None, scale=None, downsample=None, stepping=1, save_behavior="Continue", verbose=False):
+        
+    def fit(self, dataset, out=None, direction="backward", perfom_global_trnsf=False, use_channel=None, axis=None, scale=None, downsample=None, stepping=1, save_behavior="Continue", verbose=False):
         """
         Registers a dataset and saves the results to the specified path.
         """
+
+        self._out = out
+        if self._out is not None:
+            self._create_folder()
+            self.save()
+        if direction not in ["backward", "forward"]:
+            raise ValueError("The direction must be either 'backward' or 'forward'.")
+        self._registration_direction = direction
+        self._perfom_global_trnsf = perfom_global_trnsf
 
         save_behaviors = ["NotOverwrite", "Continue"]
 
@@ -376,12 +269,6 @@ class Registration:
         # Compute padding box
         padding_reference = [(0,j) for i,j in _dict_axis_shape(axis, dataset.shape).items() if i in "XYZ"][::-1]
         self._padding_box = [(0,j) for i,j in _dict_axis_shape(axis, dataset.shape).items() if i in "XYZ"][::-1]
-
-        # Setup arguments
-        registration_args = self._make_registration_args(verbose=verbose)
-
-        # Suppress skimage warnings for low contrast images
-        warnings.filterwarnings("ignore", category=UserWarning, message=".*low contrast image.*")
 
         # Stepping
         self._stepping = stepping
@@ -434,6 +321,7 @@ class Registration:
 
         img_ref = None
         trnsf_global = None
+        pos_ref_current = None
         for pos_ref, pos_float in tqdm(iterator, desc=f"Registering images using channel {use_channel}", unit="", total=self._t_max-1):
 
             if self._trnsf_exists_relative(pos_float, pos_ref):
@@ -442,99 +330,56 @@ class Registration:
                 elif save_behavior == "Continue":
                     None
             else:
-                if img_ref is None:
-                    img_ref = _get_vtImage(dataset, pos_ref, scale, axis, use_channel, downsample)
+                if img_ref is None or pos_ref_current != pos_ref:
+                    img_ref = self.get_image(dataset, pos_ref, scale, axis, use_channel, downsample)
                 else:
                     img_ref = img_float
 
-                img_float = _get_vtImage(dataset, pos_float, scale, axis, use_channel, downsample)
+                img_float = self.get_image(dataset, pos_float, scale, axis, use_channel, downsample)
 
-                keep = True
-                counter = 0
-                failed = False
-                while keep and counter < 10:
-                    # Usage
-                    if verbose:
-                        trnsf = vt.blockmatching(img_float, image_ref=img_ref, params=registration_args)
-                    else:
-                        with _suppress_stdout_stderr():
-                            trnsf = vt.blockmatching(img_float, image_ref=img_ref, params=registration_args)
-
-                    if trnsf is None:
-                        trnsf = vt.vtTransformation(np.eye(self._n_spatial+1))
-                        failed = True
-                        counter += 1
-                        if self._pyramid_highest_level > 0:
-                            if verbose:
-                                print("Registration failed. Trying with a lower highest pyramid level.")
-                            pyramid_highest_level = self._pyramid_highest_level - 1
-                            registration_args = self._make_registration_args(pyramid_highest_level=pyramid_highest_level, verbose=verbose)
-                        else:
-                            if "-pyramid-gaussian-filtering" not in self._args_registration and "-py-gf" not in self._args_registration:
-                                if verbose:
-                                    print("Registration failed. Trying with pyramid gaussian filtering.")
-                                args_registration = self._args_registration + " -pyramid-gaussian-filtering"
-                                registration_args = self._make_registration_args(args_registration=args_registration, verbose=verbose)
-                            else:
-                                if verbose:
-                                    print(f"Registration failed between positions {pos_float} and {pos_ref}. Setting it to identity and continuing.")
-                                keep = False
-                    else:
-                        trnsf = vt.vtTransformation(np.eye(self._n_spatial+1))
-                        if failed:
-                            self._failed[f"{pos_float:04d}_{pos_ref:04d}"] = registration_args
-                        registration_args = self._make_registration_args(verbose=verbose)
-                        keep = False
-
-                if "rotation" in self._registration_type:
-                    center = vt.vtPointList([[i/2 for i in self._box[::-1]]])
-                    center_moved = vt.apply_trsf_to_points(center, trnsf)
-                    compensation = np.eye(self._n_spatial+1)
-                    compensation[:self._n_spatial, -1] = center.copy_to_array()[0] - center_moved.copy_to_array()[0]
-                    trnsf = vt.compose_trsf([vt.vtTransformation(compensation), trnsf])
+                trnsf = self.register(img_float, img_ref, scale, verbose=verbose)
+                # if failed:
+                #     self._failed.append(f"{pos_float:04d}_{pos_ref:04d}")
 
                 self._save_transformation_relative(trnsf, pos_float, pos_ref)
 
-            # points = []
             if self._perfom_global_trnsf:
 
-                if self._trnsf_exists_global(pos_float, origin):
+                if self._trnsf_exists_global(pos_float, self._origin):
                     if save_behavior == "NotOverwrite":
                         raise ValueError("The global transformation already exists. If you want to overwrite it, set save_behavior='Overwrite'.")
                     elif save_behavior == "Continue":
                         None
                 else:
-                    if trnsf_global is None and pos_ref != origin:
-                        trnsf_global = self._load_transformation_global(pos_ref, origin)
-                    elif trnsf_global is None:
+                    if trnsf_global is None and pos_ref != self._origin:
+                        trnsf_global = self._load_transformation_global(pos_ref, self._origin)
+                    elif pos_ref == self._origin:
                         trnsf_global = trnsf
-                        self._save_transformation_global(trnsf_global, pos_float, origin)
+                        self._save_transformation_global(trnsf_global, pos_float, self._origin)
                     else:
-                        trnsf_global = vt.compose_trsf([
+                        trnsf_global = self.compose_trnsf([
                             trnsf_global,
                             trnsf
                         ])
-                        self._save_transformation_global(trnsf_global, pos_float, origin)
+                        self._save_transformation_global(trnsf_global, pos_float, self._origin)
 
-                #check data extremes
-                padding_reference = [(0,j) for i,j in _dict_axis_shape(axis, dataset.shape).items() if i in "XYZ"][::-1]
-                points_vt = vt.vtPointList(self._padding_box_to_points(padding_reference, scale[::-1]))
-                points_vt_out = vt.apply_trsf_to_points(points_vt, vt.inv_trsf(trnsf_global))
-                padding_box = self._points_to_padding_box(points_vt_out.copy_to_array(), scale[::-1])
-                self._padding_box = [(int(min(i[0], j[0])), int(max(i[1], j[1]))) for i, j in zip(self._padding_box, padding_box)]
+                # padding_reference = [(0,j) for i,j in _dict_axis_shape(axis, dataset.shape).items() if i in "XYZ"][::-1]
+                # padding_box = self._points_to_padding_box(self.apply_trnsf_to_points(self._padding_box_to_points(padding_reference, scale[::-1]), trnsf_global), scale)
+                # self._padding_box = [(int(min(i[0], j[0])), int(max(i[1], j[1]))) for i, j in zip(self._padding_box, padding_box)]
 
             if self._out is not None:
                 self._padding_box = self._padding_box[::-1]
                 self.save()
                 self._padding_box = self._padding_box[::-1]
+
+            pos_ref_current = pos_float
         
-        # print(self._padding_box)
         self._padding_box = self._padding_box[::-1]
         self._fitted = True
         if self._out is not None:
             self.save()
 
-    def apply(self, dataset, out=None, axis=None, scale=None, downsample=None, save_behavior="Continue", transformation="global", padding=True, verbose=False, **kwargs):
+    def apply(self, dataset, out=None, axis=None, scale=None, downsample=None, save_behavior="Continue", transformation="global", padding=False, verbose=False, **kwargs):
         """
         Registers a dataset and saves the results to the specified path.
         """
@@ -577,9 +422,6 @@ class Registration:
         else:
             padded_shape = dataset.shape
         new_shape = _shape_downsampled(padded_shape, axis, downsample)
-
-        # Suppress skimage warnings for low contrast images
-        warnings.filterwarnings("ignore", category=UserWarning, message=".*low contrast image.*")
         
         # Setup output
         if out is None:
@@ -592,7 +434,7 @@ class Registration:
             )
             data.attrs["axis"] = axis
             data.attrs["scale"] = new_scale
-            data.attrs["computed"] = None
+            data.attrs["computed"] = []
         elif isinstance(out, str):# and out.endswith(".zarr"):
             if os.path.exists(out) and save_behavior == "NotOverwrite":
                 raise ValueError("The output file already exists. If you want to overwrite it, set save_behavior='Overwrite'.")
@@ -600,7 +442,7 @@ class Registration:
                 out_path, out_file = os.path.split(out)
                 data = zarr.open_array(out_file, path=out_path)
                 if "computed" not in data.attrs:
-                    data.attrs["computed"] = None
+                    data.attrs["computed"] = []
             elif os.path.exists(out) and save_behavior == "Overwrite":
                 shutil.rmtree(out)
                 data = zarr.create_array(
@@ -611,7 +453,7 @@ class Registration:
                 )
                 data.attrs["axis"] = axis
                 data.attrs["scale"] = new_scale
-                data.attrs["computed"] = None
+                data.attrs["computed"] = []
             else:
                 data = zarr.create_array(
                     store=out,
@@ -621,56 +463,37 @@ class Registration:
                 )
                 data.attrs["axis"] = axis
                 data.attrs["scale"] = new_scale
-                data.attrs["computed"] = None
+                data.attrs["computed"] = []
         else:
             raise ValueError("The output must be None or a the name to a zarr file.")
 
         mt = np.eye(4)
-        if padding:
-            padding_drift = [i[0]*j for i,j in zip(self._padding_box, scale)][::-1]
-            mt[:3,3] = np.array(padding_drift)
-            padding_trnsf = vt.vtTransformation(mt)
+        # if padding:
+        #     padding_drift = [i[0]*j for i,j in zip(self._padding_box, scale)][::-1]
+        #     mt[:3,3] = np.array(padding_drift)
+        #     padding_trnsf = vt.vtTransformation(mt)
 
         if self._registration_direction == "backward":
             origin = 0
             iterator = range(1, new_shape[np.where([i == "T" for i in axis])[0][0]])
-            # if "C" in axis:
-            #     for ch in range(new_shape[np.where([i == "C" for i in axis])[0][0]]):
-            #         img = _get_vtImage(dataset, origin, new_scale, axis, ch, downsample)
-            #         img_ref = vt.vtImage(np.zeros([j for i,j in _dict_axis_shape(axis, data.shape).items() if i in "XYZ"], dtype="uint8"))
-            #         img_ref.setSpacing(new_scale[::-1])
-            #         if padding:
-            #             im = vt.apply_trsf(img, padding_trnsf, ref=img_ref).copy_to_array()
-            #         else:
-            #             im = img.copy_to_array()
-            #         data[_make_index(origin, axis, ch)] = im
-            # else:
-            #     data[_make_index(origin, axis, None)] = dataset[_make_index(0, axis, None, downsample)]
         else:
             origin = new_shape[np.where([i == "T" for i in axis])[0][0]] - 1
             iterator = range(new_shape[np.where([i == "T" for i in axis])[0][0]] - 2, -1, -1)
 
         if "C" in axis:
             for ch in range(new_shape[np.where([i == "C" for i in axis])[0][0]]):
-                img = _get_vtImage(dataset, origin, new_scale, axis, ch, downsample)
-                img_ref = vt.vtImage(np.zeros([j for i,j in _dict_axis_shape(axis, data.shape).items() if i in "XYZ"], dtype="uint8"))
-                img_ref.setSpacing(new_scale[::-1])
+                img = self.get_image(dataset, origin, new_scale, axis, ch, downsample)
                 if padding:
-                    im = vt.apply_trsf(img, padding_trnsf, ref=img_ref).copy_to_array()
+                    im = self.apply_trnsf(img, padding_trnsf)
                 else:
-                    im = img.copy_to_array()
-                data[_make_index(origin, axis, ch)] = im
+                    im = img
+                data[_make_index(origin, axis, ch)] = self.image2array(im)
         else:
             data[_make_index(origin, axis, None)] = dataset[_make_index(dataset.shape[np.where([i == "T" for i in axis])[0][0]] - 1, axis, None, downsample)]
 
         for t in tqdm(iterator, desc=f"Applying registration to images", unit="", total=self._t_max-1):
             #Skip is computed
-            if data.attrs["computed"] is None:
-                data.attrs["computed"] = t
-            else:
-                if t <= data.attrs["computed"] and self._registration_direction == "backward":
-                    continue
-                elif t >= data.attrs["computed"] and self._registration_direction == "forward":
+            if t in data.attrs["computed"]:
                     continue
 
             if transformation == "global":
@@ -685,41 +508,44 @@ class Registration:
 
             if "C" in axis:
                 for ch in range(new_shape[np.where([i == "C" for i in axis])[0][0]]):
-                    img = _get_vtImage(dataset, t, new_scale, axis, ch, downsample)
+                    img = self.get_image(dataset, t, new_scale, axis, ch, downsample)
                     if padding:
-                        joint_trnsf = vt.compose_trsf([trnsf,padding_trnsf])
+                        joint_trnsf = self.compose_trsf([trnsf,padding_trnsf])
                     else:
                         joint_trnsf = trnsf
-                    img_ref = vt.vtImage(np.zeros([j for i,j in _dict_axis_shape(axis, data.shape).items() if i in "XYZ"]))
-                    img_ref.setSpacing(scale[::-1])
-                    im_trnsf = vt.apply_trsf(img, joint_trnsf, ref=img_ref)
-                    im = im_trnsf.copy_to_array()
-                    data[_make_index(t, axis, ch)] = im
+                    im_trnsf = self.apply_trnsf(img, joint_trnsf)
+                    data[_make_index(t, axis, ch)] = self.image2array(im_trnsf)
             else:
-                img = _get_vtImage(dataset, t, new_scale, axis, None, downsample)
+                img = self.get_image(dataset, t, new_scale, axis, None, downsample)
                 if padding:
-                    joint_trnsf = vt.compose_trsf([trnsf,padding_trnsf])
+                    joint_trnsf = self.compose_trsf([trnsf,padding_trnsf])
                 else:
                     joint_trnsf = trnsf
-                img_ref = vt.vtImage(np.zeros([j for i,j in _dict_axis_shape(axis, data.shape).items() if i in "XYZ"]))
-                img_ref.setSpacing(scale[::-1])
-                im = vt.apply_trsf(img, joint_trnsf, ref=img_ref).copy_to_array()
-                data[_make_index(t, axis, None)] = vt.apply_trsf(img, trnsf, ref=img_ref).copy_to_array()
+                im = self.apply_trsf(img, joint_trnsf)
+                data[_make_index(t, axis, None)] = self.image2array(im)
 
-            data.attrs["computed"] = t
+            data.attrs["computed"].append(t)
 
         return data
 
-    def fit_apply(self, dataset, out=None, use_channel=None, axis=None, scale=None, downsample=None, stepping=1, save_behavior="Continue", transformation="global", verbose=False, padding=False, **kwargs):
+    def fit_apply(self, dataset, out_trnsf=None, out_dataset=None, direction="backward", use_channel=None, axis=None, scale=None, downsample=None, stepping=1, perfom_global_trnsf=False, save_behavior="Continue", verbose=False, padding=False, **kwargs):
         """
         Registers a dataset and saves the results to the specified path.
         """
+
+        self._out = out_trnsf
+        if self._out is not None:
+            self._create_folder()
+        if direction not in ["backward", "forward"]:
+            raise ValueError("The direction must be either 'backward' or 'forward'.")
+        self._registration_direction = direction
+        self._perfom_global_trnsf = perfom_global_trnsf
 
         save_behaviors = ["NotOverwrite", "Overwrite", "Continue"]
 
         # Check inputs
         axis, scale = _get_axis_scale(dataset, axis, scale)
-        
+
         if len(axis) != len(dataset.shape):
             raise ValueError("The axis must have the same length as the dataset shape.")
         
@@ -760,9 +586,6 @@ class Registration:
         # New shape
         new_shape = _shape_downsampled(dataset.shape, axis, downsample)
 
-        # Setup arguments
-        registration_args = self._make_registration_args(verbose=verbose)
-
         # Suppress skimage warnings for low contrast images
         warnings.filterwarnings("ignore", category=UserWarning, message=".*low contrast image.*")
 
@@ -785,7 +608,6 @@ class Registration:
                     iterations.append(j)
                     iterations_next.append(j+stepping)
 
-            # print([(i,j) for i,j in zip(iterations, iterations_next)])
             iterator = zip(
                 iterations,
                 iterations_next
@@ -811,7 +633,7 @@ class Registration:
             )
 
         # Setup output
-        if out is None:
+        if out_dataset is None:
             store = zarr.storage.MemoryStore()
             data = zarr.create_array(
                 store=store,
@@ -821,29 +643,29 @@ class Registration:
             )
             data.attrs["axis"] = axis
             data.attrs["scale"] = new_scale
-            data.attrs["computed"] = None
-        elif isinstance(out, str):# and out.endswith(".zarr"):
-            if os.path.exists(out) and save_behavior == "NotOverwrite":
+            data.attrs["computed"] = []
+        elif isinstance(out_dataset, str):# and out.endswith(".zarr"):
+            if os.path.exists(out_dataset) and save_behavior == "NotOverwrite":
                 raise ValueError("The output file already exists. If you want to overwrite it, set save_behavior='Overwrite'.")
-            elif os.path.exists(out) and save_behavior == "Continue":
-                out_path, out_file = os.path.split(out)
+            elif os.path.exists(out_dataset) and save_behavior == "Continue":
+                out_path, out_file = os.path.split(out_dataset)
                 data = zarr.open_array(out_file, path=out_path)
                 if "computed" not in data.attrs:
-                    data.attrs["computed"] = None
-            elif os.path.exists(out) and save_behavior == "Overwrite":
-                shutil.rmtree(out)
+                    data.attrs["computed"] = []
+            elif os.path.exists(out_dataset) and save_behavior == "Overwrite":
+                shutil.rmtree(out_dataset)
                 data = zarr.create_array(
-                    store=out,
+                    store=out_dataset,
                     shape=new_shape,
                     dtype=dataset.dtype,
                     **kwargs
                 )
                 data.attrs["axis"] = axis
                 data.attrs["scale"] = new_scale
-                data.attrs["computed"] = None
+                data.attrs["computed"] = []
             else:
                 data = zarr.create_array(
-                    store=out,
+                    store=out_dataset,
                     shape=new_shape,
                     dtype=dataset.dtype,
                     **kwargs
@@ -851,7 +673,7 @@ class Registration:
                 # data[:] = 0.
                 data.attrs["axis"] = axis
                 data.attrs["scale"] = new_scale
-                data.attrs["computed"] = None
+                data.attrs["computed"] = []
         else:
             raise ValueError("The output must be None or a the name to a zarr file.")
         
@@ -869,6 +691,7 @@ class Registration:
         # Loop over the images for registration
         img_ref = None
         trnsf_global = None
+        pos_ref_current = None
         for pos_ref, pos_float in tqdm(iterator, desc=f"Registering images using channel {use_channel}", unit="", total=self._t_max-1):
 
             if self._trnsf_exists_relative(pos_float, pos_ref) and save_behavior != "Overwrite":
@@ -877,55 +700,14 @@ class Registration:
                 elif save_behavior == "Continue":
                     None
             else:
-                if img_ref is None:
-                    img_ref = _get_vtImage(dataset, pos_ref, scale, axis, use_channel, downsample)
+                if img_ref is None or pos_ref_current != pos_ref:
+                    img_ref = self.get_image(dataset, pos_ref, scale, axis, use_channel, downsample)
                 else:
                     img_ref = img_float
 
-                img_float = _get_vtImage(dataset, pos_float, scale, axis, use_channel, downsample)
+                img_float = self.get_image(dataset, pos_float, scale, axis, use_channel, downsample)
 
-                keep = True
-                counter = 0
-                failed = False
-                while keep and counter < 10:
-                    # Usage
-                    if verbose:
-                        trnsf = vt.blockmatching(img_float, image_ref=img_ref, params=registration_args)
-                    else:
-                        with _suppress_stdout_stderr():
-                            trnsf = vt.blockmatching(img_float, image_ref=img_ref, params=registration_args)
-
-                    if trnsf is None:
-                        trnsf = vt.vtTransformation(np.eye(self._n_spatial+1))
-                        failed = True
-                        counter += 1
-                        if self._pyramid_highest_level > 0:
-                            if verbose:
-                                print("Registration failed. Trying with a lower highest pyramid level.")
-                            pyramid_highest_level = self._pyramid_highest_level - 1
-                            registration_args = self._make_registration_args(pyramid_highest_level=pyramid_highest_level, verbose=verbose)
-                        else:
-                            if "-pyramid-gaussian-filtering" not in self._args_registration and "-py-gf" not in self._args_registration:
-                                if verbose:
-                                    print("Registration failed. Trying with pyramid gaussian filtering.")
-                                args_registration = self._args_registration + " -pyramid-gaussian-filtering"
-                                registration_args = self._make_registration_args(args_registration=args_registration, verbose=verbose)
-                            else:
-                                if verbose:
-                                    print(f"Registration failed between positions {pos_float} and {pos_ref}. Setting it to identity and continuing.")
-                                keep = False
-                    else:
-                        if failed:
-                            self._failed[f"{pos_float:04d}_{pos_ref:04d}"] = registration_args
-                        registration_args = self._make_registration_args(verbose=verbose)
-                        keep = False
-
-                if "rotation" in self._registration_type:
-                    center = vt.vtPointList([[i/2 for i in self._box[::-1]]])
-                    center_moved = vt.apply_trsf_to_points(center, trnsf)
-                    compensation = np.eye(self._n_spatial+1)
-                    compensation[:self._n_spatial, -1] = center.copy_to_array()[0] - center_moved.copy_to_array()[0]
-                    trnsf = vt.compose_trsf([vt.vtTransformation(compensation), trnsf])
+                trnsf = self.register(img_float, img_ref, scale, verbose=verbose)
 
                 self._save_transformation_relative(trnsf, pos_float, pos_ref)
 
@@ -939,52 +721,46 @@ class Registration:
                 else:
                     if trnsf_global is None and pos_ref != self._origin:
                         trnsf_global = self._load_transformation_global(pos_ref, self._origin)
-                    elif trnsf_global is None:
+                    elif pos_ref == self._origin:
                         trnsf_global = trnsf
                         self._save_transformation_global(trnsf_global, pos_float, self._origin)
                     else:
-                        trnsf_global = vt.compose_trsf([
+                        trnsf_global = self.compose_trnsf([
                             trnsf_global,
                             trnsf
                         ])
                         self._save_transformation_global(trnsf_global, pos_float, self._origin)
 
                 #check data extremes
-                padding_reference = [(0,j) for i,j in _dict_axis_shape(axis, dataset.shape).items() if i in "XYZ"][::-1]
-                points_vt = vt.vtPointList(self._padding_box_to_points(padding_reference, scale[::-1]))
-                points_vt_out = vt.apply_trsf_to_points(points_vt, vt.inv_trsf(trnsf_global))
-                padding_box = self._points_to_padding_box(points_vt_out.copy_to_array(), scale[::-1])
-                self._padding_box = [(int(min(i[0], j[0])), int(max(i[1], j[1]))) for i, j in zip(self._padding_box, padding_box)]
+                # padding_reference = [(0,j) for i,j in _dict_axis_shape(axis, dataset.shape).items() if i in "XYZ"][::-1]
+                # points_vt = vt.vtPointList(self._padding_box_to_points(padding_reference, scale[::-1]))
+                # points_vt_out = vt.apply_trsf_to_points(points_vt, vt.inv_trsf(trnsf_global))
+                # padding_box = self._points_to_padding_box(points_vt_out.copy_to_array(), scale[::-1])
+                # self._padding_box = [(int(min(i[0], j[0])), int(max(i[1], j[1]))) for i, j in zip(self._padding_box, padding_box)]
 
             if self._out is not None:
                 self._padding_box = self._padding_box[::-1]
                 self.save()
                 self._padding_box = self._padding_box[::-1]
 
-            if data.attrs["computed"] is None:
-                data.attrs["computed"] = pos_float
-            elif pos_float <= data.attrs["computed"] and self._registration_direction == "backward":
-                continue
-            elif pos_float >= data.attrs["computed"] and self._registration_direction == "forward":
+            if pos_float in data.attrs["computed"]:
                 continue
 
-            if transformation == "global":
+            if perfom_global_trnsf:
                 trnsf_img = trnsf_global
             else:
                 trnsf_img = trnsf
 
             if "C" in axis:
                 for ch in range(new_shape[np.where([i == "C" for i in axis])[0][0]]):
-                    img_ = _get_vtImage(dataset, pos_float, new_scale, axis, ch, downsample)
-                    im_trnsf = vt.apply_trsf(img_, trnsf_img)
-                    im = im_trnsf.copy_to_array()
-                    data[_make_index(pos_float, axis, ch)] = im
+                    img_ = self.get_image(dataset, pos_float, new_scale, axis, ch, downsample)
+                    im_trnsf = self.apply_trnsf(img_, trnsf_img)
+                    data[_make_index(pos_float, axis, ch)] = self.image2array(im_trnsf)
             else:
-                im = vt.apply_trsf(img_float, trnsf_img).copy_to_array()
-                data[_make_index(pos_float, axis, None)] = im
+                im = self.apply_trsf(img_float, trnsf_img)
+                data[_make_index(pos_float, axis, None)] = self.image2array(im)
 
-            # import time
-            # time.sleep(30)
+            pos_ref_current = pos_float
         
         self._padding_box = self._padding_box[::-1]
         self._fitted = True
@@ -993,7 +769,7 @@ class Registration:
 
         if padding:
             print("Padding data")
-            return self.apply(data, axis=axis, scale=scale, downsample=downsample, save_behavior="Overwrite", transformation=transformation, padding=padding, verbose=verbose, **kwargs)
+            return self.apply(data, axis=axis, scale=scale, downsample=downsample, save_behavior="Overwrite", perfom_global_trnsf=perfom_global_trnsf, padding=padding, verbose=verbose, **kwargs)
         else:
             return data
     
@@ -1135,6 +911,223 @@ class Registration:
         if out is None:
             return data
     
+def get_pyramid_levels(dataset, maximum_size = 100, verbose = True):
+    """
+    Returns the lowest and highest pyramid levels for the dataset.
+
+    Args:
+        dataset (Dataset): The dataset object.
+        maximum_size (int, optional): The maximum size for the pyramid levels. Default is 100.
+        verbose (bool, optional): If True, print the pyramid levels. Default is True.
+
+    Returns:
+        tuple: The lowest and highest pyramid levels.
+    """
+
+    shape = np.array(dataset.get_spatial_shape())
+    n = int(np.ceil(np.max(np.log2(shape))))
+    ll_threshold = n
+    for level, n in enumerate(range(n, -1, -1)):
+        if 2**n < 32:
+            print(f"Level {level} is below 32 per dimension. Registration will use up to level {level-1} when computing.")
+            break
+        new_shape = np.minimum(2**n, shape)
+        if verbose:
+            print(f"Level {level}: {new_shape}")
+        if np.any(2**n > maximum_size):
+            ll_threshold = level
+
+    return ll_threshold, level - 1
+
+class RegistrationVT(Registration):
+    """
+    A class to perform image registration.
+
+    Parameters:
+        out (str, optional): Output path to save the registration results. Default is None.
+        registration_type (str, optional): Type of registration to perform. Default is "rigid".
+        perfom_global_trnsf (bool, optional): Whether to perform global transformation. Default is None.
+        pyramid_lowest_level (int, optional): Lowest level of the pyramid for multi-resolution registration. Default is 0.
+        pyramid_highest_level (int, optional): Highest level of the pyramid for multi-resolution registration. Default is 3.
+        registration_direction (str, optional): Direction of registration, either "forward" or "backward". Default is "backward".
+        args_registration (str, optional): Additional arguments for the registration process. Default is an empty string.
+
+    Attributes:
+        registration_type (str): The type of registration to perform.
+        perfom_global_trnsf (bool): Whether to perform global transformation.
+        pyramid_lowest_level (int): The lowest level of the pyramid.
+        pyramid_highest_level (int): The highest level of the pyramid.
+        registration_direction (str): The direction of registration.
+        args_registration (str): Additional arguments for registration.
+        _n_spatial (None): Placeholder for number of spatial dimensions.
+        _fitted (bool): Whether the registration object has been fitted.
+        _box (None): Placeholder for the bounding box.
+        _t_max (None): Placeholder for the maximum time point.
+        _origin (None): Placeholder for the origin.
+        _transfs (dict): Dictionary to store transformations.
+    Methods:
+        save(out=None, overwrite=False):
+        load(out):
+        _create_folder():
+            Creates the necessary folders for saving the registration object.
+        _save_transformation_relative(trnsf, pos_float, pos_ref):
+            Saves the relative transformation.
+        _save_transformation_global(trnsf, pos_float, pos_ref):
+            Saves the global transformation.
+        _load_transformation_relative(pos_float, pos_ref):
+            Loads the relative transformation.
+        _load_transformation_global(pos_float, pos_ref):
+            Loads the global transformation.
+        _trnsf_exists_relative(pos_float, pos_ref):
+            Checks if the relative transformation exists.
+        _trnsf_exists_global(pos_float, pos_ref):
+            Checks if the global transformation exists.
+        fit(dataset, use_channel=None, axis=None, scale=None, downsample=None, save_behavior="Continue", verbose=False):
+        apply(dataset, out=None, axis=None, scale=None, downsample=None, save_behavior="Continue", transformation="global", verbose=False, **kwargs):
+            Applies the registration to a dataset and saves the results to the specified path.
+        fit_apply(dataset, out=None, use_channel=None, axis=None, scale=None, downsample=None, save_behavior="Continue", transformation="global", verbose=False):
+            Fits and applies the registration to a dataset and saves the results to the specified path.
+        vectorfield(mask=None, axis=None, scale=None, out=None, n_points=20, transformation="relative", **kwargs):
+            Computes the vector field of the registration.
+        trajectories(mask=None, axis=None, scale=None, out=None, n_points=20, transformation="relative", **kwargs):
+            Computes the trajectories of the registration.
+    """
+
+    def __init__(self, 
+            registration_type="rigid", 
+            pyramid_lowest_level=0, 
+            pyramid_highest_level=3, 
+            args_registration=""
+        ):
+        """
+        Initialize the registration object with the specified parameters.
+
+        Parameters:
+        registration_type (str, optional): Type of registration to perform. Default is "rigid".
+        pyramid_lowest_level (int, optional): Lowest level of the pyramid for multi-resolution registration. Default is 0.
+        pyramid_highest_level (int, optional): Highest level of the pyramid for multi-resolution registration. Default is 3.
+        args_registration (str, optional): Additional arguments for the registration process. Default is an empty string.
+        """
+
+        super().__init__()
+
+        rigid_transformations = ["translation2D", "translation3D", "translation", "rigid2D", "rigid3D", "rigid", "rotation2D", "rotation3D", "rotation"]
+
+        if registration_type not in rigid_transformations:
+            raise ValueError(f"Invalid registration type: {registration_type}. Supported types are: {rigid_transformations}")
+        self._registration_type = registration_type
+        self._pyramid_lowest_level = pyramid_lowest_level
+        self._pyramid_highest_level = pyramid_highest_level
+        self._args_registration = args_registration
+
+        
+    def get_image(self, dataset, t, scale, axis, use_channel, downsample, padding=None):
+        img = dataset[_make_index(t, axis, use_channel, downsample)]
+        # if padding is not None:
+        #     padding_ = [(-p[0]//d, (p[1]-s)//d) for p,s,d in zip(padding, img.shape, downsample)]
+        #     # padding_ = [(0, (p[1]-s)//d-p[0]//d) for p,s,d in zip(padding, img.shape, downsample)]
+        #     img = np.pad(img, padding_, mode="constant")
+
+        # Suppress skimage warnings for low contrast images
+        warnings.filterwarnings("ignore", category=UserWarning, message=".*low contrast image.*")
+
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".tiff", delete=True) as temp_file:
+                imsave(temp_file.name, img)
+                img = vt.vtImage(temp_file.name)
+                # img = vt.vtImage(img.copy()) #Ideal but runs all the time in problems
+                img.setSpacing(scale[::-1])
+        except: #In case you do not have access permissions
+            temp_file = f"temp_{np.random.randint(0,1E6)}.tiff"
+            imsave(temp_file, img)
+            img = vt.vtImage(temp_file)
+            # img = vt.vtImage(img.copy()) #Ideal but runs all the time in problems
+            img.setSpacing(scale[::-1])
+            os.remove(temp_file)
+
+        # Activate warnings again
+        warnings.filterwarnings("ignore", category=UserWarning, message=".*low contrast image.*")
+
+        return img
+    
+    def write_trnsf(self, trnsf, out):
+        trnsf.write(out)
+
+    def read_trnsf(self, out):
+        return vt.vtTransformation(out)
+    
+    def apply_trnsf(self, img, trnsf):
+        return vt.apply_trsf(img, trnsf)
+    
+    def apply_trnsf_to_points(self, points, trnsf):
+        points = vt.vtPointList(points)
+        return vt.apply_trsf_to_points(points, trnsf).copy_to_array()
+
+    def image2array(self, img):
+        return img.copy_to_array()
+    
+    def compose_trnsf(self, trnsfs):
+        return vt.compose_trsf(trnsfs)
+    
+    def _make_registration_args(self, registration_type=None, pyramid_lowest_level=None, pyramid_highest_level=None, args_registration=None, verbose=False):
+        if registration_type is None:
+            registration_type = self._registration_type
+        if pyramid_lowest_level is None:
+            pyramid_lowest_level = self._pyramid_lowest_level
+        if pyramid_highest_level is None:
+            pyramid_highest_level = self._pyramid_highest_level
+        if args_registration is None:
+            args_registration = self._args_registration
+
+        registration_args = ""
+        if not verbose:
+            registration_args = " -no-verbose"
+        registration_args += f" -transformation-type {registration_type} -pyramid-lowest-level {pyramid_lowest_level} -pyramid-highest-level {pyramid_highest_level} "
+        registration_args += args_registration
+        registration_args = registration_args.replace("rotation", "rigid")
+
+        return registration_args
+    
+    def register(self, img_float, img_ref, scale, verbose=False):
+
+        keep = True
+        counter = 0
+        registration_args = self._make_registration_args(verbose=verbose)
+        while keep and counter < 10:
+            # Usage
+            if verbose:
+                trnsf = vt.blockmatching(img_float, image_ref=img_ref, params=registration_args)
+            else:
+                with _suppress_stdout_stderr():
+                    trnsf = vt.blockmatching(img_float, image_ref=img_ref, params=registration_args)
+            if trnsf is None:
+                trnsf = vt.vtTransformation(np.eye(self._n_spatial+1))
+                failed = True
+                counter += 1
+                if self._pyramid_highest_level > 0:
+                    if verbose:
+                        print("Registration failed. Trying with a lower highest pyramid level.")
+                    pyramid_highest_level = self._pyramid_highest_level - 1
+                    registration_args = self._make_registration_args(pyramid_highest_level=pyramid_highest_level, verbose=verbose)
+                else:
+                    if "-pyramid-gaussian-filtering" not in self._args_registration and "-py-gf" not in self._args_registration:
+                        if verbose:
+                            print("Registration failed. Trying with pyramid gaussian filtering.")
+                        args_registration = self._args_registration + " -pyramid-gaussian-filtering"
+                        registration_args = self._make_registration_args(args_registration=args_registration, verbose=verbose)
+            else:
+                registration_args = self._make_registration_args(verbose=verbose)
+                keep = False
+
+        if "rotation" in self._registration_type:
+            center = vt.vtPointList([[i/2 for i in self._box[::-1]]])
+            center_moved = vt.apply_trsf_to_points(center, trnsf)
+            compensation = np.eye(self._n_spatial+1)
+            compensation[:self._n_spatial, -1] = center.copy_to_array()[0] - center_moved.copy_to_array()[0]
+            trnsf = vt.compose_trsf([vt.vtTransformation(compensation), trnsf])
+
+        return trnsf
+    
 #     Parameters for the blockmatching algorithm:
 #         ### image geometry ### 
 #         [-reference-voxel %lf %lf [%lf]]:
@@ -1257,3 +1250,101 @@ class Registration:
 #         value for respectively the lowest or the highest level of the pyramid (recall
 #         that the most lowest level, ie #0, refers to the original image). For
 #         intermediary levels, values are linearly interpolated.
+
+class RegistrationMoments(Registration):
+    def __init__(self, n_axis, align_center=True, align_rotation=True):
+        super().__init__()
+        self.align_center = align_center
+        self.align_rotation = align_rotation
+        self._n_spatial = None
+        self._n_axis = n_axis
+
+    def get_image(self, dataset, t, scale, axis, use_channel, downsample, padding=None):
+        return dataset[_make_index(t, axis, use_channel, downsample)]
+
+    def write_trnsf(self, trnsf, out):
+        np.savetxt(out, trnsf, fmt='%.6f')
+
+    def read_trnsf(self, out):
+        return np.loadtxt(out)
+
+    def apply_trnsf(self, image, trnsf):
+
+        # Extract rotation and translation
+        rotation_matrix = trnsf[:3, :3]
+        translation = trnsf[:3, 3]
+
+        # Apply the affine transformation to align img1 to img2
+        transformed_img = affine_transform(image, rotation_matrix, offset=translation)
+
+        return transformed_img
+
+    def image2array(self, img):
+        return img
+    
+    def compose_trnsf(self, trnsfs):
+        return np.linalg.multi_dot(trnsfs)
+
+    def register(self, img_float, img_ref, scale, verbose=False):
+        """Compute the transformation (translation + rotation) to align img2 to img1."""
+
+        center_image = np.array(img_float.shape)/2
+
+        img1_ = img_ref
+        center1 = centroid(img1_)  # Center of img1
+        # axes1 = inertia_tensor(img1_)
+        # eigvals1, eigvecs1 = np.linalg.eigh(axes1)
+        # print(eigvecs1)
+
+        img2_ = img_float
+        center2 = centroid(img2_) # Center of img2
+        # axes2 = inertia_tensor(img2_)
+        # eigvals2, eigvecs2 = np.linalg.eigh(axes2)
+        # print(eigvecs2)
+
+        # Compute translation to move img2 to img1
+        translation = center2 - center1 if self.align_center else np.zeros(3)
+
+        # Compute rotation
+        if self.align_rotation:
+
+            # selected_axes1 = eigvecs1[:, -1]  # Strongest principal axes of img1
+            # selected_axes2 = eigvecs2[:, -1]  # Strongest principal axes of img2
+            selected_axes1 = center1 - center_image  # Strongest principal axes of img1
+            selected_axes2 = center2 - center_image  # Strongest principal axes of img2
+
+            # Normalize axes
+            selected_axes1 = selected_axes1 / np.linalg.norm(selected_axes1, axis=0)
+            selected_axes2 = selected_axes2 / np.linalg.norm(selected_axes2, axis=0)
+
+            # Ensure orthogonality by computing cross product
+            normal = np.cross(selected_axes1, selected_axes2)
+            normal = normal / np.linalg.norm(normal)
+            angle = np.arccos(np.dot(selected_axes1, selected_axes2))
+
+            # Rodrigues' rotation formula
+            K = np.array([
+                [0, -normal[2], normal[1]],
+                [normal[2], 0, -normal[0]],
+                [-normal[1], normal[0], 0]
+            ])
+            rotation_matrix = np.eye(3) + np.sin(angle) * K + (1 - np.cos(angle)) * (K @ K)
+
+
+        else:
+            rotation_matrix = np.eye(3)
+
+        rotation_matrix_aff = np.eye(4)
+        rotation_matrix_aff[:3,:3] = rotation_matrix
+
+        translation_aff = np.eye(4)
+        translation_aff[:3,3] = -center_image
+        translation_inv_aff = np.eye(4)
+        translation_inv_aff[:3,3] = center_image
+
+        translation_aff_center = np.eye(4)
+        translation_aff_center[:3,3] = -translation
+
+        trnsf = translation_aff_center @ translation_inv_aff @ rotation_matrix_aff @ translation_aff
+
+        return trnsf  # Return as a 3×4 matrix (rotation + translation)
