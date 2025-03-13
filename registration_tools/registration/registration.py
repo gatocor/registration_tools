@@ -17,6 +17,7 @@ from copy import deepcopy
 import zarr
 from ..utils.auxiliar import _get_axis_scale, _make_index, _dict_axis_shape, _suppress_stdout_stderr, _shape_downsampled, _shape_padded
 import tempfile
+import time
 try:
     import cupy as cp
     import cupyx.scipy.ndimage as cndi
@@ -1289,10 +1290,7 @@ class RegistrationMoments(Registration):
         # Apply the affine transformation to align img1 to img2
         transformed_img = ndix.affine_transform(image_, rotation_matrix, offset=translation)
 
-        if GPU_AVAILABLE:
-            return transformed_img.get()
-        else:
-            return transformed_img
+        return transformed_img.get() if GPU_AVAILABLE else transformed_img
 
     def image2array(self, img):
         return img
@@ -1307,13 +1305,12 @@ class RegistrationMoments(Registration):
         ndix = cndi if GPU_AVAILABLE else ndi
         skmx = cskm if GPU_AVAILABLE else skm
         img_float_ = nx.array(img_float)
-        img_ref_ = nx.array(img_float)
+        img_ref_ = nx.array(img_ref)
         
         # Compute center of the images in real-world coordinates
         center_image = (nx.array(img_float_.shape) - 1) / 2 * nx.array(scale)
 
         center1 = skmx.centroid(img_ref_, spacing=scale)  # Center of img1 in real-world space
-
         center2 = skmx.centroid(img_float_, spacing=scale)  # Center of img2 in real-world space
 
         # Compute translation to move img2 to img1
@@ -1338,12 +1335,10 @@ class RegistrationMoments(Registration):
                 normal /= normal_norm
                 angle = nx.arccos(nx.clip(nx.dot(selected_axes1, selected_axes2), -1.0, 1.0))
 
-                # Rodrigues' rotation formula
-                K = nx.array([
-                    [0, -normal[2], normal[1]],
-                    [normal[2], 0, -normal[0]],
-                    [-normal[1], normal[0], 0]
-                ])
+                K = nx.zeros((3, 3))
+                K[0, 1], K[0, 2] = -normal[2], normal[1]
+                K[1, 0], K[1, 2] = normal[2], -normal[0]
+                K[2, 0], K[2, 1] = -normal[1], normal[0]
                 rotation_matrix = nx.eye(3) + nx.sin(angle) * K + (1 - nx.cos(angle)) * (K @ K)
         else:
             rotation_matrix = nx.eye(3)
@@ -1371,7 +1366,4 @@ class RegistrationMoments(Registration):
         # Apply transformation in the correct order
         trnsf = scale_inv_aff @ translation_aff_center @ translation_inv_aff @ rotation_matrix_aff @ translation_aff @ scale_aff
 
-        if GPU_AVAILABLE:
-            return trnsf.get()
-        else:
-            return trnsf  # Return as a 4×4 affine transformation matrix
+        return trnsf.get() if GPU_AVAILABLE else trnsf
