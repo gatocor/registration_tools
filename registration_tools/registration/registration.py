@@ -2,8 +2,8 @@ import os
 import re
 import numpy as np
 from skimage.io import imread, imsave
-from skimage.measure import centroid, inertia_tensor, moments_central
-from scipy.ndimage import affine_transform
+import skimage.measure as skm
+import scipy.ndimage as ndi
 import shutil
 import vt
 from ..dataset.dataset import Dataset
@@ -17,6 +17,13 @@ from copy import deepcopy
 import zarr
 from ..utils.auxiliar import _get_axis_scale, _make_index, _dict_axis_shape, _suppress_stdout_stderr, _shape_downsampled, _shape_padded
 import tempfile
+try:
+    import cupy as cp
+    import cupyx.scipy.ndimage as cndi
+    import cucim.skimage as cskm
+    GPU_AVAILABLE = True
+except ImportError:
+    GPU_AVAILABLE = False
 
 class Registration:
     """
@@ -1270,14 +1277,20 @@ class RegistrationMoments(Registration):
 
     def apply_trnsf(self, image, trnsf):
 
+        nx = cp if GPU_AVAILABLE else np 
+        ndix = cndi if GPU_AVAILABLE else ndi
+
         # Extract rotation and translation
-        rotation_matrix = trnsf[:3, :3]
-        translation = trnsf[:3, 3]
+        rotation_matrix = nx.array(trnsf[:3, :3])
+        translation = nx.array(trnsf[:3, 3])
 
         # Apply the affine transformation to align img1 to img2
-        transformed_img = affine_transform(image, rotation_matrix, offset=translation)
+        transformed_img = ndix.affine_transform(image, rotation_matrix, offset=translation)
 
-        return transformed_img
+        if GPU_AVAILABLE:
+            return transformed_img.get()
+        else:
+            return transformed_img
 
     def image2array(self, img):
         return img
@@ -1286,65 +1299,75 @@ class RegistrationMoments(Registration):
         return np.linalg.multi_dot(trnsfs)
 
     def register(self, img_float, img_ref, scale, verbose=False):
-        """Compute the transformation (translation + rotation) to align img2 to img1."""
+        """Compute the transformation (translation + rotation) to align img2 to img1, considering anisotropy."""
 
-        center_image = np.array(img_float.shape)/2
+        nx = cp if GPU_AVAILABLE else np 
+        ndix = cndi if GPU_AVAILABLE else ndi
+        skmx = cskm if GPU_AVAILABLE else skm
 
-        img1_ = img_ref
-        center1 = centroid(img1_)  # Center of img1
-        # axes1 = inertia_tensor(img1_)
-        # eigvals1, eigvecs1 = np.linalg.eigh(axes1)
-        # print(eigvecs1)
+        # Compute center of the images in real-world coordinates
+        center_image = (nx.array(img_float.shape) - 1) / 2 * nx.array(scale)
 
-        img2_ = img_float
-        center2 = centroid(img2_) # Center of img2
-        # axes2 = inertia_tensor(img2_)
-        # eigvals2, eigvecs2 = np.linalg.eigh(axes2)
-        # print(eigvecs2)
+        center1 = skmx.centroid(img_ref, spacing=scale)  # Center of img1 in real-world space
+
+        center2 = skmx.centroid(img_float, spacing=scale)  # Center of img2 in real-world space
 
         # Compute translation to move img2 to img1
         translation = center2 - center1 if self.align_center else np.zeros(3)
 
         # Compute rotation
         if self.align_rotation:
-
-            # selected_axes1 = eigvecs1[:, -1]  # Strongest principal axes of img1
-            # selected_axes2 = eigvecs2[:, -1]  # Strongest principal axes of img2
-            selected_axes1 = center1 - center_image  # Strongest principal axes of img1
-            selected_axes2 = center2 - center_image  # Strongest principal axes of img2
+            selected_axes1 = (center1 - center_image)  # Strongest principal axes of img1
+            selected_axes2 = (center2 - center_image)  # Strongest principal axes of img2
 
             # Normalize axes
-            selected_axes1 = selected_axes1 / np.linalg.norm(selected_axes1, axis=0)
-            selected_axes2 = selected_axes2 / np.linalg.norm(selected_axes2, axis=0)
+            selected_axes1 /= nx.linalg.norm(selected_axes1, axis=0)
+            selected_axes2 /= nx.linalg.norm(selected_axes2, axis=0)
 
-            # Ensure orthogonality by computing cross product
-            normal = np.cross(selected_axes1, selected_axes2)
-            normal = normal / np.linalg.norm(normal)
-            angle = np.arccos(np.dot(selected_axes1, selected_axes2))
+            # Compute cross product (normal vector)
+            normal = nx.cross(selected_axes1, selected_axes2)
+            normal_norm = nx.linalg.norm(normal)
 
-            # Rodrigues' rotation formula
-            K = np.array([
-                [0, -normal[2], normal[1]],
-                [normal[2], 0, -normal[0]],
-                [-normal[1], normal[0], 0]
-            ])
-            rotation_matrix = np.eye(3) + np.sin(angle) * K + (1 - np.cos(angle)) * (K @ K)
+            if normal_norm < 1e-6:  # If vectors are nearly parallel, set identity rotation
+                rotation_matrix = nx.eye(3)
+            else:
+                normal /= normal_norm
+                angle = nx.arccos(nx.clip(nx.dot(selected_axes1, selected_axes2), -1.0, 1.0))
 
-
+                # Rodrigues' rotation formula
+                K = np.array([
+                    [0, -normal[2], normal[1]],
+                    [normal[2], 0, -normal[0]],
+                    [-normal[1], normal[0], 0]
+                ])
+                rotation_matrix = nx.eye(3) + nx.sin(angle) * K + (1 - nx.cos(angle)) * (K @ K)
         else:
-            rotation_matrix = np.eye(3)
+            rotation_matrix = nx.eye(3)
 
-        rotation_matrix_aff = np.eye(4)
+        # Convert to 4x4 affine transformation matrix
+        rotation_matrix_aff = nx.eye(4)
         rotation_matrix_aff[:3,:3] = rotation_matrix
 
-        translation_aff = np.eye(4)
+        # Translation matrices
+        translation_aff = nx.eye(4)
         translation_aff[:3,3] = -center_image
-        translation_inv_aff = np.eye(4)
+        translation_inv_aff = nx.eye(4)
         translation_inv_aff[:3,3] = center_image
 
-        translation_aff_center = np.eye(4)
+        translation_aff_center = nx.eye(4)
         translation_aff_center[:3,3] = -translation
 
-        trnsf = translation_aff_center @ translation_inv_aff @ rotation_matrix_aff @ translation_aff
+        # Scaling matrices (fixing order of operations)
+        scale_aff = nx.eye(4)
+        scale_aff[:3,:3] = nx.diag(scale)
+        
+        scale_inv_aff = nx.eye(4)
+        scale_inv_aff[:3,:3] = nx.diag(1/nx.array(scale))
 
-        return trnsf  # Return as a 3×4 matrix (rotation + translation)
+        # Apply transformation in the correct order
+        trnsf = scale_inv_aff @ translation_aff_center @ translation_inv_aff @ rotation_matrix_aff @ translation_aff @ scale_aff
+
+        if GPU_AVAILABLE:
+            return trnsf.get()
+        else:
+            return trnsf  # Return as a 4×4 affine transformation matrix
