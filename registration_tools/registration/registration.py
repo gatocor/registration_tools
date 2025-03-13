@@ -20,8 +20,9 @@ import tempfile
 try:
     import cupy as cp
     import cupyx.scipy.ndimage as cndi
-    import cucim.skimage as cskm
+    import cucim.skimage.measure as cskm
     GPU_AVAILABLE = True
+    print("GPU_AVAILABLE!, Steps that can be accelerated with CUDA will be passed to the GPU.")
 except ImportError:
     GPU_AVAILABLE = False
 
@@ -1279,13 +1280,14 @@ class RegistrationMoments(Registration):
 
         nx = cp if GPU_AVAILABLE else np 
         ndix = cndi if GPU_AVAILABLE else ndi
+        image_ = nx.array(image)
 
         # Extract rotation and translation
         rotation_matrix = nx.array(trnsf[:3, :3])
         translation = nx.array(trnsf[:3, 3])
 
         # Apply the affine transformation to align img1 to img2
-        transformed_img = ndix.affine_transform(image, rotation_matrix, offset=translation)
+        transformed_img = ndix.affine_transform(image_, rotation_matrix, offset=translation)
 
         if GPU_AVAILABLE:
             return transformed_img.get()
@@ -1304,16 +1306,18 @@ class RegistrationMoments(Registration):
         nx = cp if GPU_AVAILABLE else np 
         ndix = cndi if GPU_AVAILABLE else ndi
         skmx = cskm if GPU_AVAILABLE else skm
-
+        img_float_ = nx.array(img_float)
+        img_ref_ = nx.array(img_float)
+        
         # Compute center of the images in real-world coordinates
-        center_image = (nx.array(img_float.shape) - 1) / 2 * nx.array(scale)
+        center_image = (nx.array(img_float_.shape) - 1) / 2 * nx.array(scale)
 
-        center1 = skmx.centroid(img_ref, spacing=scale)  # Center of img1 in real-world space
+        center1 = skmx.centroid(img_ref_, spacing=scale)  # Center of img1 in real-world space
 
-        center2 = skmx.centroid(img_float, spacing=scale)  # Center of img2 in real-world space
+        center2 = skmx.centroid(img_float_, spacing=scale)  # Center of img2 in real-world space
 
         # Compute translation to move img2 to img1
-        translation = center2 - center1 if self.align_center else np.zeros(3)
+        translation = center2 - center1 if self.align_center else nx.zeros(3)
 
         # Compute rotation
         if self.align_rotation:
@@ -1335,7 +1339,7 @@ class RegistrationMoments(Registration):
                 angle = nx.arccos(nx.clip(nx.dot(selected_axes1, selected_axes2), -1.0, 1.0))
 
                 # Rodrigues' rotation formula
-                K = np.array([
+                K = nx.array([
                     [0, -normal[2], normal[1]],
                     [normal[2], 0, -normal[0]],
                     [-normal[1], normal[0], 0]
