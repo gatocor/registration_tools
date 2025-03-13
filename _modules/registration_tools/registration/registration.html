@@ -35,8 +35,8 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">skimage.io</span><span class="w"> </span><span class="kn">import</span> <span class="n">imread</span><span class="p">,</span> <span class="n">imsave</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">skimage.measure</span><span class="w"> </span><span class="kn">import</span> <span class="n">centroid</span><span class="p">,</span> <span class="n">inertia_tensor</span><span class="p">,</span> <span class="n">moments_central</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">scipy.ndimage</span><span class="w"> </span><span class="kn">import</span> <span class="n">affine_transform</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">skimage.measure</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">skm</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">scipy.ndimage</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ndi</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">shutil</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">vt</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..dataset.dataset</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dataset</span>
@@ -50,6 +50,13 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">zarr</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..utils.auxiliar</span><span class="w"> </span><span class="kn">import</span> <span class="n">_get_axis_scale</span><span class="p">,</span> <span class="n">_make_index</span><span class="p">,</span> <span class="n">_dict_axis_shape</span><span class="p">,</span> <span class="n">_suppress_stdout_stderr</span><span class="p">,</span> <span class="n">_shape_downsampled</span><span class="p">,</span> <span class="n">_shape_padded</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">cupy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">cp</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">cupyx.scipy.ndimage</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">cndi</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">cucim.skimage</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">cskm</span>
+    <span class="n">GPU_AVAILABLE</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+    <span class="n">GPU_AVAILABLE</span> <span class="o">=</span> <span class="kc">False</span>
 
 <span class="k">class</span><span class="w"> </span><span class="nc">Registration</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
@@ -1306,14 +1313,20 @@
 
     <span class="k">def</span><span class="w"> </span><span class="nf">apply_trnsf</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image</span><span class="p">,</span> <span class="n">trnsf</span><span class="p">):</span>
 
+        <span class="n">nx</span> <span class="o">=</span> <span class="n">cp</span> <span class="k">if</span> <span class="n">GPU_AVAILABLE</span> <span class="k">else</span> <span class="n">np</span> 
+        <span class="n">ndix</span> <span class="o">=</span> <span class="n">cndi</span> <span class="k">if</span> <span class="n">GPU_AVAILABLE</span> <span class="k">else</span> <span class="n">ndi</span>
+
         <span class="c1"># Extract rotation and translation</span>
-        <span class="n">rotation_matrix</span> <span class="o">=</span> <span class="n">trnsf</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span> <span class="p">:</span><span class="mi">3</span><span class="p">]</span>
-        <span class="n">translation</span> <span class="o">=</span> <span class="n">trnsf</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+        <span class="n">rotation_matrix</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">trnsf</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span> <span class="p">:</span><span class="mi">3</span><span class="p">])</span>
+        <span class="n">translation</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">trnsf</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">])</span>
 
         <span class="c1"># Apply the affine transformation to align img1 to img2</span>
-        <span class="n">transformed_img</span> <span class="o">=</span> <span class="n">affine_transform</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">rotation_matrix</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="n">translation</span><span class="p">)</span>
+        <span class="n">transformed_img</span> <span class="o">=</span> <span class="n">ndix</span><span class="o">.</span><span class="n">affine_transform</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">rotation_matrix</span><span class="p">,</span> <span class="n">offset</span><span class="o">=</span><span class="n">translation</span><span class="p">)</span>
 
-        <span class="k">return</span> <span class="n">transformed_img</span>
+        <span class="k">if</span> <span class="n">GPU_AVAILABLE</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">transformed_img</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">transformed_img</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">image2array</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">img</span><span class="p">):</span>
         <span class="k">return</span> <span class="n">img</span>
@@ -1322,68 +1335,78 @@
         <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">multi_dot</span><span class="p">(</span><span class="n">trnsfs</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">register</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">img_float</span><span class="p">,</span> <span class="n">img_ref</span><span class="p">,</span> <span class="n">scale</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute the transformation (translation + rotation) to align img2 to img1.&quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute the transformation (translation + rotation) to align img2 to img1, considering anisotropy.&quot;&quot;&quot;</span>
 
-        <span class="n">center_image</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">img_float</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span>
+        <span class="n">nx</span> <span class="o">=</span> <span class="n">cp</span> <span class="k">if</span> <span class="n">GPU_AVAILABLE</span> <span class="k">else</span> <span class="n">np</span> 
+        <span class="n">ndix</span> <span class="o">=</span> <span class="n">cndi</span> <span class="k">if</span> <span class="n">GPU_AVAILABLE</span> <span class="k">else</span> <span class="n">ndi</span>
+        <span class="n">skmx</span> <span class="o">=</span> <span class="n">cskm</span> <span class="k">if</span> <span class="n">GPU_AVAILABLE</span> <span class="k">else</span> <span class="n">skm</span>
 
-        <span class="n">img1_</span> <span class="o">=</span> <span class="n">img_ref</span>
-        <span class="n">center1</span> <span class="o">=</span> <span class="n">centroid</span><span class="p">(</span><span class="n">img1_</span><span class="p">)</span>  <span class="c1"># Center of img1</span>
-        <span class="c1"># axes1 = inertia_tensor(img1_)</span>
-        <span class="c1"># eigvals1, eigvecs1 = np.linalg.eigh(axes1)</span>
-        <span class="c1"># print(eigvecs1)</span>
+        <span class="c1"># Compute center of the images in real-world coordinates</span>
+        <span class="n">center_image</span> <span class="o">=</span> <span class="p">(</span><span class="n">nx</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">img_float</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">nx</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">scale</span><span class="p">)</span>
 
-        <span class="n">img2_</span> <span class="o">=</span> <span class="n">img_float</span>
-        <span class="n">center2</span> <span class="o">=</span> <span class="n">centroid</span><span class="p">(</span><span class="n">img2_</span><span class="p">)</span> <span class="c1"># Center of img2</span>
-        <span class="c1"># axes2 = inertia_tensor(img2_)</span>
-        <span class="c1"># eigvals2, eigvecs2 = np.linalg.eigh(axes2)</span>
-        <span class="c1"># print(eigvecs2)</span>
+        <span class="n">center1</span> <span class="o">=</span> <span class="n">skmx</span><span class="o">.</span><span class="n">centroid</span><span class="p">(</span><span class="n">img_ref</span><span class="p">,</span> <span class="n">spacing</span><span class="o">=</span><span class="n">scale</span><span class="p">)</span>  <span class="c1"># Center of img1 in real-world space</span>
+
+        <span class="n">center2</span> <span class="o">=</span> <span class="n">skmx</span><span class="o">.</span><span class="n">centroid</span><span class="p">(</span><span class="n">img_float</span><span class="p">,</span> <span class="n">spacing</span><span class="o">=</span><span class="n">scale</span><span class="p">)</span>  <span class="c1"># Center of img2 in real-world space</span>
 
         <span class="c1"># Compute translation to move img2 to img1</span>
         <span class="n">translation</span> <span class="o">=</span> <span class="n">center2</span> <span class="o">-</span> <span class="n">center1</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">align_center</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
 
         <span class="c1"># Compute rotation</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">align_rotation</span><span class="p">:</span>
-
-            <span class="c1"># selected_axes1 = eigvecs1[:, -1]  # Strongest principal axes of img1</span>
-            <span class="c1"># selected_axes2 = eigvecs2[:, -1]  # Strongest principal axes of img2</span>
-            <span class="n">selected_axes1</span> <span class="o">=</span> <span class="n">center1</span> <span class="o">-</span> <span class="n">center_image</span>  <span class="c1"># Strongest principal axes of img1</span>
-            <span class="n">selected_axes2</span> <span class="o">=</span> <span class="n">center2</span> <span class="o">-</span> <span class="n">center_image</span>  <span class="c1"># Strongest principal axes of img2</span>
+            <span class="n">selected_axes1</span> <span class="o">=</span> <span class="p">(</span><span class="n">center1</span> <span class="o">-</span> <span class="n">center_image</span><span class="p">)</span>  <span class="c1"># Strongest principal axes of img1</span>
+            <span class="n">selected_axes2</span> <span class="o">=</span> <span class="p">(</span><span class="n">center2</span> <span class="o">-</span> <span class="n">center_image</span><span class="p">)</span>  <span class="c1"># Strongest principal axes of img2</span>
 
             <span class="c1"># Normalize axes</span>
-            <span class="n">selected_axes1</span> <span class="o">=</span> <span class="n">selected_axes1</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">selected_axes1</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-            <span class="n">selected_axes2</span> <span class="o">=</span> <span class="n">selected_axes2</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">selected_axes2</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+            <span class="n">selected_axes1</span> <span class="o">/=</span> <span class="n">nx</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">selected_axes1</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+            <span class="n">selected_axes2</span> <span class="o">/=</span> <span class="n">nx</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">selected_axes2</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
 
-            <span class="c1"># Ensure orthogonality by computing cross product</span>
-            <span class="n">normal</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">cross</span><span class="p">(</span><span class="n">selected_axes1</span><span class="p">,</span> <span class="n">selected_axes2</span><span class="p">)</span>
-            <span class="n">normal</span> <span class="o">=</span> <span class="n">normal</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">normal</span><span class="p">)</span>
-            <span class="n">angle</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arccos</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">selected_axes1</span><span class="p">,</span> <span class="n">selected_axes2</span><span class="p">))</span>
+            <span class="c1"># Compute cross product (normal vector)</span>
+            <span class="n">normal</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">cross</span><span class="p">(</span><span class="n">selected_axes1</span><span class="p">,</span> <span class="n">selected_axes2</span><span class="p">)</span>
+            <span class="n">normal_norm</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">normal</span><span class="p">)</span>
 
-            <span class="c1"># Rodrigues&#39; rotation formula</span>
-            <span class="n">K</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span>
-                <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="n">normal</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">normal</span><span class="p">[</span><span class="mi">1</span><span class="p">]],</span>
-                <span class="p">[</span><span class="n">normal</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="n">normal</span><span class="p">[</span><span class="mi">0</span><span class="p">]],</span>
-                <span class="p">[</span><span class="o">-</span><span class="n">normal</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">normal</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="mi">0</span><span class="p">]</span>
-            <span class="p">])</span>
-            <span class="n">rotation_matrix</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">angle</span><span class="p">)</span> <span class="o">*</span> <span class="n">K</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">angle</span><span class="p">))</span> <span class="o">*</span> <span class="p">(</span><span class="n">K</span> <span class="o">@</span> <span class="n">K</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">normal_norm</span> <span class="o">&lt;</span> <span class="mf">1e-6</span><span class="p">:</span>  <span class="c1"># If vectors are nearly parallel, set identity rotation</span>
+                <span class="n">rotation_matrix</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">normal</span> <span class="o">/=</span> <span class="n">normal_norm</span>
+                <span class="n">angle</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">arccos</span><span class="p">(</span><span class="n">nx</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">nx</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">selected_axes1</span><span class="p">,</span> <span class="n">selected_axes2</span><span class="p">),</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">))</span>
 
-
+                <span class="c1"># Rodrigues&#39; rotation formula</span>
+                <span class="n">K</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span>
+                    <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="n">normal</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">normal</span><span class="p">[</span><span class="mi">1</span><span class="p">]],</span>
+                    <span class="p">[</span><span class="n">normal</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="n">normal</span><span class="p">[</span><span class="mi">0</span><span class="p">]],</span>
+                    <span class="p">[</span><span class="o">-</span><span class="n">normal</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">normal</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="mi">0</span><span class="p">]</span>
+                <span class="p">])</span>
+                <span class="n">rotation_matrix</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="o">+</span> <span class="n">nx</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">angle</span><span class="p">)</span> <span class="o">*</span> <span class="n">K</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">nx</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">angle</span><span class="p">))</span> <span class="o">*</span> <span class="p">(</span><span class="n">K</span> <span class="o">@</span> <span class="n">K</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">rotation_matrix</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+            <span class="n">rotation_matrix</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
 
-        <span class="n">rotation_matrix_aff</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
+        <span class="c1"># Convert to 4x4 affine transformation matrix</span>
+        <span class="n">rotation_matrix_aff</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
         <span class="n">rotation_matrix_aff</span><span class="p">[:</span><span class="mi">3</span><span class="p">,:</span><span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="n">rotation_matrix</span>
 
-        <span class="n">translation_aff</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
+        <span class="c1"># Translation matrices</span>
+        <span class="n">translation_aff</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
         <span class="n">translation_aff</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span><span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="o">-</span><span class="n">center_image</span>
-        <span class="n">translation_inv_aff</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
+        <span class="n">translation_inv_aff</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
         <span class="n">translation_inv_aff</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span><span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="n">center_image</span>
 
-        <span class="n">translation_aff_center</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
+        <span class="n">translation_aff_center</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
         <span class="n">translation_aff_center</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span><span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="o">-</span><span class="n">translation</span>
 
-        <span class="n">trnsf</span> <span class="o">=</span> <span class="n">translation_aff_center</span> <span class="o">@</span> <span class="n">translation_inv_aff</span> <span class="o">@</span> <span class="n">rotation_matrix_aff</span> <span class="o">@</span> <span class="n">translation_aff</span>
+        <span class="c1"># Scaling matrices (fixing order of operations)</span>
+        <span class="n">scale_aff</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
+        <span class="n">scale_aff</span><span class="p">[:</span><span class="mi">3</span><span class="p">,:</span><span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">diag</span><span class="p">(</span><span class="n">scale</span><span class="p">)</span>
+        
+        <span class="n">scale_inv_aff</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
+        <span class="n">scale_inv_aff</span><span class="p">[:</span><span class="mi">3</span><span class="p">,:</span><span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="n">nx</span><span class="o">.</span><span class="n">diag</span><span class="p">(</span><span class="mi">1</span><span class="o">/</span><span class="n">nx</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">scale</span><span class="p">))</span>
 
-        <span class="k">return</span> <span class="n">trnsf</span>  <span class="c1"># Return as a 3×4 matrix (rotation + translation)</span>
+        <span class="c1"># Apply transformation in the correct order</span>
+        <span class="n">trnsf</span> <span class="o">=</span> <span class="n">scale_inv_aff</span> <span class="o">@</span> <span class="n">translation_aff_center</span> <span class="o">@</span> <span class="n">translation_inv_aff</span> <span class="o">@</span> <span class="n">rotation_matrix_aff</span> <span class="o">@</span> <span class="n">translation_aff</span> <span class="o">@</span> <span class="n">scale_aff</span>
+
+        <span class="k">if</span> <span class="n">GPU_AVAILABLE</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">trnsf</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">trnsf</span>  <span class="c1"># Return as a 4×4 affine transformation matrix</span>
 </pre></div>
 
           </div>

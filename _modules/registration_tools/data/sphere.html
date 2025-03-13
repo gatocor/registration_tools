@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../../../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>registration_tools.data.sphere &#8212; Registration Tools 0.1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/alabaster.css?v=27fed22d" />
+    <script src="../../../_static/documentation_options.js?v=2709fde1"></script>
+    <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+   
+  <link rel="stylesheet" href="../../../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for registration_tools.data.sphere</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">tifffile</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..dataset.dataset</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dataset</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">zarr</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">scipy.ndimage</span>
+
+<div class="viewcode-block" id="sphere">
+<a class="viewcode-back" href="../../../API_data.html#registration_tools.data.sphere">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">sphere</span><span class="p">(</span><span class="n">out</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">num_images</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">image_size</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">num_channels</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">min_radius</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">max_radius</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">jump</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">decay_factor</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    This function creates a series of 3D images of a sphere moving along an L-shaped path while increasing the radius.</span>
+<span class="sd">    The radius of the spheres increases linearly from min_radius to max_radius across the images.</span>
+<span class="sd">    The spheres have Gaussian intensity from the center to the border.</span>
+<span class="sd">    The images are saved in the specified directory with a specified stride.</span>
+
+<span class="sd">    Parameters:</span>
+<span class="sd">        out (str): The directory or zarr file where the images will be saved. If None, the images are stored in memory. Default is None.</span>
+<span class="sd">        num_images (int): The number of images to generate. Default is 10.</span>
+<span class="sd">        image_size (int): The size of each dimension of the cubic images. Default is 100.</span>
+<span class="sd">        num_channels (int): The number of channels for the images. Default is 1.</span>
+<span class="sd">        min_radius (int): The minimum radius of the spheres. Default is 5.</span>
+<span class="sd">        max_radius (int): The maximum radius of the spheres. Default is 20.</span>
+<span class="sd">        jump (int): The step size for the L-shaped path points. Default is 2.</span>
+<span class="sd">        stride (tuple): The stride to apply when saving the images. Default is (3, 2, 1).</span>
+<span class="sd">        decay_factor (float): The exponential decay factor for the Gaussian intensity. Default is 0.5.</span>
+<span class="sd">        verbose (bool): If True, print detailed information. Default is False.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Dataset or zarr array: The dataset object containing the generated images if saved to a directory, or a zarr array if saved to a zarr file or in memory.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">out</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">type</span> <span class="o">=</span> <span class="s2">&quot;zarr&quot;</span>
+        <span class="n">store</span> <span class="o">=</span> <span class="n">zarr</span><span class="o">.</span><span class="n">storage</span><span class="o">.</span><span class="n">MemoryStore</span><span class="p">()</span>
+        <span class="n">zarr_file</span> <span class="o">=</span> <span class="n">zarr</span><span class="o">.</span><span class="n">create_array</span><span class="p">(</span><span class="n">store</span><span class="o">=</span><span class="n">store</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">num_images</span><span class="p">,</span> <span class="n">num_channels</span><span class="p">,</span> <span class="n">image_size</span><span class="o">//</span><span class="n">stride</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">image_size</span><span class="o">//</span><span class="n">stride</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">image_size</span><span class="o">//</span><span class="n">stride</span><span class="p">[</span><span class="mi">2</span><span class="p">]),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span>
+        <span class="n">zarr_file</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">&quot;axis&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;TCZYX&quot;</span>
+        <span class="n">zarr_file</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">&quot;scale&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">stride</span>
+    <span class="k">elif</span> <span class="p">(</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="n">out</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;.zarr&quot;</span><span class="p">)</span> <span class="p">):</span>
+        <span class="nb">type</span> <span class="o">=</span> <span class="s2">&quot;zarr&quot;</span>
+        <span class="n">zarr_file</span> <span class="o">=</span> <span class="n">zarr</span><span class="o">.</span><span class="n">create_array</span><span class="p">(</span><span class="n">store</span><span class="o">=</span><span class="n">out</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">num_images</span><span class="p">,</span> <span class="n">num_channels</span><span class="p">,</span> <span class="n">image_size</span><span class="o">//</span><span class="n">stride</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">image_size</span><span class="o">//</span><span class="n">stride</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">image_size</span><span class="o">//</span><span class="n">stride</span><span class="p">[</span><span class="mi">2</span><span class="p">]),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span>
+        <span class="n">zarr_file</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">&quot;axis&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;TCZYX&quot;</span>
+        <span class="n">zarr_file</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">&quot;scale&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">stride</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="c1"># Create the directory</span>
+        <span class="nb">type</span> <span class="o">=</span> <span class="s2">&quot;directory&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">out</span><span class="p">):</span>
+            <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">out</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Directory &#39;</span><span class="si">{</span><span class="n">out</span><span class="si">}</span><span class="s2">&#39; created successfully&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">FileExistsError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Directory &#39;</span><span class="si">{</span><span class="n">out</span><span class="si">}</span><span class="s2">&#39; already exists&quot;</span><span class="p">)</span>
+    
+        <span class="c1"># Create subfolders for each channel</span>
+        <span class="k">for</span> <span class="n">channel</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_channels</span><span class="p">):</span>
+            <span class="n">channel_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;channel_</span><span class="si">{</span><span class="n">channel</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">channel_path</span><span class="p">)</span>
+
+    <span class="c1"># Create L-shaped path with jumps</span>
+    <span class="n">center</span> <span class="o">=</span> <span class="n">image_size</span> <span class="o">//</span> <span class="mi">2</span>
+    <span class="n">path_points</span> <span class="o">=</span> <span class="p">[(</span><span class="n">center</span><span class="p">,</span> <span class="n">center</span><span class="p">,</span> <span class="n">center</span> <span class="o">+</span> <span class="n">i</span> <span class="o">*</span> <span class="n">jump</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">)]</span> <span class="o">+</span> <span class="p">[(</span><span class="n">center</span><span class="p">,</span> <span class="n">center</span> <span class="o">+</span> <span class="n">i</span> <span class="o">*</span> <span class="n">jump</span><span class="p">,</span> <span class="n">center</span> <span class="o">+</span> <span class="mi">4</span> <span class="o">*</span> <span class="n">jump</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">6</span><span class="p">)]</span>
+
+    <span class="c1"># Generate and save images</span>
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">path_points</span><span class="p">):</span>
+        <span class="n">radius</span> <span class="o">=</span> <span class="n">min_radius</span> <span class="o">+</span> <span class="p">(</span><span class="n">i</span> <span class="o">*</span> <span class="p">(</span><span class="n">max_radius</span> <span class="o">-</span> <span class="n">min_radius</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">num_images</span> <span class="o">-</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="n">image</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">image_size</span><span class="p">,</span> <span class="n">image_size</span><span class="p">,</span> <span class="n">image_size</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span>
+        
+        <span class="c1"># Apply Gaussian intensity from the center to the border</span>
+        <span class="n">X</span><span class="p">,</span> <span class="n">Y</span><span class="p">,</span> <span class="n">Z</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">image_size</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">image_size</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">image_size</span><span class="p">),</span> <span class="n">indexing</span><span class="o">=</span><span class="s1">&#39;ij&#39;</span><span class="p">)</span>
+        <span class="n">distances</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">((</span><span class="n">X</span> <span class="o">-</span> <span class="n">x</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="p">(</span><span class="n">Y</span> <span class="o">-</span> <span class="n">y</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="p">(</span><span class="n">Z</span> <span class="o">-</span> <span class="n">z</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">mask</span> <span class="o">=</span> <span class="n">distances</span> <span class="o">&lt;</span> <span class="n">radius</span>
+        <span class="n">image</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span> <span class="o">=</span> <span class="mi">255</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">decay_factor</span> <span class="o">*</span> <span class="p">(</span><span class="n">distances</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span> <span class="o">/</span> <span class="n">radius</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+        
+        <span class="k">for</span> <span class="n">channel</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_channels</span><span class="p">):</span>
+            <span class="k">if</span> <span class="nb">type</span> <span class="o">==</span> <span class="s2">&quot;zarr&quot;</span><span class="p">:</span>
+                <span class="n">zarr_file</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">channel</span><span class="p">]</span> <span class="o">=</span> <span class="n">image</span><span class="p">[::</span><span class="n">stride</span><span class="p">[</span><span class="mi">0</span><span class="p">],::</span><span class="n">stride</span><span class="p">[</span><span class="mi">1</span><span class="p">],::</span><span class="n">stride</span><span class="p">[</span><span class="mi">2</span><span class="p">]]</span>
+            <span class="k">elif</span> <span class="nb">type</span> <span class="o">==</span> <span class="s2">&quot;directory&quot;</span><span class="p">:</span>
+                <span class="n">channel_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;channel_</span><span class="si">{</span><span class="n">channel</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="n">tifffile</span><span class="o">.</span><span class="n">imwrite</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">channel_path</span><span class="p">,</span> <span class="sa">f</span><span class="s1">&#39;sphere_</span><span class="si">{</span><span class="n">i</span><span class="si">:</span><span class="s1">02d</span><span class="si">}</span><span class="s1">.tiff&#39;</span><span class="p">),</span> <span class="n">image</span><span class="p">[::</span><span class="n">stride</span><span class="p">[</span><span class="mi">0</span><span class="p">],::</span><span class="n">stride</span><span class="p">[</span><span class="mi">1</span><span class="p">],::</span><span class="n">stride</span><span class="p">[</span><span class="mi">2</span><span class="p">]])</span>
+
+    <span class="k">if</span> <span class="nb">type</span> <span class="o">==</span> <span class="s2">&quot;zarr&quot;</span> <span class="ow">and</span> <span class="n">out</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">zarr_file</span>
+    <span class="k">elif</span> <span class="nb">type</span> <span class="o">==</span> <span class="s2">&quot;zarr&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">zarr</span><span class="o">.</span><span class="n">open_array</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;r&#39;</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># Create dataset</span>
+        <span class="n">dataset</span> <span class="o">=</span> <span class="n">Dataset</span><span class="p">([</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;channel_</span><span class="si">{</span><span class="n">ch</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot;sphere_</span><span class="si">{:02d}</span><span class="s2">.tiff&quot;</span><span class="p">)</span> <span class="k">for</span> <span class="n">ch</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_channels</span><span class="p">)],</span> <span class="s2">&quot;CT&quot;</span><span class="p">,</span> <span class="s2">&quot;ZYX&quot;</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="p">[</span><span class="n">st</span> <span class="k">for</span> <span class="n">st</span> <span class="ow">in</span> <span class="n">stride</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">dataset</span></div>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">rotating_spheres</span><span class="p">(</span><span class="n">out</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">num_images</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">image_size</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">num_channels</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">min_radius</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">max_radius</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">rotation_speed</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">decay_factor</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    This function creates a series of 3D images of three spheres rotating around the center of the image.</span>
+<span class="sd">    The radius of the spheres increases linearly from min_radius to max_radius across the images.</span>
+<span class="sd">    The spheres have Gaussian intensity from the center to the border.</span>
+<span class="sd">    The images are saved in the specified directory with a specified stride.</span>
+<span class="sd">    Parameters:</span>
+<span class="sd">        out (str): The directory or zarr file where the images will be saved. If None, the images are stored in memory. Default is None.</span>
+<span class="sd">        num_images (int): The number of images to generate. Default is 10.</span>
+<span class="sd">        image_size (int): The size of each dimension of the cubic images. Default is 100.</span>
+<span class="sd">        num_channels (int): The number of channels for the images. Default is 1.</span>
+<span class="sd">        min_radius (int): The minimum radius of the spheres. Default is 5.</span>
+<span class="sd">        max_radius (int): The maximum radius of the spheres. Default is 20.</span>
+<span class="sd">        rotation_speed (float): The speed of rotation for the spheres. Default is 0.1.</span>
+<span class="sd">        stride (tuple): The stride to apply when saving the images. Default is (3, 2, 1).</span>
+<span class="sd">        decay_factor (float): The exponential decay factor for the Gaussian intensity. Default is 0.5.</span>
+<span class="sd">        verbose (bool): If True, print detailed information. Default is False.</span>
+<span class="sd">    Returns:</span>
+<span class="sd">        Dataset or zarr array: The dataset object containing the generated images if saved to a directory, or a zarr array if saved to a zarr file or in memory.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">out</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">type</span> <span class="o">=</span> <span class="s2">&quot;zarr&quot;</span>
+        <span class="n">store</span> <span class="o">=</span> <span class="n">zarr</span><span class="o">.</span><span class="n">storage</span><span class="o">.</span><span class="n">MemoryStore</span><span class="p">()</span>
+        <span class="n">zarr_file</span> <span class="o">=</span> <span class="n">zarr</span><span class="o">.</span><span class="n">create_array</span><span class="p">(</span><span class="n">store</span><span class="o">=</span><span class="n">store</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">num_images</span><span class="p">,</span> <span class="n">num_channels</span><span class="p">,</span> <span class="n">image_size</span><span class="o">//</span><span class="n">stride</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">image_size</span><span class="o">//</span><span class="n">stride</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">image_size</span><span class="o">//</span><span class="n">stride</span><span class="p">[</span><span class="mi">2</span><span class="p">]),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span>
+        <span class="n">zarr_file</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">&quot;axis&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;TCZYX&quot;</span>
+        <span class="n">zarr_file</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">&quot;scale&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">stride</span>
+    <span class="k">elif</span> <span class="p">(</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="n">out</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;.zarr&quot;</span><span class="p">)</span> <span class="p">):</span>
+        <span class="nb">type</span> <span class="o">=</span> <span class="s2">&quot;zarr&quot;</span>
+        <span class="n">zarr_file</span> <span class="o">=</span> <span class="n">zarr</span><span class="o">.</span><span class="n">create_array</span><span class="p">(</span><span class="n">store</span><span class="o">=</span><span class="n">out</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;w&#39;</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">num_images</span><span class="p">,</span> <span class="n">num_channels</span><span class="p">,</span> <span class="n">image_size</span><span class="o">//</span><span class="n">stride</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">image_size</span><span class="o">//</span><span class="n">stride</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">image_size</span><span class="o">//</span><span class="n">stride</span><span class="p">[</span><span class="mi">2</span><span class="p">]),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span>
+        <span class="n">zarr_file</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">&quot;axis&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;TCZYX&quot;</span>
+        <span class="n">zarr_file</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">&quot;scale&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">stride</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="c1"># Create the directory</span>
+        <span class="nb">type</span> <span class="o">=</span> <span class="s2">&quot;directory&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">out</span><span class="p">):</span>
+            <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">out</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Directory &#39;</span><span class="si">{</span><span class="n">out</span><span class="si">}</span><span class="s2">&#39; created successfully&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">FileExistsError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Directory &#39;</span><span class="si">{</span><span class="n">out</span><span class="si">}</span><span class="s2">&#39; already exists&quot;</span><span class="p">)</span>
+    
+        <span class="c1"># Create subfolders for each channel</span>
+        <span class="k">for</span> <span class="n">channel</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_channels</span><span class="p">):</span>
+            <span class="n">channel_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;channel_</span><span class="si">{</span><span class="n">channel</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">channel_path</span><span class="p">)</span>
+    <span class="c1"># Generate and save images</span>
+    <span class="n">center</span> <span class="o">=</span> <span class="n">image_size</span> <span class="o">//</span> <span class="mi">2</span>
+    <span class="n">angles</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">rotation_speed</span><span class="p">,</span> <span class="n">num_images</span><span class="p">,</span> <span class="n">endpoint</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">angle</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">angles</span><span class="p">):</span>
+        <span class="n">radius</span> <span class="o">=</span> <span class="n">min_radius</span> <span class="o">+</span> <span class="p">(</span><span class="n">i</span> <span class="o">*</span> <span class="p">(</span><span class="n">max_radius</span> <span class="o">-</span> <span class="n">min_radius</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">num_images</span> <span class="o">-</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="n">image</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">image_size</span><span class="p">,</span> <span class="n">image_size</span><span class="p">,</span> <span class="n">image_size</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span>
+        
+        <span class="c1"># Calculate sphere positions</span>
+        <span class="n">positions</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="p">(</span><span class="n">center</span><span class="p">,</span> <span class="n">center</span> <span class="o">+</span> <span class="nb">int</span><span class="p">(</span><span class="n">center</span><span class="o">/</span><span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">angle</span> <span class="o">+</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">/</span> <span class="mi">3</span> <span class="o">*</span> <span class="n">j</span><span class="p">)),</span> <span class="n">center</span> <span class="o">+</span> <span class="nb">int</span><span class="p">(</span><span class="n">center</span><span class="o">/</span><span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">angle</span> <span class="o">+</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">/</span> <span class="mi">3</span> <span class="o">*</span> <span class="n">j</span><span class="p">)))</span>
+            <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+        <span class="p">]</span>
+        
+        <span class="k">for</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span> <span class="ow">in</span> <span class="n">positions</span><span class="p">:</span>
+            <span class="c1"># Apply Gaussian intensity from the center to the border</span>
+            <span class="n">X</span><span class="p">,</span> <span class="n">Y</span><span class="p">,</span> <span class="n">Z</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">image_size</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">image_size</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">image_size</span><span class="p">),</span> <span class="n">indexing</span><span class="o">=</span><span class="s1">&#39;ij&#39;</span><span class="p">)</span>
+            <span class="n">distances</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">((</span><span class="n">X</span> <span class="o">-</span> <span class="n">x</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="p">(</span><span class="n">Y</span> <span class="o">-</span> <span class="n">y</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="p">(</span><span class="n">Z</span> <span class="o">-</span> <span class="n">z</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="n">distances</span> <span class="o">&lt;</span> <span class="n">radius</span>
+            <span class="n">image</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span> <span class="o">=</span> <span class="mi">255</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">decay_factor</span> <span class="o">*</span> <span class="p">(</span><span class="n">distances</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span> <span class="o">/</span> <span class="n">radius</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+        
+        <span class="k">for</span> <span class="n">channel</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_channels</span><span class="p">):</span>
+            <span class="k">if</span> <span class="nb">type</span> <span class="o">==</span> <span class="s2">&quot;zarr&quot;</span><span class="p">:</span>
+                <span class="n">zarr_file</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">channel</span><span class="p">]</span> <span class="o">=</span> <span class="n">image</span><span class="p">[::</span><span class="n">stride</span><span class="p">[</span><span class="mi">0</span><span class="p">],::</span><span class="n">stride</span><span class="p">[</span><span class="mi">1</span><span class="p">],::</span><span class="n">stride</span><span class="p">[</span><span class="mi">2</span><span class="p">]]</span>
+            <span class="k">elif</span> <span class="nb">type</span> <span class="o">==</span> <span class="s2">&quot;directory&quot;</span><span class="p">:</span>
+                <span class="n">channel_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;channel_</span><span class="si">{</span><span class="n">channel</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="n">tifffile</span><span class="o">.</span><span class="n">imwrite</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">channel_path</span><span class="p">,</span> <span class="sa">f</span><span class="s1">&#39;sphere_</span><span class="si">{</span><span class="n">i</span><span class="si">:</span><span class="s1">02d</span><span class="si">}</span><span class="s1">.tiff&#39;</span><span class="p">),</span> <span class="n">image</span><span class="p">[::</span><span class="n">stride</span><span class="p">[</span><span class="mi">0</span><span class="p">],::</span><span class="n">stride</span><span class="p">[</span><span class="mi">1</span><span class="p">],::</span><span class="n">stride</span><span class="p">[</span><span class="mi">2</span><span class="p">]])</span>
+    <span class="k">if</span> <span class="nb">type</span> <span class="o">==</span> <span class="s2">&quot;zarr&quot;</span> <span class="ow">and</span> <span class="n">out</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">zarr_file</span>
+    <span class="k">elif</span> <span class="nb">type</span> <span class="o">==</span> <span class="s2">&quot;zarr&quot;</span><span class="p">:</span>
+        <span class="n">zarr_file</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">zarr</span><span class="o">.</span><span class="n">open_array</span><span class="p">(</span><span class="n">store</span><span class="o">=</span><span class="n">store</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;r&#39;</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># Create dataset</span>
+        <span class="n">dataset</span> <span class="o">=</span> <span class="n">Dataset</span><span class="p">([</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;channel_</span><span class="si">{</span><span class="n">ch</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot;sphere_</span><span class="si">{:02d}</span><span class="s2">.tiff&quot;</span><span class="p">)</span> <span class="k">for</span> <span class="n">ch</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_channels</span><span class="p">)],</span> <span class="s2">&quot;CT&quot;</span><span class="p">,</span> <span class="s2">&quot;ZYX&quot;</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="p">[</span><span class="n">st</span> <span class="k">for</span> <span class="n">st</span> <span class="ow">in</span> <span class="n">stride</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">dataset</span>
+    
+<span class="k">def</span><span class="w"> </span><span class="nf">hemisphere_spheres</span><span class="p">(</span><span class="n">out</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">num_images</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">image_size</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">num_channels</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">min_radius</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">max_radius</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">translation_speed</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">rotation_speed</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">stride</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">decay_factor</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    This function creates a series of 3D images of spheres distributed in a hemisphere that translate and rotate.</span>
+<span class="sd">    The radius of the spheres increases linearly from min_radius to max_radius across the images.</span>
+<span class="sd">    The spheres have Gaussian intensity from the center to the border.</span>
+<span class="sd">    The images are saved in the specified directory with a specified stride.</span>
+
+<span class="sd">    Parameters:</span>
+<span class="sd">        out (str): The directory or zarr file where the images will be saved. If None, the images are stored in memory. Default is None.</span>
+<span class="sd">        num_images (int): The number of images to generate. Default is 10.</span>
+<span class="sd">        image_size (int): The size of each dimension of the cubic images. Default is 100.</span>
+<span class="sd">        num_channels (int): The number of channels for the images. Default is 1.</span>
+<span class="sd">        min_radius (int): The minimum radius of the spheres. Default is 5.</span>
+<span class="sd">        max_radius (int): The maximum radius of the spheres. Default is 20.</span>
+<span class="sd">        translation_speed (int): The speed of translation for the spheres. Default is 2.</span>
+<span class="sd">        rotation_speed (float): The speed of rotation for the spheres. Default is 0.1.</span>
+<span class="sd">        stride (tuple): The stride to apply when saving the images. Default is (3, 2, 1).</span>
+<span class="sd">        decay_factor (float): The exponential decay factor for the Gaussian intensity. Default is 0.5.</span>
+<span class="sd">        verbose (bool): If True, print detailed information. Default is False.</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        Dataset or zarr array: The dataset object containing the generated images if saved to a directory, or a zarr array if saved to a zarr file or in memory.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">out</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="nb">type</span> <span class="o">=</span> <span class="s2">&quot;zarr&quot;</span>
+        <span class="n">store</span> <span class="o">=</span> <span class="n">zarr</span><span class="o">.</span><span class="n">storage</span><span class="o">.</span><span class="n">MemoryStore</span><span class="p">()</span>
+        <span class="n">zarr_file</span> <span class="o">=</span> <span class="n">zarr</span><span class="o">.</span><span class="n">create_array</span><span class="p">(</span><span class="n">store</span><span class="o">=</span><span class="n">store</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">num_images</span><span class="p">,</span> <span class="n">num_channels</span><span class="p">,</span> <span class="n">image_size</span><span class="o">//</span><span class="n">stride</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">image_size</span><span class="o">//</span><span class="n">stride</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">image_size</span><span class="o">//</span><span class="n">stride</span><span class="p">[</span><span class="mi">2</span><span class="p">]),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span>
+        <span class="n">zarr_file</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">&quot;axis&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;TCZYX&quot;</span>
+        <span class="n">zarr_file</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">&quot;scale&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">stride</span>
+    <span class="k">elif</span> <span class="p">(</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="n">out</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;.zarr&quot;</span><span class="p">)</span> <span class="p">):</span>
+        <span class="nb">type</span> <span class="o">=</span> <span class="s2">&quot;zarr&quot;</span>
+        <span class="n">zarr_file</span> <span class="o">=</span> <span class="n">zarr</span><span class="o">.</span><span class="n">create_array</span><span class="p">(</span><span class="n">store</span><span class="o">=</span><span class="n">out</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;w&#39;</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">num_images</span><span class="p">,</span> <span class="n">num_channels</span><span class="p">,</span> <span class="n">image_size</span><span class="o">//</span><span class="n">stride</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">image_size</span><span class="o">//</span><span class="n">stride</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">image_size</span><span class="o">//</span><span class="n">stride</span><span class="p">[</span><span class="mi">2</span><span class="p">]),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span>
+        <span class="n">zarr_file</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">&quot;axis&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;TCZYX&quot;</span>
+        <span class="n">zarr_file</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">&quot;scale&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">stride</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="c1"># Create the directory</span>
+        <span class="nb">type</span> <span class="o">=</span> <span class="s2">&quot;directory&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">out</span><span class="p">):</span>
+            <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">out</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Directory &#39;</span><span class="si">{</span><span class="n">out</span><span class="si">}</span><span class="s2">&#39; created successfully&quot;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">FileExistsError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Directory &#39;</span><span class="si">{</span><span class="n">out</span><span class="si">}</span><span class="s2">&#39; already exists&quot;</span><span class="p">)</span>
+    
+        <span class="c1"># Create subfolders for each channel</span>
+        <span class="k">for</span> <span class="n">channel</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_channels</span><span class="p">):</span>
+            <span class="n">channel_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;channel_</span><span class="si">{</span><span class="n">channel</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">channel_path</span><span class="p">)</span>
+    <span class="c1"># Generate and save images</span>
+    <span class="n">center</span> <span class="o">=</span> <span class="n">image_size</span> <span class="o">//</span> <span class="mi">2</span>
+    <span class="n">angles</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">rotation_speed</span><span class="p">,</span> <span class="n">num_images</span><span class="p">,</span> <span class="n">endpoint</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">translations</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">translation_speed</span> <span class="o">*</span> <span class="n">num_images</span><span class="p">,</span> <span class="n">num_images</span><span class="p">,</span> <span class="n">endpoint</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">angle</span><span class="p">,</span> <span class="n">translation</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">angles</span><span class="p">,</span> <span class="n">translations</span><span class="p">)):</span>
+        <span class="n">radius</span> <span class="o">=</span> <span class="n">min_radius</span> <span class="o">+</span> <span class="p">(</span><span class="n">i</span> <span class="o">*</span> <span class="p">(</span><span class="n">max_radius</span> <span class="o">-</span> <span class="n">min_radius</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">num_images</span> <span class="o">-</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="n">image</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">image_size</span><span class="p">,</span> <span class="n">image_size</span><span class="p">,</span> <span class="n">image_size</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span>
+        
+        <span class="c1"># Calculate sphere positions in a hemisphere</span>
+        <span class="n">positions</span><span class="o">=</span><span class="p">[]</span>
+        <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>
+            <span class="n">positions</span> <span class="o">+=</span> <span class="p">[</span>
+                <span class="p">(</span>
+                    <span class="n">center</span> <span class="o">+</span> <span class="nb">int</span><span class="p">(</span><span class="n">center</span><span class="o">/</span><span class="mi">3</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">/</span> <span class="mi">6</span> <span class="o">*</span> <span class="n">k</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">angle</span> <span class="o">+</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">/</span> <span class="mi">6</span> <span class="o">*</span> <span class="n">j</span><span class="p">)),</span> 
+                    <span class="n">center</span> <span class="o">+</span> <span class="nb">int</span><span class="p">(</span><span class="n">center</span><span class="o">/</span><span class="mi">3</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">/</span> <span class="mi">6</span> <span class="o">*</span> <span class="n">k</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">angle</span> <span class="o">+</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">/</span> <span class="mi">6</span> <span class="o">*</span> <span class="n">j</span><span class="p">)),</span> 
+                    <span class="n">center</span> <span class="o">+</span> <span class="nb">int</span><span class="p">(</span><span class="n">center</span><span class="o">/</span><span class="mi">3</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">/</span> <span class="mi">6</span> <span class="o">*</span> <span class="n">k</span><span class="p">))</span>
+                <span class="p">)</span>
+                <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">6</span><span class="p">)</span>
+            <span class="p">]</span>
+        
+        <span class="k">for</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span> <span class="ow">in</span> <span class="n">positions</span><span class="p">:</span>
+            <span class="c1"># Apply Gaussian intensity from the center to the border</span>
+            <span class="n">X</span><span class="p">,</span> <span class="n">Y</span><span class="p">,</span> <span class="n">Z</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">image_size</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">image_size</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">image_size</span><span class="p">),</span> <span class="n">indexing</span><span class="o">=</span><span class="s1">&#39;ij&#39;</span><span class="p">)</span>
+            <span class="n">distances</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">((</span><span class="n">X</span> <span class="o">-</span> <span class="n">x</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="p">(</span><span class="n">Y</span> <span class="o">-</span> <span class="n">y</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="p">(</span><span class="n">Z</span> <span class="o">-</span> <span class="n">z</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="n">distances</span> <span class="o">&lt;</span> <span class="n">radius</span>
+            <span class="n">image</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span> <span class="o">=</span> <span class="mi">255</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">decay_factor</span> <span class="o">*</span> <span class="p">(</span><span class="n">distances</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span> <span class="o">/</span> <span class="n">radius</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+
+        <span class="c1"># Rotate around axis X</span>
+        <span class="n">R</span> <span class="o">=</span> <span class="p">[[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> 
+            <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">angle</span><span class="p">),</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">angle</span><span class="p">)],</span> 
+            <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">angle</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">angle</span><span class="p">)]]</span>
+        <span class="n">center_</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">image_size</span><span class="o">//</span><span class="mi">2</span><span class="p">,</span> <span class="n">image_size</span><span class="o">//</span><span class="mi">2</span><span class="p">,</span> <span class="n">image_size</span><span class="o">//</span><span class="mi">2</span><span class="p">])</span>
+        <span class="n">offset</span> <span class="o">=</span> <span class="n">center_</span> <span class="o">-</span> <span class="n">R</span> <span class="o">@</span> <span class="n">center_</span>
+        <span class="n">image</span> <span class="o">=</span> <span class="n">scipy</span><span class="o">.</span><span class="n">ndimage</span><span class="o">.</span><span class="n">affine_transform</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> 
+                               <span class="n">matrix</span><span class="o">=</span><span class="n">R</span><span class="p">,</span> 
+                               <span class="n">offset</span><span class="o">=</span><span class="n">offset</span><span class="p">,</span>
+                    <span class="p">)</span>
+        <span class="c1"># Translate along Z-axis</span>
+        <span class="n">image</span> <span class="o">=</span> <span class="n">scipy</span><span class="o">.</span><span class="n">ndimage</span><span class="o">.</span><span class="n">shift</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">shift</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">translation</span><span class="p">))</span>
+        
+        <span class="k">for</span> <span class="n">channel</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_channels</span><span class="p">):</span>
+            <span class="k">if</span> <span class="nb">type</span> <span class="o">==</span> <span class="s2">&quot;zarr&quot;</span><span class="p">:</span>
+                <span class="n">zarr_file</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">channel</span><span class="p">]</span> <span class="o">=</span> <span class="n">image</span><span class="p">[::</span><span class="n">stride</span><span class="p">[</span><span class="mi">0</span><span class="p">],::</span><span class="n">stride</span><span class="p">[</span><span class="mi">1</span><span class="p">],::</span><span class="n">stride</span><span class="p">[</span><span class="mi">2</span><span class="p">]]</span>
+            <span class="k">elif</span> <span class="nb">type</span> <span class="o">==</span> <span class="s2">&quot;directory&quot;</span><span class="p">:</span>
+                <span class="n">channel_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;channel_</span><span class="si">{</span><span class="n">channel</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="n">tifffile</span><span class="o">.</span><span class="n">imwrite</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">channel_path</span><span class="p">,</span> <span class="sa">f</span><span class="s1">&#39;sphere_</span><span class="si">{</span><span class="n">i</span><span class="si">:</span><span class="s1">02d</span><span class="si">}</span><span class="s1">.tiff&#39;</span><span class="p">),</span> <span class="n">image</span><span class="p">[::</span><span class="n">stride</span><span class="p">[</span><span class="mi">0</span><span class="p">],::</span><span class="n">stride</span><span class="p">[</span><span class="mi">1</span><span class="p">],::</span><span class="n">stride</span><span class="p">[</span><span class="mi">2</span><span class="p">]])</span>
+
+    <span class="k">if</span> <span class="nb">type</span> <span class="o">==</span> <span class="s2">&quot;zarr&quot;</span> <span class="ow">and</span> <span class="n">out</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">zarr_file</span>
+    <span class="k">elif</span> <span class="nb">type</span> <span class="o">==</span> <span class="s2">&quot;zarr&quot;</span><span class="p">:</span>
+        <span class="n">zarr_file</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">zarr</span><span class="o">.</span><span class="n">open_array</span><span class="p">(</span><span class="n">store</span><span class="o">=</span><span class="n">store</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;r&#39;</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># Create dataset</span>
+        <span class="n">dataset</span> <span class="o">=</span> <span class="n">Dataset</span><span class="p">([</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;channel_</span><span class="si">{</span><span class="n">ch</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot;sphere_</span><span class="si">{:02d}</span><span class="s2">.tiff&quot;</span><span class="p">)</span> <span class="k">for</span> <span class="n">ch</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_channels</span><span class="p">)],</span> <span class="s2">&quot;CT&quot;</span><span class="p">,</span> <span class="s2">&quot;ZYX&quot;</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="p">[</span><span class="n">st</span> <span class="k">for</span> <span class="n">st</span> <span class="ow">in</span> <span class="n">stride</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">dataset</span>
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../../../index.html">Registration Tools</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../usage.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../examples.html">Examples</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../API.html">API Reference</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../../../index.html">Documentation overview</a><ul>
+  <li><a href="../../index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 8.2.3</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>
