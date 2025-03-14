@@ -18,6 +18,10 @@ import zarr
 from ..utils.auxiliar import _get_axis_scale, _make_index, _dict_axis_shape, _suppress_stdout_stderr, _shape_downsampled, _shape_padded
 import tempfile
 import time
+from copy import deepcopy
+import threading
+import queue
+import concurrent.futures
 try:
     import cupy as cp
     import cupyx.scipy.ndimage as cndi
@@ -222,6 +226,59 @@ class Registration:
         for i in range(points_scaled.shape[1]):
             box.append((points_scaled[:, i].min(), points_scaled[:, i].max()))
         return box
+
+    def _preload_images(self, dataset, positions, axis, scale, use_channel, downsample, buffer_queue, stop_event):
+        """Background thread function to preload images into a queue."""
+        for pos in positions:
+            if stop_event.is_set():
+                break  # Stop preloading if main thread signals exit
+
+            image = self.get_image(dataset, pos, scale, axis, use_channel, downsample)
+            buffer_queue.put((pos, image))  # Store preloaded image
+
+    def _preload_images_in_thread(self, id, events, dataset, axis, scale, use_channel, downsample, task_queue, buffer_queue, num_events, assignement):
+        """Background thread function to preload images into a queue."""
+        while not task_queue.empty():
+            ord, pos = task_queue.get()
+
+            # print(f"Worker loading pos {id} {pos}")
+            assignement[ord] = (id, False)
+            image = self.get_image(dataset, pos, scale, axis, use_channel, downsample)
+            # time.sleep(np.random.randint(1, 3))
+            # print(f"Worker finishing pos {id} {pos}")
+
+            while ord-1 not in assignement.keys() and ord > 0:
+                time.sleep(.1)
+
+            if ord > 0:
+                while not assignement[ord-1][1]:
+                    time.sleep(.1)
+
+            # print(f"Worker putting pos {id} {pos}")
+            buffer_queue.put((ord, image))  # Store preloaded image
+            assignement[ord] = (id, True)
+
+            # while ord-1 not in assignement.keys() and ord > 0:
+            #     time.sleep(1)
+            
+            # if ord > 0: 
+            #     if not assignement[ord-1][1]:
+            #         print(f"{id} waiting for {assignement[ord-1][0]}")
+            #         events[id].wait()  # Wait for previous event to be completed
+
+            # # Process the task
+            # # print(f"Worker processing pos {pos}")
+            # print(f"Putting {ord}")
+            # buffer_queue.put((ord, image))  # Store preloaded image
+            # assignement[ord] = (id, True)
+
+            # # Signal the next task in sequence
+            # while ord+1 not in assignement.keys(): 
+            #     time.sleep(1)
+
+            # print(f"Setting {assignement[ord+1]} {pos}")
+            # events[assignement[ord+1][0]].set()
+            # task_queue.task_done()
         
     def fit(self, dataset, out=None, direction="backward", perfom_global_trnsf=False, use_channel=None, axis=None, scale=None, downsample=None, stepping=1, save_behavior="Continue", verbose=False):
         """
@@ -537,7 +594,297 @@ class Registration:
 
         return data
 
-    def fit_apply(self, dataset, out_trnsf=None, out_dataset=None, direction="backward", use_channel=None, axis=None, scale=None, downsample=None, stepping=1, perfom_global_trnsf=False, save_behavior="Continue", verbose=False, padding=False, **kwargs):
+    def fit_apply(self, 
+                  dataset, out_trnsf=None, out_dataset=None, direction="backward", 
+                  use_channel=None, axis=None, scale=None, downsample=None, stepping=1, 
+                  perfom_global_trnsf=False, save_behavior="Continue", verbose=False, padding=False, 
+                  num_loading_threads=1, num_preloaded_images=1, **kwargs):
+        """
+        Registers a dataset and saves the results to the specified path.
+        """
+
+        self._out = out_trnsf
+        if self._out is not None:
+            self._create_folder()
+        if direction not in ["backward", "forward"]:
+            raise ValueError("The direction must be either 'backward' or 'forward'.")
+        self._registration_direction = direction
+        self._perfom_global_trnsf = perfom_global_trnsf
+
+        save_behaviors = ["NotOverwrite", "Overwrite", "Continue"]
+
+        # Check inputs
+        axis, scale = _get_axis_scale(dataset, axis, scale)
+
+        if len(axis) != len(dataset.shape):
+            raise ValueError("The axis must have the same length as the dataset shape.")
+        
+        if "T" not in axis:
+            raise ValueError("The axis must contain the time dimension 'T'.")
+        
+        use_channel = use_channel
+        if "C" in axis and use_channel is None:
+            raise ValueError("The axis contains the channel dimension 'C'. The channel to use must be specified.")
+        elif "C" in axis and dataset.shape[np.where([i == "C" for i in axis])[0][0]] < use_channel:
+            raise ValueError("The specified channel does not exist in the dataset.")
+                
+        if save_behavior not in save_behaviors:
+            raise ValueError(f"save_behavior should be one of the following: {save_behaviors}.")
+
+        # Check downsample
+        self._n_spatial = len([i for i in axis if i in "XYZ"])
+        if downsample is None:
+            downsample = (1,) * self._n_spatial
+        else:
+            downsample = downsample
+
+        if not all(isinstance(d, int) for d in downsample):
+            raise ValueError("All elements in downsample must be integers.")
+        elif len(downsample) != self._n_spatial:
+            raise ValueError(f"downsample must have the same length as the number of spatial dimensions ({self._n_spatial}).")
+
+        # Scale
+        new_scale = tuple([i * j for i, j in zip(scale, downsample)])
+
+        # Compute box
+        self._box = tuple([int(i) for i in np.array(dataset.shape)[[axis.index(ax) for ax in axis if ax in "XYZ"]] * np.array(scale)])
+
+        # Compute padding box
+        padding_reference = [(0,j) for i,j in _dict_axis_shape(axis, dataset.shape).items() if i in "XYZ"][::-1]
+        self._padding_box = [(0,j) for i,j in _dict_axis_shape(axis, dataset.shape).items() if i in "XYZ"][::-1]
+
+        # New shape
+        new_shape = _shape_downsampled(dataset.shape, axis, downsample)
+
+        # Suppress skimage warnings for low contrast images
+        warnings.filterwarnings("ignore", category=UserWarning, message=".*low contrast image.*")
+
+        # Stepping
+        self._stepping = stepping
+
+        # Set registration direction
+        self._t_max = _dict_axis_shape(axis, dataset.shape)["T"]
+        if self._registration_direction == "backward":
+            self._origin = 0
+            iterations = []
+            iterations_next = []
+            for i in range(stepping):
+                if i != self._origin:
+                    iterations.append(self._origin)
+                    iterations_next.append(i)
+                for j in range(i, self._t_max, stepping):
+                    if self._t_max <= stepping+j:
+                        break
+                    iterations.append(j)
+                    iterations_next.append(j+stepping)
+
+            iterator = zip(
+                iterations,
+                iterations_next
+            )
+        else:
+            self._origin = self._t_max - 1
+            iterations = []
+            iterations_next = []
+            for i in range(self._t_max-1, self._t_max-stepping-1, -1):
+                if i != self._origin:
+                    iterations.append(self._origin)
+                    iterations_next.append(i)
+                for j in range(i, 0, -stepping):
+                    if j-stepping < 0:
+                        break
+                    iterations.append(j)
+                    iterations_next.append(j-stepping)
+
+            # print([(i,j) for i,j in zip(iterations, iterations_next)])
+            iterator = zip(
+                iterations,
+                iterations_next
+            )
+
+        # Setup output
+        if out_dataset is None:
+            store = zarr.storage.MemoryStore()
+            data = zarr.create_array(
+                store=store,
+                shape=new_shape,
+                dtype=dataset.dtype,
+                **kwargs
+            )
+            data.attrs["axis"] = axis
+            data.attrs["scale"] = new_scale
+            data.attrs["computed"] = []
+        elif isinstance(out_dataset, str):# and out.endswith(".zarr"):
+            if os.path.exists(out_dataset) and save_behavior == "NotOverwrite":
+                raise ValueError("The output file already exists. If you want to overwrite it, set save_behavior='Overwrite'.")
+            elif os.path.exists(out_dataset) and save_behavior == "Continue":
+                out_path, out_file = os.path.split(out_dataset)
+                data = zarr.open_array(out_file, path=out_path)
+                if "computed" not in data.attrs:
+                    data.attrs["computed"] = []
+            elif os.path.exists(out_dataset) and save_behavior == "Overwrite":
+                shutil.rmtree(out_dataset)
+                data = zarr.create_array(
+                    store=out_dataset,
+                    shape=new_shape,
+                    dtype=dataset.dtype,
+                    **kwargs
+                )
+                data.attrs["axis"] = axis
+                data.attrs["scale"] = new_scale
+                data.attrs["computed"] = []
+            else:
+                data = zarr.create_array(
+                    store=out_dataset,
+                    shape=new_shape,
+                    dtype=dataset.dtype,
+                    **kwargs
+                )
+                # data[:] = 0.
+                data.attrs["axis"] = axis
+                data.attrs["scale"] = new_scale
+                data.attrs["computed"] = []
+        else:
+            raise ValueError("The output must be None or a the name to a zarr file.")
+        
+        # Save initial image
+        if "C" in axis:
+            for ch in range(new_shape[np.where([i == "C" for i in axis])[0][0]]):
+                data[_make_index(self._origin, axis, ch)] = dataset[_make_index(self._origin, axis, ch, downsample=downsample)]
+        else:
+            data[_make_index(self._origin, axis, None)] = dataset[_make_index(self._origin, axis, None, downsample=downsample)]
+
+        # Save parameters in the registration folder
+        if self._out is not None:
+            self.save()
+
+        # Create a preloading buffer and threading event
+        buffer_queue = queue.Queue(maxsize=num_preloaded_images)  # Buffer with 2 preloaded images
+        # preloader_thread = threading.Thread(target=self._preload_images, 
+        #                                     args=(dataset, [p[1] for p in deepcopy(iterator)], axis, scale, None, downsample, buffer_queue, stop_event))
+        # preloader_thread.start()
+
+        # Divide the positions across multiple threads
+
+        # A list of events to synchronize threads
+        events = [threading.Event() for _ in range(num_loading_threads)]
+
+        task_queue = queue.Queue()
+        for ord, task in enumerate(deepcopy(iterator)):
+            task_queue.put((ord, task[1]))  # Include index to preserve task order
+
+        # Launch threads
+        # Create a ThreadPoolExecutor to manage the workers
+        task_worker_threads = []
+        assignement = {}
+        for _ in range(num_loading_threads):
+            thread = threading.Thread(target=self._preload_images_in_thread, args=(_, events, dataset, axis, scale, None, downsample, task_queue, buffer_queue, num_loading_threads, assignement))
+            task_worker_threads.append(thread)
+            thread.start()
+
+        # Loop over the images for registration
+        img_ref = None
+        trnsf_global = None
+        pos_ref_current = None
+        data_ = np.zeros([i for i,j in zip(new_shape, axis) if j != "T"])
+        for pos_ref, pos_float in tqdm(iterator, desc=f"Registering images using channel {use_channel}", unit="", total=self._t_max-1):
+            # start_total = time.time()
+            if self._trnsf_exists_relative(pos_float, pos_ref) and save_behavior != "Overwrite":
+                if save_behavior == "NotOverwrite":
+                    raise ValueError("The relative transformation already exists. If you want to overwrite it, set save_behavior='Overwrite'.")
+                elif save_behavior == "Continue":
+                    None
+            else:
+                # start = time.time()
+                if img_ref is None or pos_ref_current != pos_ref:
+                    img_ref = self.get_image(dataset, pos_ref, scale, axis, use_channel, downsample)
+                else:
+                    img_ref = img_float
+                _, img_total = buffer_queue.get()
+                # img_total = self.get_image(dataset, pos_float, scale, axis, None, downsample)
+                img_float = img_total[use_channel]
+                # print(f"Getting images: {time.time()-start:.2f}")
+                # start = time.time()
+                trnsf = self.register(img_float, img_ref, new_scale, verbose=verbose)
+                # print(f"Registration: {time.time()-start:.2f}")
+                # start = time.time()
+                self._save_transformation_relative(trnsf, pos_float, pos_ref)
+                # print(f"Saving transformation: {time.time()-start:.2f}")
+            # start = time.time()
+            if self._perfom_global_trnsf:
+                if self._trnsf_exists_global(pos_float, self._origin):
+                    if save_behavior == "NotOverwrite":
+                        raise ValueError("The global transformation already exists. If you want to overwrite it, set save_behavior='Overwrite'.")
+                    elif save_behavior == "Continue":
+                        None
+                else:
+                    if trnsf_global is None and pos_ref != self._origin:
+                        trnsf_global = self._load_transformation_global(pos_ref, self._origin)
+                    elif pos_ref == self._origin:
+                        trnsf_global = trnsf
+                        self._save_transformation_global(trnsf_global, pos_float, self._origin)
+                    else:
+                        trnsf_global = self.compose_trnsf([
+                            trnsf_global,
+                            trnsf
+                        ])
+                        self._save_transformation_global(trnsf_global, pos_float, self._origin)
+            # print(f"Global transformation: {time.time()-start:.2f}")
+                #check data extremes
+                # padding_reference = [(0,j) for i,j in _dict_axis_shape(axis, dataset.shape).items() if i in "XYZ"][::-1]
+                # points_vt = vt.vtPointList(self._padding_box_to_points(padding_reference, scale[::-1]))
+                # points_vt_out = vt.apply_trsf_to_points(points_vt, vt.inv_trsf(trnsf_global))
+                # padding_box = self._points_to_padding_box(points_vt_out.copy_to_array(), scale[::-1])
+                # self._padding_box = [(int(min(i[0], j[0])), int(max(i[1], j[1]))) for i, j in zip(self._padding_box, padding_box)]
+            if self._out is not None:
+                self._padding_box = self._padding_box[::-1]
+                self.save()
+                self._padding_box = self._padding_box[::-1]
+            if pos_float in data.attrs["computed"]:
+                continue
+            if perfom_global_trnsf:
+                trnsf_img = trnsf_global
+            else:
+                trnsf_img = trnsf
+            if "C" in axis:
+                for ch in range(new_shape[np.where([i == "C" for i in axis])[0][0]]):
+                    # start = time.time()
+                    img_ = img_total[ch]
+                    # print(f"Getting image: {time.time()-start:.2f}")
+                    # start = time.time()
+                    im_trnsf = self.apply_trnsf(img_, trnsf_img)
+                    # print(f"Applying transformation: {time.time()-start:.2f}")
+                    # start = time.time()
+                    data_[ch] = self.image2array(im_trnsf)
+                    # print(f"Saving image: {time.time()-start:.2f}")
+                # start = time.time()
+                data[_make_index(pos_float, axis, None)] = data_
+                # print(f"Saving image: {time.time()-start:.2f}")
+            else:
+                im = self.apply_trsf(img_float, trnsf_img)
+                data[_make_index(pos_float, axis, None)] = self.image2array(im)
+            pos_ref_current = pos_float
+
+            # print(f"Total time: {time.time()-start_total:.2f}")
+
+
+            # Wait for all tasks to be processed
+        for thread in task_worker_threads:
+            thread.join()
+
+        self._padding_box = self._padding_box[::-1]
+        self._fitted = True
+        if self._out is not None:
+            self.save()
+
+        if padding:
+            print("Padding data")
+            return self.apply(data, axis=axis, scale=scale, downsample=downsample, save_behavior="Overwrite", perfom_global_trnsf=perfom_global_trnsf, padding=padding, verbose=verbose, **kwargs)
+        else:
+            return data
+
+
+    def fit_apply_old(self, dataset, out_trnsf=None, out_dataset=None, direction="backward", use_channel=None, axis=None, scale=None, downsample=None, stepping=1, perfom_global_trnsf=False, save_behavior="Continue", verbose=False, padding=False, **kwargs):
         """
         Registers a dataset and saves the results to the specified path.
         """
@@ -701,7 +1048,10 @@ class Registration:
         img_ref = None
         trnsf_global = None
         pos_ref_current = None
+
         for pos_ref, pos_float in tqdm(iterator, desc=f"Registering images using channel {use_channel}", unit="", total=self._t_max-1):
+
+            # start_total = time.time()
 
             if self._trnsf_exists_relative(pos_float, pos_ref) and save_behavior != "Overwrite":
                 if save_behavior == "NotOverwrite":
@@ -709,17 +1059,24 @@ class Registration:
                 elif save_behavior == "Continue":
                     None
             else:
+                start = time.time()
                 if img_ref is None or pos_ref_current != pos_ref:
                     img_ref = self.get_image(dataset, pos_ref, scale, axis, use_channel, downsample)
                 else:
                     img_ref = img_float
 
                 img_float = self.get_image(dataset, pos_float, scale, axis, use_channel, downsample)
+                print(f"Getting images: {time.time()-start:.2f}")
 
+                start = time.time()
                 trnsf = self.register(img_float, img_ref, scale, verbose=verbose)
+                print(f"Registration: {time.time()-start:.2f}")
 
+                start = time.time()
                 self._save_transformation_relative(trnsf, pos_float, pos_ref)
+                print(f"Saving transformation: {time.time()-start:.2f}")
 
+            # start = time.time()
             if self._perfom_global_trnsf:
 
                 if self._trnsf_exists_global(pos_float, self._origin):
@@ -739,6 +1096,7 @@ class Registration:
                             trnsf
                         ])
                         self._save_transformation_global(trnsf_global, pos_float, self._origin)
+            # print(f"Global transformation: {time.time()-start:.2f}")
 
                 #check data extremes
                 # padding_reference = [(0,j) for i,j in _dict_axis_shape(axis, dataset.shape).items() if i in "XYZ"][::-1]
@@ -762,15 +1120,23 @@ class Registration:
 
             if "C" in axis:
                 for ch in range(new_shape[np.where([i == "C" for i in axis])[0][0]]):
+                    start = time.time()
                     img_ = self.get_image(dataset, pos_float, new_scale, axis, ch, downsample)
+                    print(f"Getting image: {time.time()-start:.2f}")
+                    start = time.time()
                     im_trnsf = self.apply_trnsf(img_, trnsf_img)
+                    print(f"Applying transformation: {time.time()-start:.2f}")
+                    start = time.time()
                     data[_make_index(pos_float, axis, ch)] = self.image2array(im_trnsf)
+                    print(f"Saving image: {time.time()-start:.2f}")
             else:
                 im = self.apply_trsf(img_float, trnsf_img)
                 data[_make_index(pos_float, axis, None)] = self.image2array(im)
 
             pos_ref_current = pos_float
         
+            # print(f"Total time: {time.time()-start_total:.2f}")
+
         self._padding_box = self._padding_box[::-1]
         self._fitted = True
         if self._out is not None:
@@ -781,7 +1147,7 @@ class Registration:
             return self.apply(data, axis=axis, scale=scale, downsample=downsample, save_behavior="Overwrite", perfom_global_trnsf=perfom_global_trnsf, padding=padding, verbose=verbose, **kwargs)
         else:
             return data
-    
+
     def vectorfield(self, mask=None, axis=None, scale=None, out=None, n_points=20, transformation="relative", **kwargs):
 
         if not self._fitted:
