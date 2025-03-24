@@ -6,10 +6,11 @@ import warnings
 from skimage._shared.utils import warn
 from registration_tools.dataset.dataset import Dataset
 from registration_tools.data import sphere
-from registration_tools.utils import project
+from registration_tools.utils import project, downsample
 from skimage.io import imread
 import numpy as np
 import zarr
+
 class TestRegistration(unittest.TestCase):
 
     @classmethod
@@ -21,7 +22,7 @@ class TestRegistration(unittest.TestCase):
         self.zarr_file2 = os.path.join(os.path.dirname(__file__), 'zarr2.zarr')
         self.results_folder = os.path.join(os.path.dirname(__file__), 'results_folder')
         self.trnsf_folder = os.path.join(os.path.dirname(__file__), 'trnsf_folder')
-        sphere(self.test_folder, num_images=10, image_size=100, num_channels=3, min_radius=10, max_radius=10, jump=3, stride=(1, 2, 3))
+        sphere(self.test_folder, num_images=10, image_size=100, num_channels=3, min_radius=10, max_radius=10, jump=3, stride=(1, 2, 4))
 
     @classmethod
     def tearDownClass(self):
@@ -41,7 +42,7 @@ class TestRegistration(unittest.TestCase):
                 os.path.join(self.test_folder, "channel_1", "sphere_{:02d}.tiff"),
                 os.path.join(self.test_folder, "channel_2", "sphere_{:02d}.tiff")             
             ]
-            , axis_data="CT", axis_files="XYZ", scale=(3,2,1))
+            , axis_data="CT", axis_files="XYZ", scale=(1,2,4))
 
         data_ = dataset[:,:,:,:,:]
 
@@ -49,6 +50,10 @@ class TestRegistration(unittest.TestCase):
         projection = data_.max(axis=2)
         data = project(dataset,"X")
         self.assertTrue(np.all(data==projection), f"Max projections are not the same.")
+        
+        data = downsample(dataset, factor=(1,2,4))
+        self.assertTrue(np.all((3,10,100,100,100)==data.shape), f"Downsampled data is not the same.")
+        self.assertTrue(np.all(np.array([1,1,1])==np.array(data.attrs["scale"])), f"Downsampled data is not the same.")
 
         #dataset zarr out
         if os.path.exists(self.zarr_file):
@@ -57,6 +62,13 @@ class TestRegistration(unittest.TestCase):
         data = zarr.open_array(self.zarr_file, mode="r")
         self.assertTrue(np.all(data==projection), f"Max projections are not the same.")
 
+        if os.path.exists(self.zarr_file):
+            shutil.rmtree(self.zarr_file)
+        downsample(dataset, factor=(1,2,4), out=self.zarr_file)
+        data = zarr.open_array(self.zarr_file, mode="r")
+        self.assertTrue(np.all((3,10,100,100,100)==data.shape), f"Downsampled data is not the same.")
+        self.assertTrue(np.all(np.array([1,1,1])==np.array(data.attrs["scale"])), f"Downsampled data is not the same.")
+
         #zarr
         dataset.to_zarr(self.zarr_file2)
         z = zarr.open_array(self.zarr_file2, mode="r")
@@ -64,12 +76,24 @@ class TestRegistration(unittest.TestCase):
         data = project(z,"X")
         self.assertTrue(np.all(data==projection), f"Max projections are not the same.")
 
+        data = downsample(dataset, factor=(1,2,4))
+        self.assertTrue(np.all((3,10,100,100,100)==data.shape), f"Downsampled data is not the same.")
+        self.assertTrue(np.all(np.array([1,1,1])==np.array(data.attrs["scale"])), f"Downsampled data is not the same.")
+
         #zarr out
         if os.path.exists(self.zarr_file):
             shutil.rmtree(self.zarr_file)
         project(z,"X",out=self.zarr_file)
         data = zarr.open_array(self.zarr_file, mode="r")
         self.assertTrue(np.all(data==projection), f"Max projections are not the same.")
+
+        if os.path.exists(self.zarr_file):
+            shutil.rmtree(self.zarr_file)
+        data = downsample(dataset, factor=(1,2,4),out=self.zarr_file)
+        data = zarr.open_array(self.zarr_file, mode="r")
+        self.assertTrue(np.all((3,10,100,100,100)==data.shape), f"Downsampled data is not the same.")
+        self.assertTrue(np.all(np.array([1,1,1])==np.array(data.attrs["scale"])), f"Downsampled data is not the same.")
+
 
     # def test_register_zarr(self):
     #     dataset = Dataset(

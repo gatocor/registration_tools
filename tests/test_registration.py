@@ -1,177 +1,239 @@
-import os
-import re
 import unittest
-import shutil
-import warnings
-from skimage._shared.utils import warn
-from registration_tools.dataset.dataset import Dataset
-from registration_tools.data import sphere
-from registration_tools.registration import Registration, get_pyramid_levels, load_registration
-from skimage.io import imread
 import numpy as np
-import zarr
-class TestRegistration(unittest.TestCase):
+from registration_tools.data import sphere
+import registration_tools.registration as rt_reg
+import os
+import shutil
+import napari
+import registration_tools.visualization as rt_vis
+import registration_tools.utils as rt_utils
 
-    @classmethod
-    def setUpClass(self):
-        warnings.filterwarnings("ignore", category=UserWarning, message=".*is a low contrast image")
-        self.test_folder = os.path.join(os.path.dirname(__file__), 'test_folder')
-        self.save_folder = os.path.join(os.path.dirname(__file__), 'save_folder')
-        self.zarr_file = os.path.join(os.path.dirname(__file__), 'zarr.zarr')
-        self.results_folder = os.path.join(os.path.dirname(__file__), 'results_folder')
-        self.trnsf_folder = os.path.join(os.path.dirname(__file__), 'trnsf_folder')
-        sphere(self.test_folder, num_images=10, image_size=100, num_channels=3, min_radius=10, max_radius=10, jump=3, stride=(1, 2, 3))
+class TestExampleData(unittest.TestCase):
 
     @classmethod
     def tearDownClass(self):
-        if os.path.exists(self.test_folder):
-            shutil.rmtree(self.test_folder)
-        if os.path.exists(self.save_folder):
-            shutil.rmtree(self.save_folder)
-        if os.path.exists(self.zarr_file):
-            shutil.rmtree(self.zarr_file)
-        if os.path.exists(self.trnsf_folder):
-            shutil.rmtree(self.trnsf_folder)
+        shutil.rmtree("dataset_registered.zarr", ignore_errors=True)
+        shutil.rmtree("trnsf", ignore_errors=True)
 
-    def test_register_dataset(self):
-        dataset = Dataset(
-            [
-                os.path.join(self.test_folder, "channel_0", "sphere_{:02d}.tiff"),
-                os.path.join(self.test_folder, "channel_1", "sphere_{:02d}.tiff"),
-                os.path.join(self.test_folder, "channel_2", "sphere_{:02d}.tiff")             
-            ]
-            , axis_data="CT", axis_files="XYZ", scale=(1,2,3))
-
-        dataset.to_zarr(self.zarr_file)
-        dataset_zarr = zarr.open_array(self.zarr_file, mode="r")
-
-        for registration_type in ["translation", "rigid", "vectorfield"]:
-            transformation = Registration(registration_type=registration_type, registration_direction="backward", perfom_global_trnsf=True)
-
-            #Dataset
-            data = transformation.fit_apply(dataset=dataset, use_channel=0, save_behavior="Continue")
-            # Check if the registration files are created
-            self.assertTrue(len(transformation._transfs) > 0)
-            # Check if the max from all files is around the center of the image
-            for channel in range(3):
-                centers = []
-                for t in range(10):
-                    image = data[channel][t]
-                    max_pos = np.unravel_index(np.argmax(image), image.shape)
-                    centers.append(max_pos)
-                centers = np.array(centers)
-                mean_center = np.mean(centers, axis=0)
-                expected_center = np.array(image.shape) // 2
-                self.assertTrue(np.allclose(mean_center, expected_center, atol=3), f"Mean center {mean_center} in channel {channel} is not around the expected center {expected_center}")
-
-            #Zarr            
-            data = transformation.fit_apply(dataset=dataset_zarr, use_channel=0, save_behavior="Continue")
-            # Check if the registration files are created
-            self.assertTrue(len(transformation._transfs) > 0)
-            # Check if the max from all files is around the center of the image
-            for channel in range(3):
-                centers = []
-                for t in range(10):
-                    image = data[channel][t]
-                    max_pos = np.unravel_index(np.argmax(image), image.shape)
-                    centers.append(max_pos)
-                centers = np.array(centers)
-                mean_center = np.mean(centers, axis=0)
-                expected_center = np.array(image.shape) // 2
-                self.assertTrue(np.allclose(mean_center, expected_center, atol=3), f"Mean center {mean_center} in channel {channel} is not around the expected center {expected_center}")
-
-    def test_register_dataset_saving_to_folder(self):
-        if os.path.exists(self.zarr_file):
-            shutil.rmtree(self.zarr_file)
-
-        dataset = Dataset(
-            [
-                os.path.join(self.test_folder, "channel_0", "sphere_{:02d}.tiff"),
-                os.path.join(self.test_folder, "channel_1", "sphere_{:02d}.tiff"),
-                os.path.join(self.test_folder, "channel_2", "sphere_{:02d}.tiff")             
-            ]
-            , axis_data="CT", axis_files="XYZ", scale=(1,2,3))
-
-        dataset.to_zarr(self.zarr_file)
-        dataset_zarr = zarr.open_array(self.zarr_file, mode="r")
-
-        for registration_type in ["translation", "rigid", "vectorfield"]:
-            if os.path.exists(self.trnsf_folder):
-                shutil.rmtree(self.trnsf_folder)
-            transformation = Registration(out=self.trnsf_folder, registration_type=registration_type, registration_direction="backward", perfom_global_trnsf=True)
-
-            #Dataset
-            transformation.fit(dataset=dataset, use_channel=0, save_behavior="Continue")
-            transformation = load_registration(self.trnsf_folder)
-            data = transformation.apply(dataset=dataset, save_behavior="Overwrite")
-            print(data.shape, data.attrs["scale"])
-
-            # Check if the max from all files is around the center of the image
-            for channel in range(3):
-                centers = []
-                for t in range(10):
-                    image = data[channel][t]
-                    max_pos = np.unravel_index(np.argmax(image), image.shape)
-                    centers.append(max_pos)
-                centers = np.array(centers)
-                mean_center = np.mean(centers, axis=0)
-                expected_center = np.array(image.shape) // 2
-                self.assertTrue(np.allclose(mean_center, expected_center, atol=3), f"Mean center {mean_center} in channel {channel} is not around the expected center {expected_center}")
-
-            #Zarr            
-            if os.path.exists(self.trnsf_folder):
-                shutil.rmtree(self.trnsf_folder)
-            transformation = Registration(out=self.trnsf_folder, registration_type=registration_type, registration_direction="backward", perfom_global_trnsf=True)
-            transformation.fit(dataset=dataset_zarr, use_channel=0, save_behavior="Continue")
-            transformation = load_registration(self.trnsf_folder)
-            data = transformation.apply(dataset=dataset, use_channel=0, save_behavior="Continue")
+    def test_registration(self):
+        for dim,channels,dtype,stride,out_dataset,out_trnsf,direction,stepping in [
+            (2, 1, np.uint8, (1, 1, 1), None, None, 'backward', 1),
+            (2, 1, np.uint8, (1, 1, 1), None, None, 'backward', 2),
+            (2, 1, np.uint8, (1, 1, 1), None, None, 'backward', 10),
+            (2, 1, np.uint8, (1, 1, 1), None, None, 'forward', 1),
+            (2, 1, np.uint8, (1, 1, 1), None, None, 'forward', 2),
+            (2, 1, np.uint8, (1, 1, 1), None, None, 'forward', 10),
+            (2, 1, np.uint8, (1, 1, 1), None, 'trnsf', 'backward', 1),
+            (2, 1, np.uint8, (1, 1, 1), 'dataset_registered.zarr', None, 'backward', 1),
+            (2, 1, np.uint8, (1, 1, 1), 'dataset_registered.zarr', 'trnsf', 'backward', 1),
+            (2, 1, np.uint8, (2, 1, 1), None, None, 'backward', 1),
+            (2, 1, np.uint8, (1, 2, 1), None, None, 'backward', 1),
+            (2, 1, np.uint16, (1, 1, 1), None, None, 'backward', 1),
+            (2, 1, np.uint64, (1, 1, 1), None, None, 'backward', 1),
+            (2, 1, np.float64, (1, 1, 1), None, None, 'backward', 1),
+            (2, 2, np.uint8, (1, 1, 1), None, None, 'backward', 1),
+            (2, 2, np.uint8, (1, 1, 1), None, 'trnsf', 'backward', 1),
+            (2, 2, np.uint8, (1, 1, 1), 'dataset_registered.zarr', None, 'backward', 1),
+            (2, 2, np.uint8, (1, 1, 1), 'dataset_registered.zarr', 'trnsf', 'backward', 1),
+            (3, 1, np.uint8, (1, 1, 1), None, None, 'backward', 1),
+            (3, 1, np.uint8, (1, 1, 1), None, None, 'backward', 2),
+            (3, 1, np.uint8, (1, 1, 1), None, None, 'backward', 10),
+            (3, 1, np.uint8, (1, 1, 1), None, None, 'forward', 1),
+            (3, 1, np.uint8, (1, 1, 1), None, None, 'forward', 2),
+            (3, 1, np.uint8, (1, 1, 1), None, None, 'forward', 10),
+            (3, 1, np.uint8, (1, 1, 1), None, 'trnsf', 'backward', 1),
+            (3, 1, np.uint8, (1, 1, 1), 'dataset_registered.zarr', None, 'backward', 1),
+            (3, 1, np.uint8, (1, 1, 1), 'dataset_registered.zarr', 'trnsf', 'backward', 1),
+            (3, 1, np.uint8, (2, 1, 1), None, None, 'backward', 1),
+            (3, 1, np.uint8, (1, 2, 1), None, None, 'backward', 1),
+            (3, 1, np.uint8, (1, 1, 2), None, None, 'backward', 1),
+            (3, 1, np.uint16, (1, 1, 1), None, None, 'backward', 1),
+            (3, 1, np.uint64, (1, 1, 1), None, None, 'backward', 1),
+            (3, 1, np.float64, (1, 1, 1), None, None, 'backward', 1),
+            (3, 2, np.uint8, (1, 1, 1), None, None, 'backward', 1),
+            (3, 2, np.uint8, (1, 1, 1), None, 'trnsf', 'backward', 1),
+            (3, 2, np.uint8, (1, 1, 1), 'dataset_registered.zarr', None, 'backward', 1),
+            (3, 2, np.uint8, (1, 1, 1), 'dataset_registered.zarr', 'trnsf', 'backward', 1),
+        ]:
             
-            # Check if the max from all files is around the center of the image
-            for channel in range(3):
-                centers = []
-                for t in range(10):
-                    image = data[channel][t]
-                    max_pos = np.unravel_index(np.argmax(image), image.shape)
-                    centers.append(max_pos)
-                centers = np.array(centers)
-                mean_center = np.mean(centers, axis=0)
-                expected_center = np.array(image.shape) // 2
-                self.assertTrue(np.allclose(mean_center, expected_center, atol=3), f"Mean center {mean_center} in channel {channel} is not around the expected center {expected_center}")
+            with self.subTest(dim=dim, channels=channels, dtype=dtype, stride=stride, out_trnsf=out_trnsf, out_dataset=out_dataset, direction=direction, stepping=stepping):
+                # Fit_apply
+                shutil.rmtree("dataset_registered.zarr", ignore_errors=True)
+                shutil.rmtree("trnsf", ignore_errors=True)
+                dataset = sphere(
+                    num_channels=channels,
+                    num_spatial_dims=dim,
+                    min_radius=10,
+                    max_radius=10,
+                    dtype=dtype,
+                    stride=stride,
+                    jump=4,
+                )
+                
+                model = rt_reg.RegistrationVT(
+                    registration_type="rigid3D",
+                )
+                dataset_registered = model.fit_apply(
+                    dataset,
+                    out_trnsf=out_trnsf,
+                    out_dataset=out_dataset,
+                    use_channel=1,
+                    direction=direction,
+                    perform_global_trnsf=True,
+                    stepping=stepping,
+                    verbose=False,
+                )
+                if direction == "backward":
+                    pos = 0
+                    iter = range(1,dataset.shape[0])
+                else:
+                    pos = 9
+                    iter = range(dataset.shape[0]-2,-1,-1)
+                # viewer = napari.Viewer()
+                # viewer.add_image(dataset[pos], scale=dataset.attrs["scale"], colormap="red")
+                # rt_vis.add_image(viewer, dataset, opacity=0.5)
+                # rt_vis.add_image(viewer, dataset_registered, opacity=0.5, colormap="green")
+                # viewer.dims.ndisplay = dim
+                # viewer.dims.current_step = (0,0,0)
+                # napari.run()
+                # Check dtype
+                self.assertEqual(dataset_registered.dtype, np.dtype(dtype), 
+                                f"Expected dtype {dtype}, but got {dataset_registered.dtype}")
+                # Check dimensions
+                self.assertEqual(dataset.shape, dataset_registered.shape, 
+                                f"Expected {dataset.shape} dimensions (including channels), but got {dataset_registered.shape}")
+                # Check argmax position for all times
+                for t in iter:
+                    if channels == 1:
+                        shape = dataset[1].shape
+                        scale = np.array(dataset.attrs["scale"])[:dim]
+                        # print(t, scale, shape)
+                        # print(((np.array(np.unravel_index(dataset[pos].argmax(), shape)), np.array(np.unravel_index(dataset[t].argmax(), shape)))*scale))
+                        # print(((np.array(np.unravel_index(dataset_registered[pos].argmax(), shape)), np.array(np.unravel_index(dataset_registered[t].argmax(), shape)))*scale))
+                        # print()
+                        self.assertTrue(np.linalg.norm((np.array(np.unravel_index(dataset[pos].argmax(), shape)) - np.array(np.unravel_index(dataset[t].argmax(), shape)))*scale) >
+                                        np.linalg.norm((np.array(np.unravel_index(dataset[pos].argmax(), shape)) - np.array(np.unravel_index(dataset_registered[t].argmax(), shape)))*scale),
+                                        f"Expected center of mass to be close to the same position.")
+                    else:
+                        shape = dataset[t,0].shape
+                        scale = np.array(dataset.attrs["scale"])[:dim]
+                        self.assertTrue(np.linalg.norm((np.array(np.unravel_index(dataset[pos,0].argmax(), shape)) - np.array(np.unravel_index(dataset[t,0].argmax(), shape)))*scale) >
+                                        np.linalg.norm((np.array(np.unravel_index(dataset[pos,0].argmax(), shape)) - np.array(np.unravel_index(dataset_registered[t,0].argmax(), shape)))*scale),
+                                        f"Expected center of mass to be close to the same position.")
+                        self.assertTrue(np.linalg.norm((np.array(np.unravel_index(dataset[pos,0].argmax(), shape)) - np.array(np.unravel_index(dataset[t,1].argmax(), shape)))*scale) >
+                                        np.linalg.norm((np.array(np.unravel_index(dataset[pos,0].argmax(), shape)) - np.array(np.unravel_index(dataset_registered[t,1].argmax(), shape)))*scale),
+                                        f"Expected center of mass to be close to the same position.")
+                        
+                # Fit + apply
+                shutil.rmtree("dataset_registered.zarr", ignore_errors=True)
+                shutil.rmtree("trnsf", ignore_errors=True)
+                model = rt_reg.RegistrationVT(
+                    registration_type="rigid3D",
+                )
+                model.fit(
+                    dataset,
+                    out=out_trnsf,
+                    use_channel=1,
+                    direction=direction,
+                    perform_global_trnsf=True,
+                    stepping=stepping,
+                    verbose=False,
+                )
+                dataset_registered = model.apply(
+                    dataset,
+                    out=out_dataset
+                )
+                if direction == "backward":
+                    pos = 0
+                    iter = range(1,dataset.shape[0])
+                else:
+                    pos = 9
+                    iter = range(dataset.shape[0]-2,-1,-1)
+                # viewer = napari.Viewer()
+                # viewer.add_image(dataset[pos], scale=dataset.attrs["scale"], colormap="red")
+                # rt_vis.add_image(viewer, dataset, opacity=0.5)
+                # rt_vis.add_image(viewer, dataset_registered, opacity=0.5, colormap="green")
+                # viewer.dims.ndisplay = dim
+                # viewer.dims.current_step = (0,0,0)
+                # napari.run()
+                # Check dtype
+                self.assertEqual(dataset_registered.dtype, np.dtype(dtype), 
+                                f"Expected dtype {dtype}, but got {dataset_registered.dtype}")
+                # Check dimensions
+                self.assertEqual(dataset.shape, dataset_registered.shape, 
+                                f"Expected {dataset.shape} dimensions (including channels), but got {dataset_registered.shape}")
+                # Check argmax position for all times
+                for t in iter:
+                    if channels == 1:
+                        shape = dataset[1].shape
+                        scale = np.array(dataset.attrs["scale"])[:dim]
+                        # print(t, scale, shape)
+                        # print(((np.array(np.unravel_index(dataset[pos].argmax(), shape)), np.array(np.unravel_index(dataset[t].argmax(), shape)))*scale))
+                        # print(((np.array(np.unravel_index(dataset_registered[pos].argmax(), shape)), np.array(np.unravel_index(dataset_registered[t].argmax(), shape)))*scale))
+                        # print()
+                        self.assertTrue(np.linalg.norm((np.array(np.unravel_index(dataset[pos].argmax(), shape)) - np.array(np.unravel_index(dataset[t].argmax(), shape)))*scale) >
+                                        np.linalg.norm((np.array(np.unravel_index(dataset[pos].argmax(), shape)) - np.array(np.unravel_index(dataset_registered[t].argmax(), shape)))*scale),
+                                        f"Expected center of mass to be close to the same position.")
+                    else:
+                        shape = dataset[t,0].shape
+                        scale = np.array(dataset.attrs["scale"])[:dim]
+                        self.assertTrue(np.linalg.norm((np.array(np.unravel_index(dataset[pos,0].argmax(), shape)) - np.array(np.unravel_index(dataset[t,0].argmax(), shape)))*scale) >
+                                        np.linalg.norm((np.array(np.unravel_index(dataset[pos,0].argmax(), shape)) - np.array(np.unravel_index(dataset_registered[t,0].argmax(), shape)))*scale),
+                                        f"Expected center of mass to be close to the same position.")
+                        self.assertTrue(np.linalg.norm((np.array(np.unravel_index(dataset[pos,0].argmax(), shape)) - np.array(np.unravel_index(dataset[t,1].argmax(), shape)))*scale) >
+                                        np.linalg.norm((np.array(np.unravel_index(dataset[pos,0].argmax(), shape)) - np.array(np.unravel_index(dataset_registered[t,1].argmax(), shape)))*scale),
+                                        f"Expected center of mass to be close to the same position.")
 
-    # def test_register_continuation(self):
-    #     dataset = Dataset(
-    #         [
-    #             os.path.join(self.test_folder, "channel_0", "sphere_{:02d}.tiff"),
-    #             os.path.join(self.test_folder, "channel_1", "sphere_{:02d}.tiff"),
-    #             os.path.join(self.test_folder, "channel_2", "sphere_{:02d}.tiff")             
-    #         ]
-    #         , "XYZ", numbers=[0,1,2,3,4,5,6,7,8,9], scale=(1,1,1))
-    #     transformation = Registration(self.trnsf_folder)
-    #     transformation.fit_apply(
-    #         dataset=dataset,
-    #         save_path=self.save_folder,
-    #         use_channel=0,
-    #         save_behavior="Continue"
-    #     ),
-    #     for i in [5,6,7,8,9]:
-    #         os.remove(os.path.join(self.save_folder, "files_ch0", f"sphere_{i:02d}.tiff"))
-    #     transformation.fit_apply(
-    #         dataset=dataset,
-    #         save_path=self.save_folder,
-    #         use_channel=0,
-    #         save_behavior="NotOverwrite"
-    #     ),
+                # Apply to downsampled dataset
+                shutil.rmtree("dataset_registered.zarr", ignore_errors=True)
+                dataset_downsampled = rt_utils.downsample(dataset, [0.5 for _ in range(dim)])
+                dataset_registered = model.apply(
+                    dataset_downsampled,
+                    out=out_dataset
+                )
+                if direction == "backward":
+                    pos = 0
+                    iter = range(1,dataset.shape[0])
+                else:
+                    pos = 9
+                    iter = range(dataset.shape[0]-2,-1,-1)
 
-    # def test_get_pyramid_levels(self):
-    #     dataset = Dataset(
-    #         os.path.join(self.test_folder, "channel_0", "sphere_{:02d}.tiff"),
-    #         "XYZ",
-    #         numbers=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-    #         scale=(1, 1, 1)
-    #     )
-    #     lowest_level, highest_level = get_pyramid_levels(dataset, maximum_size=50, verbose=False)
-    #     self.assertEqual(lowest_level, 1)
-    #     self.assertEqual(highest_level, 2)
+                # viewer = napari.Viewer()
+                # viewer.add_image(dataset[pos], scale=dataset.attrs["scale"], colormap="red", name=f"dataset t={pos}")
+                # rt_vis.add_image(viewer, dataset, opacity=0.5, name="dataset")
+                # rt_vis.add_image(viewer, dataset_downsampled, opacity=0.5, colormap="blue", name="dataset_downsampled")
+                # rt_vis.add_image(viewer, dataset_registered, opacity=0.5, colormap="green", name="dataset_downsampled_registered")
+                # viewer.dims.ndisplay = dim
+                # viewer.dims.current_step = (0,0,0)
+                # napari.run()
+
+                # Check dtype
+                self.assertEqual(dataset_registered.dtype, np.dtype(dtype), 
+                                f"Expected dtype {dtype}, but got {dataset_registered.dtype}")
+                # Check dimensions
+                self.assertEqual(dataset_downsampled.shape, dataset_registered.shape, 
+                                f"Expected {dataset_downsampled.shape} dimensions (including channels), but got {dataset_registered.shape}")
+                # Check argmax position for all times
+                for t in iter:
+                    if channels == 1:
+                        shape = dataset_downsampled[1].shape
+                        scale = np.array(dataset_downsampled.attrs["scale"])[:dim]
+                        # print(t, scale, shape)
+                        # print(((np.array(np.unravel_index(dataset[pos].argmax(), shape)), np.array(np.unravel_index(dataset[t].argmax(), shape)))*scale))
+                        # print(((np.array(np.unravel_index(dataset_registered[pos].argmax(), shape)), np.array(np.unravel_index(dataset_registered[t].argmax(), shape)))*scale))
+                        # print()
+                        self.assertTrue(np.linalg.norm((np.array(np.unravel_index(dataset_downsampled[pos].argmax(), shape)) - np.array(np.unravel_index(dataset_downsampled[t].argmax(), shape)))*scale) >
+                                        np.linalg.norm((np.array(np.unravel_index(dataset_downsampled[pos].argmax(), shape)) - np.array(np.unravel_index(dataset_registered[t].argmax(), shape)))*scale),
+                                        f"Expected center of mass to be close to the same position.")
+                    else:
+                        shape = dataset_downsampled[t,0].shape
+                        scale = np.array(dataset_downsampled.attrs["scale"])[:dim]
+                        self.assertTrue(np.linalg.norm((np.array(np.unravel_index(dataset_downsampled[pos,0].argmax(), shape)) - np.array(np.unravel_index(dataset_downsampled[t,0].argmax(), shape)))*scale) >
+                                        np.linalg.norm((np.array(np.unravel_index(dataset_downsampled[pos,0].argmax(), shape)) - np.array(np.unravel_index(dataset_registered[t,0].argmax(), shape)))*scale),
+                                        f"Expected center of mass to be close to the same position.")
+                        self.assertTrue(np.linalg.norm((np.array(np.unravel_index(dataset_downsampled[pos,0].argmax(), shape)) - np.array(np.unravel_index(dataset_downsampled[t,1].argmax(), shape)))*scale) >
+                                        np.linalg.norm((np.array(np.unravel_index(dataset_downsampled[pos,0].argmax(), shape)) - np.array(np.unravel_index(dataset_registered[t,1].argmax(), shape)))*scale),
+                                        f"Expected center of mass to be close to the same position.")
 
 if __name__ == "__main__":
     unittest.main()

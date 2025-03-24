@@ -5,7 +5,7 @@ from ..dataset.dataset import Dataset
 import zarr
 import scipy.ndimage
 
-def sphere(out=None, num_images=10, image_size=100, num_channels=1, min_radius=5, max_radius=20, jump=2, stride=(3, 2, 1), decay_factor=0.5, verbose=False):
+def sphere(out=None, num_images=10, image_size=100, num_channels=1, num_spatial_dims=3, min_radius=5, max_radius=20, jump=2, stride=(1, 1, 1), decay_factor=0.5, dtype=np.uint8, verbose=False):
     """
     This function creates a series of 3D images of a sphere moving along an L-shaped path while increasing the radius.
     The radius of the spheres increases linearly from min_radius to max_radius across the images.
@@ -20,24 +20,47 @@ def sphere(out=None, num_images=10, image_size=100, num_channels=1, min_radius=5
         min_radius (int): The minimum radius of the spheres. Default is 5.
         max_radius (int): The maximum radius of the spheres. Default is 20.
         jump (int): The step size for the L-shaped path points. Default is 2.
-        stride (tuple): The stride to apply when saving the images. Default is (3, 2, 1).
+        stride (tuple): The stride to apply when saving the images. Default is (1, 1, 1).
         decay_factor (float): The exponential decay factor for the Gaussian intensity. Default is 0.5.
         verbose (bool): If True, print detailed information. Default is False.
 
     Returns:
         Dataset or zarr array: The dataset object containing the generated images if saved to a directory, or a zarr array if saved to a zarr file or in memory.
     """
+
+    if not (isinstance(stride, tuple) and all(isinstance(s, int) for s in stride) and len(stride) >= num_spatial_dims):
+        raise ValueError("Stride must be a tuple of integers with a length equal to or greater than the number of spatial dimensions.")
+
+    if num_channels > 1 and num_spatial_dims == 2:
+        shape = (num_images, num_channels, image_size//stride[0], image_size//stride[1])
+        axis = "TCYX"
+        slicing = (slice(None,None,stride[0]), slice(None,None,stride[1]))
+    elif num_channels > 1 and num_spatial_dims == 3:
+        shape = (num_images, num_channels, image_size//stride[0], image_size//stride[1], image_size//stride[2])
+        axis = "TCZYX"
+        slicing = (slice(None,None,stride[0]), slice(None,None,stride[1]), slice(None,None,stride[2]))
+    elif num_channels == 1 and num_spatial_dims == 2:
+        shape = (num_images, image_size//stride[0], image_size//stride[1])
+        axis = "TYX"
+        slicing = (slice(None,None,stride[0]), slice(None,None,stride[1]))
+    elif num_channels == 1 and num_spatial_dims == 3:
+        shape = (num_images, image_size//stride[0], image_size//stride[1], image_size//stride[2])
+        axis = "TZYX"
+        slicing = (slice(None,None,stride[0]), slice(None,None,stride[1]), slice(None,None,stride[2]))
+    else:
+        raise ValueError("The number of channels has to be a number bigger 0 and spatial dimensions 2 or 3")
+
     if out is None:
         type = "zarr"
         store = zarr.storage.MemoryStore()
-        zarr_file = zarr.create_array(store=store, shape=(num_images, num_channels, image_size//stride[0], image_size//stride[1], image_size//stride[2]), dtype=np.uint8)
-        zarr_file.attrs["axis"] = "TCZYX"
-        zarr_file.attrs["scale"] = stride
+        zarr_file = zarr.create_array(store=store, shape=shape, dtype=dtype)
+        zarr_file.attrs["axis"] = axis
+        zarr_file.attrs["scale"] = [stride[i] for i in range(num_spatial_dims)]
     elif ( isinstance(out, str) and out.endswith(".zarr") ):
         type = "zarr"
-        zarr_file = zarr.create_array(store=out, shape=(num_images, num_channels, image_size//stride[0], image_size//stride[1], image_size//stride[2]), dtype=np.uint8)
-        zarr_file.attrs["axis"] = "TCZYX"
-        zarr_file.attrs["scale"] = stride
+        zarr_file = zarr.create_array(store=out, shape=shape, dtype=dtype)
+        zarr_file.attrs["axis"] = axis
+        zarr_file.attrs["scale"] = [stride[i] for i in range(num_spatial_dims)]
     elif isinstance(out, str):
         # Create the directory
         type = "directory"
@@ -55,25 +78,39 @@ def sphere(out=None, num_images=10, image_size=100, num_channels=1, min_radius=5
 
     # Create L-shaped path with jumps
     center = image_size // 2
-    path_points = [(center, center, center + i * jump) for i in range(5)] + [(center, center + i * jump, center + 4 * jump) for i in range(1, 6)]
+    if num_spatial_dims == 2:
+        n = ((num_images - 1) // 2, (num_images - 1) - (num_images - 1) // 2)
+        path_points = [(center, center)] + [(center, center + i * jump) for i in range(1, n[0]+1)] + [(center + i * jump, center + n[0] * jump) for i in range(1, n[1]+1)]
+    else:
+        n = ((num_images - 1) // 3, (num_images - 1) // 3, (num_images - 1) - 2 * (num_images - 1) // 3)
+        path_points = [(center, center, center)] + [(center, center, center + i * jump) for i in range(1, n[0]+1)] + [(center, center + i * jump, center + n[0] * jump) for i in range(1, n[1]+1)] + [(center + i * jump, center + n[1] * jump, center + n[0] * jump) for i in range(1, n[2]+1)]
 
     # Generate and save images
-    for i, (x, y, z) in enumerate(path_points):
+    dmax = 255
+    for i, p in enumerate(path_points):
         radius = min_radius + (i * (max_radius - min_radius) / (num_images - 1))
-        image = np.zeros((image_size, image_size, image_size), dtype=np.uint8)
-        
-        # Apply Gaussian intensity from the center to the border
-        X, Y, Z = np.meshgrid(np.arange(image_size), np.arange(image_size), np.arange(image_size), indexing='ij')
-        distances = np.sqrt((X - x)**2 + (Y - y)**2 + (Z - z)**2)
+
+        if num_spatial_dims == 2:
+            image = np.zeros((image_size, image_size), dtype=dtype)
+            X, Y = np.meshgrid(np.arange(image_size), np.arange(image_size), indexing='ij')
+            distances = np.sqrt((X - p[0])**2 + (Y - p[1])**2)
+        else:
+            image = np.zeros((image_size, image_size, image_size), dtype=dtype)
+            X, Y, Z = np.meshgrid(np.arange(image_size), np.arange(image_size), np.arange(image_size), indexing='ij')
+            distances = np.sqrt((X - p[0])**2 + (Y - p[1])**2 + (Z - p[2])**2)
+
         mask = distances < radius
-        image[mask] = 255 * np.exp(-decay_factor * (distances[mask] / radius)**2)
+        image[mask] = (dmax * np.exp(-decay_factor * (distances[mask] / radius)**2))
         
         for channel in range(num_channels):
             if type == "zarr":
-                zarr_file[i, channel] = image[::stride[0],::stride[1],::stride[2]]
+                if num_channels == 1:
+                    zarr_file[i] = image[slicing]
+                else:
+                    zarr_file[i, channel] = image[slicing]
             elif type == "directory":
                 channel_path = os.path.join(out, f"channel_{channel}")
-                tifffile.imwrite(os.path.join(channel_path, f'sphere_{i:02d}.tiff'), image[::stride[0],::stride[1],::stride[2]])
+                tifffile.imwrite(os.path.join(channel_path, f'sphere_{i:02d}.tiff'), image[slicing])
 
     if type == "zarr" and out is None:
         return zarr_file
