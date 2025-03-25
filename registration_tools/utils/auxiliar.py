@@ -16,6 +16,19 @@ def _make_index(t, axis, use_channel=None, downsample=(1,1,1)):
     index = tuple(index)
     return index
 
+def make_index(axis, downsample=(1,1,1), **kwargs):
+    spatial_order = [i for i in axis if i in "XYZ"]
+    index = [slice(None)] * len(axis)
+    for i, ax in enumerate(axis):
+        if ax not in kwargs:
+            if ax in "XYZ":
+                index[i] = slice(None, None, downsample[spatial_order.index(ax)])
+        else:
+            index[i] = kwargs[ax]
+
+    return tuple(index)
+    
+
 def _get_axis_scale(mask, axis, scale):
 
     if axis is None:

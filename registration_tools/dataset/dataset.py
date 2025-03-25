@@ -267,7 +267,7 @@ class Dataset:
                 self._axis_data = axis_data
                 self._n_axis_data = len(axis_data)
             else:
-                raise ValueError("Axis data must have the same length as the number of dimensions in the data.")
+                raise ValueError(f"Axis data must have the same length as the number of dimensions in the data. Dataset has {self._data.ndim} dimensions and axis_data provided is {axis_data}.")
         else:
             raise ValueError("Invalid data format for axis_data")
         
@@ -278,7 +278,7 @@ class Dataset:
                 self._axis_files = axis_files
                 self._n_axis_files = len(axis_files)
             else:
-                raise ValueError("Axis files must have the same length as the number of dimensions in the files.")
+                raise ValueError(f"Axis files must have the same length as the number of dimensions in the files. Image has {img.ndim} dimensions and axis_files is provided {axis_files}.")
         else:
             raise ValueError("Invalid data format for axis_files")
         self.dtype = img.dtype

@@ -13,13 +13,33 @@ import time
 import warnings  # Add this import
 from copy import deepcopy
 import zarr
-from ..utils.auxiliar import _get_axis_scale, _make_index, _dict_axis_shape, _suppress_stdout_stderr, _shape_downsampled, _shape_padded
+from ..utils.auxiliar import _get_axis_scale, _make_index, make_index, _dict_axis_shape, _suppress_stdout_stderr, _shape_downsampled, _shape_padded
 import tempfile
 import time
 from copy import deepcopy
 import threading
 import queue
 import dask.array as da
+# from dask.diagnostics import ProgressBar
+from dask.callbacks import Callback
+from dask.distributed import Client, Lock, LocalCluster
+
+class ProgressBar(Callback):
+    def __init__(self, total_tasks):
+        self.total_tasks = total_tasks  # Pass the total number of blocks as a parameter
+
+    def _start_state(self, dsk, state):
+        # Initialize tqdm with the number of blocks (tasks) to be processed
+        self._tqdm = tqdm(total=self.total_tasks, desc="Dask Progress")
+
+    def _posttask(self, key, result, dsk, state, worker_id):
+        # Update the progress bar after each task completes
+        self._tqdm.update(1)
+
+    def _finish(self, dsk, state, errored):
+        # Close the progress bar when the computation finishes
+        self._tqdm.close()
+
 try:
     import cupy as cp
     import cupyx.scipy.ndimage as cndi
@@ -35,7 +55,6 @@ from qtpy.QtWidgets import QVBoxLayout, QWidget, QSlider, QLabel, QPushButton
 from qtpy.QtCore import Qt
 from napari.utils.events import Event
 from vispy.util.keys import ALT, CONTROL
-
 class Registration:
     """
     A class to perform image registration.
@@ -204,12 +223,12 @@ class Registration:
     def _load_transformation_global(self, pos_float, pos_ref):
         if self._out is None:
             if f"trnsf_global_{pos_float:04d}_{pos_ref:04d}.trnsf" not in self._transfs:
-                raise ValueError("The transformation between the specified positions does not exist.")
+                raise ValueError(f"The transformation between {pos_float:04d} and {pos_ref:04d} the specified positions does not exist.")
             else:
                 return self._transfs[f"trnsf_global_{pos_float:04d}_{pos_ref:04d}.trnsf"]
         else:
             if not os.path.exists(f"{self._out}/trnsf_global/trnsf_global_{pos_float:04d}_{pos_ref:04d}.trnsf"):
-                raise ValueError("The transformation between the specified positions does not exist.")
+                raise ValueError(f"The transformation between {pos_float:04d} and {pos_ref:04d} the specified positions does not exist.")
             else:
                 return self.read_trnsf(f"{self._out}/trnsf_global/trnsf_global_{pos_float:04d}_{pos_ref:04d}.trnsf")
 
@@ -490,7 +509,7 @@ class Registration:
         if self._out is not None:
             self.save()
 
-    def apply(self, dataset, out=None, axis=None, scale=None, downsample=None, save_behavior="Continue", transformation="global", padding=False, verbose=False, **kwargs):
+    def apply_old(self, dataset, out=None, axis=None, scale=None, downsample=None, save_behavior="Continue", transformation="global", padding=False, verbose=False, **kwargs):
         """
         Registers a dataset and saves the results to the specified path.
         """
@@ -636,6 +655,321 @@ class Registration:
 
             data.attrs["computed"].append(t)
         
+        return data
+
+    def apply(self, dataset, out=None, axis=None, scale=None, downsample=None, save_behavior="Continue", transformation="global", padding=False, verbose=False, num_loading_threads=1, num_preloaded_images=1, **kwargs):
+        """
+        Registers a dataset and saves the results to the specified path.
+        """
+
+        save_behaviors = ["NotOverwrite", "Overwrite", "Continue"]
+
+        if not self._fitted:
+            raise ValueError("The registration object has not been fitted. Please fit the registration object before applying it.")
+
+        # Check inputs
+        axis, scale = _get_axis_scale(dataset, axis, scale)
+        
+        if len(axis) != len(dataset.shape):
+            raise ValueError("The axis must have the same length as the dataset shape.")
+        
+        if "T" not in axis:
+            raise ValueError("The axis must contain the time dimension 'T'.")
+                        
+        if save_behavior not in save_behaviors:
+            raise ValueError(f"save_behavior should be one of the following: {save_behaviors}.")
+
+        # Check downsample
+        self._n_spatial = len([i for i in axis if i in "XYZ"])
+        if downsample is None:
+            downsample = (1,) * self._n_spatial
+        else:
+            downsample = downsample
+
+        if not all(isinstance(d, int) for d in downsample):
+            raise ValueError("All elements in downsample must be integers.")
+        elif len(downsample) != self._n_spatial:
+            raise ValueError(f"downsample must have the same length as the number of spatial dimensions ({self._n_spatial}).")
+
+        # Scale
+        new_scale = tuple([i * j for i, j in zip(scale, downsample)])
+
+        # Shape
+        if padding:
+            padded_shape = _shape_padded(dataset.shape, axis, self._padding_box)
+        else:
+            padded_shape = dataset.shape
+        new_shape = _shape_downsampled(padded_shape, axis, downsample)
+        
+        # Setup output
+        if out is None:
+            store = zarr.storage.MemoryStore()
+            data = zarr.create_array(
+                store=store,
+                shape=new_shape,
+                dtype=dataset.dtype,
+                **kwargs
+            )
+            data.attrs["axis"] = axis
+            data.attrs["scale"] = new_scale
+            data.attrs["computed"] = []
+        elif isinstance(out, str):# and out.endswith(".zarr"):
+            if os.path.exists(out) and save_behavior == "NotOverwrite":
+                raise ValueError("The output file already exists. If you want to overwrite it, set save_behavior='Overwrite'.")
+            elif os.path.exists(out) and save_behavior == "Continue":
+                out_path, out_file = os.path.split(out)
+                data = zarr.open_array(out_file, path=out_path)
+                if "computed" not in data.attrs:
+                    data.attrs["computed"] = []
+            elif os.path.exists(out) and save_behavior == "Overwrite":
+                shutil.rmtree(out)
+                data = zarr.create_array(
+                    store=out,
+                    shape=new_shape,
+                    dtype=dataset.dtype,
+                    **kwargs
+                )
+                data.attrs["axis"] = axis
+                data.attrs["scale"] = new_scale
+                data.attrs["computed"] = []
+            else:
+                data = zarr.create_array(
+                    store=out,
+                    shape=new_shape,
+                    dtype=dataset.dtype,
+                    **kwargs
+                )
+                data.attrs["axis"] = axis
+                data.attrs["scale"] = new_scale
+                data.attrs["computed"] = []
+        else:
+            raise ValueError("The output must be None or a the name to a zarr file.")
+
+        mt = np.eye(4)
+        # if padding:
+        #     padding_drift = [i[0]*j for i,j in zip(self._padding_box, scale)][::-1]
+        #     mt[:3,3] = np.array(padding_drift)
+        #     padding_trnsf = vt.vtTransformation(mt)
+
+        if self._registration_direction == "backward":
+            origin = 0
+            iterator = range(0, new_shape[np.where([i == "T" for i in axis])[0][0]])
+        else:
+            origin = new_shape[np.where([i == "T" for i in axis])[0][0]] - 1
+            iterator = range(new_shape[np.where([i == "T" for i in axis])[0][0]] - 1, -1, -1)
+
+        # Create a preloading buffer and threading event
+        buffer_queue = queue.Queue(maxsize=num_preloaded_images)  # Buffer with 2 preloaded images
+        # A list of events to synchronize threads
+        events = [threading.Event() for _ in range(num_loading_threads)]
+        task_queue = queue.Queue()
+        for ord, task in enumerate(deepcopy(iterator)):
+            task_queue.put((ord, task))  # Include index to preserve task order
+
+        # Launch threads
+        # Create a ThreadPoolExecutor to manage the workers
+        task_worker_threads = []
+        assignement = {}
+        for _ in range(num_loading_threads):
+            thread = threading.Thread(target=self._preload_images_in_thread, args=(_, events, dataset, axis, scale, None, downsample, task_queue, buffer_queue, num_loading_threads, assignement))
+            task_worker_threads.append(thread)
+            thread.start()
+
+        # # start = time.time() 
+        # if "C" in axis:
+        #     for ch in range(new_shape[np.where([i == "C" for i in axis])[0][0]]):
+        #         img = self._get_image(dataset, origin, axis, ch, downsample)
+        #         if padding:
+        #             im = self.apply_trnsf(img, padding_trnsf, new_scale)
+        #         else:
+        #             im = img
+        #         data[_make_index(origin, axis, ch)] = im
+        # else:
+        #     data[_make_index(origin, axis, None)] = dataset[_make_index(dataset.shape[np.where([i == "T" for i in axis])[0][0]] - 1, axis, None, downsample)]
+        # # print(f"Time to get image: {time.time()-start}")
+
+        data_ = np.zeros([i for i,j in zip(new_shape, axis) if j != "T"])
+        for t in tqdm(iterator, desc=f"Applying registration to images", unit="", total=self._t_max-1):
+
+            _, image = buffer_queue.get()
+
+            # print(f"Loading {t}")
+            # total_time = time.time() 
+            #Skip is computed
+            if t in data.attrs["computed"]:
+                    continue
+
+            if transformation == "global":
+                if not self._trnsf_exists_global(t, origin):
+                    raise ValueError("The global transformation does not exist.")
+                trnsf = self._load_transformation_global(t, origin)
+            else:
+                if not self._trnsf_exists_relative(t, origin):
+                    raise ValueError("The relative transformation does not exist.")
+                trnsf = self._load_transformation_relative(t, origin)
+
+            if "C" in axis:
+                for ch in range(new_shape[np.where([i == "C" for i in axis])[0][0]]):
+                    start = time.time()
+                    img = image[ch]
+                    if padding:
+                        joint_trnsf = self.compose_trnsf([trnsf,padding_trnsf])
+                    else:
+                        joint_trnsf = trnsf
+                    # print(f"Time to get image: {time.time()-start}")
+                    # start = time.time()
+                    im_trnsf = self.apply_trnsf(img, joint_trnsf, new_scale)
+                    # print(f"Time to apply trnsf: {time.time()-start}")
+                    # start = time.time()
+                    data_[ch] = im_trnsf
+                    # print(f"Time to save partial image: {time.time()-start}")
+
+                # start = time.time()
+                data[_make_index(t, axis, None)] = data_
+                # print(f"Time to save image: {time.time()-start}")
+            else:
+                img = image
+                if padding:
+                    joint_trnsf = self.compose_trnsf([trnsf,padding_trnsf])
+                else:
+                    joint_trnsf = trnsf
+                im = self.apply_trnsf(img, joint_trnsf, new_scale)
+                data[_make_index(t, axis, None)] = im
+
+            data.attrs["computed"].append(t)
+
+            # print(f"Total time: {time.time()-total_time}")
+        
+        return data
+
+    def apply_dask(self, dataset, out=None, axis=None, scale=None, downsample=None, 
+                save_behavior="Continue", transformation="global", padding=False,
+                num_parallel_processed_images=None, 
+                verbose=False, **kwargs):
+        """
+        Registers a dataset using Dask for parallel processing and saves the results in a Zarr store.
+        """
+        save_behaviors = ["NotOverwrite", "Overwrite", "Continue"]
+
+        if num_parallel_processed_images is None:
+            num_parallel_processed_images = threading.active_count()
+
+        if not self._fitted:
+            raise ValueError("The registration object has not been fitted. Please fit it before applying.")
+
+        # Check inputs
+        axis, scale = _get_axis_scale(dataset, axis, scale)
+        
+        if len(axis) != len(dataset.shape):
+            raise ValueError("The axis must have the same length as the dataset shape.")
+        
+        if "T" not in axis:
+            raise ValueError("The axis must contain the time dimension 'T'.")
+                        
+        if save_behavior not in save_behaviors:
+            raise ValueError(f"save_behavior should be one of the following: {save_behaviors}.")
+
+        # Check downsample
+        self._n_spatial = len([i for i in axis if i in "XYZ"])
+        downsample = downsample if downsample is not None else (1,) * self._n_spatial
+
+        if not all(isinstance(d, int) for d in downsample):
+            raise ValueError("All elements in downsample must be integers.")
+        if len(downsample) != self._n_spatial:
+            raise ValueError(f"downsample must have the same length as the number of spatial dimensions ({self._n_spatial}).")
+
+        # Compute new scale
+        new_scale = tuple(i * j for i, j in zip(scale, downsample))
+
+        # Compute output shape
+        padded_shape = _shape_padded(dataset.shape, axis, self._padding_box) if padding else dataset.shape
+        new_shape = _shape_downsampled(padded_shape, axis, downsample)
+
+        # Determine time axis index
+        time_idx = axis.index("T")
+        origin = 0 if self._registration_direction == "backward" else new_shape[time_idx] - 1
+        iterator = range(1, new_shape[time_idx]) if self._registration_direction == "backward" else range(new_shape[time_idx] - 2, -1, -1)
+
+        # Convert dataset to Dask array
+        dataset_dask = da.from_array(dataset)
+
+        def process_image(t, dataset, axis, downsample, transformation, padding, new_scale, lock):
+            """
+            Function to be applied in parallel to each time step.
+            """
+            if t is []:
+                return self._get_image(dataset, self._origin, axis, None, downsample)
+            elif t[0] == 0:
+                return self._get_image(dataset, self._origin, axis, None, downsample)
+
+            if transformation == "global":
+                t = t[0]
+                if not self._trnsf_exists_global(t, origin):
+                    raise ValueError(f"The global transformation does not exist., {t}")
+                trnsf = self._load_transformation_global(t, origin)
+            else:
+                if not self._trnsf_exists_relative(t, origin):
+                    raise ValueError("The relative transformation does not exist.")
+                trnsf = self._load_transformation_relative(t, origin)
+
+            img = self._get_image(dataset, t, axis, None, downsample)
+            joint_trnsf = self.compose_trnsf([trnsf, padding_trnsf]) if padding else trnsf
+            if GPU_AVAILABLE:
+                lock.acquire()
+                if "C" in axis:
+                    im_trnsf = np.zeros_like(img)
+                    for ch in range(new_shape[np.where([i == "C" for i in axis])[0][0]]):
+                        im_trnsf[ch] = self.apply_trnsf(img[ch], joint_trnsf, new_scale)
+                else:
+                    im_trnsf = self.apply_trnsf(img, joint_trnsf, new_scale)
+                lock.release()
+            else:
+                if "C" in axis:
+                    im_trnsf = np.zeros_like(img)
+                    for ch in range(new_shape[np.where([i == "C" for i in axis])[0][0]]):
+                        im_trnsf[ch] = self.apply_trnsf(img[ch], joint_trnsf, new_scale)
+                else:
+                    im_trnsf = self.apply_trnsf(img, joint_trnsf, new_scale)
+
+            return im_trnsf
+
+        # Apply processing using Dask's map_blocks
+        client = LocalCluster(n_workers=num_parallel_processed_images, threads_per_worker=1)
+        gpu_lock = Lock()#threading.Lock()
+        processed_dask = da.map_blocks(
+            lambda t: process_image(t, dataset, axis, downsample, transformation, padding, new_scale, gpu_lock),
+            da.arange(self._t_max, chunks=1),
+            dtype=dataset.dtype,
+            chunks=[j for i,j in _dict_axis_shape(axis, new_shape).items() if i != "T"],
+        )
+
+        # Setup output storage
+        if out is None:
+            store = zarr.storage.MemoryStore()
+            # Use Dask's built-in ProgressBar
+            with ProgressBar(self._t_max*2):
+                data = processed_dask.compute()
+        elif isinstance(out, str):
+            if os.path.exists(out) and save_behavior == "NotOverwrite":
+                raise ValueError("The output file already exists. Use save_behavior='Overwrite' to overwrite.")
+            elif os.path.exists(out) and save_behavior == "Continue":
+                data = zarr.open(out, mode="a")
+                if "computed" not in data.attrs:
+                    data.attrs["computed"] = []
+            elif os.path.exists(out) and save_behavior == "Overwrite":
+                shutil.rmtree(out)
+                with ProgressBar(self._t_max):
+                        data = da.to_zarr(processed_dask, out)
+            else:
+                # processed_dask.compute()
+                with ProgressBar(self._t_max*2):
+                        da.to_zarr(processed_dask, out)
+                data = zarr.open(out, mode="r")
+        else:
+            raise ValueError("Output must be None or a valid Zarr file path.")
+        
+        client.close()
+
         return data
 
     def fit_apply(self, 
@@ -1526,6 +1860,18 @@ class RegistrationVT(Registration):
     # def compose_trnsf(self, trnsfs):
     #     return vt.compose_trsf(trnsfs)
     
+    def _vectorfield2array(self, trnsf, scale):
+
+        points = np.meshgrid(*[np.arange(0, i) for i in self._box])
+        points = np.vstack([i.ravel() for i in points]).T
+        points = points[:,::-1]
+        points_vt = vt.vtPointList(points)
+        points_vt_out = vt.apply_trsf_to_points(points_vt, trnsf)
+        vectorfield = points_vt_out.copy_to_array()[:,:self._n_spatial] - points
+        p,d = points.shape
+
+        return np.concatenate([points[:,::-1].reshape(p,1,d), -vectorfield[:,::-1].reshape(p,1,d)], axis=1)
+
     def _make_registration_args(self, registration_type=None, pyramid_lowest_level=None, pyramid_highest_level=None, args_registration=None, verbose=False):
         if registration_type is None:
             registration_type = self._registration_type
@@ -1586,6 +1932,9 @@ class RegistrationVT(Registration):
             compensation = np.eye(self._n_spatial+1)
             compensation[:self._n_spatial, -1] = center.copy_to_array()[0] - center_moved.copy_to_array()[0]
             trnsf = vt.compose_trsf([vt.vtTransformation(compensation), trnsf])
+
+        if self._registration_type == "vectorfield":
+            return self._vectorfield2array(trnsf, scale)
 
         #Invert axis order to make it consistent with input order
         if self._n_spatial == 2:
@@ -1874,23 +2223,29 @@ class RegistrationManual(Registration):
         # self._axis2[:,0,:] = np.array(ax_)/2
         # self._axis2[:,1,1] = self._arrow_scale
 
-        if len(os.listdir(os.path.join(self._out, "trnsf_global"))) == 0:
-            for t in range(self._t_max):
-                self._save_transformation_global(np.eye(4), t, self._origin)
-
         viewer = napari.Viewer()
         viewer.add_image(dataset, scale=scale, name="Dataset", opacity=0.5)
         viewer.add_image(dataset, scale=scale, name="Dataset (corrected)", opacity=0.5, colormap="green")
         dataset_dask = da.from_array(dataset, chunks=dataset.shape)
         if self._registration_direction == "backward":
-            viewer.add_image(dataset_dask[:,1:], scale=scale, name="Dataset t+1", opacity=0.5, colormap="red")
+            slicing = make_index(self._axis, T=slice(1,None,1))
+            print(self._axis, slicing)
+            viewer.add_image(dataset_dask[slicing], scale=scale, name="Dataset t+1", opacity=0.5, colormap="red")
         else:
-            viewer.add_image(dataset_dask[:,:-1], scale=scale, name="Dataset t+1", opacity=0.5, colormap="red")
+            slicing = make_index(self._axis, T=slice(None,-1,None))
+            viewer.add_image(dataset_dask[slicing], scale=scale, name="Dataset t+1", opacity=0.5, colormap="red")
 
         if direction == "backward":
             self._origin = 0
         else:
             self._origin = self._t_max-1
+
+        if self._out is None:
+            for t in range(self._t_max):
+                self._save_transformation_global(np.eye(4), t, self._origin)
+        elif len(os.listdir(os.path.join(self._out, "trnsf_global"))) == 0:
+            for t in range(self._t_max):
+                self._save_transformation_global(np.eye(4), t, self._origin)
 
         if self._n_spatial == 2:
             viewer.dims.ndisplay = 2
@@ -1902,7 +2257,8 @@ class RegistrationManual(Registration):
         napari.run()
 
         self._fitted = True
-        self.save()
+        if self._out is not None:
+            self.save()
 
 class AffineRegistrationWidget(QWidget):
     
@@ -1916,7 +2272,7 @@ class AffineRegistrationWidget(QWidget):
         self.explanation = self.create_explanation()
         self.register_button = self.create_button("Register", self.register)
         self.rotation_slider = self.create_slider("Rotation step", 1, 360, 1)
-        self.translation_slider = self.create_slider("Translation Step", 1, np.min(model._spatial_shape), np.max(1,np.min(model._spatial_shape)//100))
+        self.translation_slider = self.create_slider("Translation Step", 1, np.min(model._spatial_shape), min(1,np.min(model._spatial_shape)//100))
         self.propagate_backwards_button = self.create_button("Propagate backwards", self.propagate_backwards)
         self.propagate_forwards_button = self.create_button("Propagate forwards", self.propagate_forwards)
         self.setLayout(self.layout)
@@ -1978,14 +2334,36 @@ class AffineRegistrationWidget(QWidget):
 
     def register(self,*args):
         t = self.viewer.dims.current_step[self.axis.index("T")]
-        c = self.viewer.dims.current_step[self.axis.index("C")]
+        if "C" in self.axis:
+            slicing = make_index(self.axis, 
+                                 T = self.viewer.dims.current_step[self.axis.index("T")],
+                                 C = self.viewer.dims.current_step[self.axis.index("C")]
+            )
+            if t == self.model._t_max-1:
+                slicing_ = make_index(self.axis, 
+                                     T = self.viewer.dims.current_step[self.axis.index("T")-1],
+                                     C = self.viewer.dims.current_step[self.axis.index("C")]
+                )
+            else:
+                slicing_ = slicing
+        else:
+            slicing = make_index(self.axis, 
+                                 T = self.viewer.dims.current_step[self.axis.index("T")]
+            )
+            if t == self.model._t_max-1:
+                slicing_ = make_index(self.axis, 
+                                     T = self.viewer.dims.current_step[self.axis.index("T")-1],
+                )
+            else:
+                slicing_ = slicing
+
         layer = self.viewer.layers["Dataset t+1"]
         # translation = np.eye(4)
         # translation[:3, 3] = np.array([0, 0, 20])  # Replace with desired translation values (x, y, z)
         # trnsf = translation
         # self.viewer.layers["Dataset t+1"].data[0,t] = ndi.affine_transform(self.viewer.layers["Dataset"].data[0,t], trnsf, order=1)
-        img_ref = self.viewer.layers["Dataset"].data[c,t]
-        img_float = self.viewer.layers["Dataset t+1"].data[c,t]
+        img_ref = self.viewer.layers["Dataset"].data[slicing]
+        img_float = self.viewer.layers["Dataset t+1"].data[slicing_]
         trnsf_ref = self.model._load_transformation_global(t, self.model._origin)
         trnsf_float = self.model._load_transformation_global(t+1, self.model._origin)
         # trnsf_ref = self.model._transfs[t]
@@ -2007,38 +2385,42 @@ class AffineRegistrationWidget(QWidget):
             verbose=True
         )
 
+        # trnsf= np.linalg.inv(trnsf)
+
         # trnsf = vt.inv_trsf(trnsf).copy_to_array()
-        trnsf = trnsf.copy_to_array()
+        # trnsf = trnsf.copy_to_array()
 
         # trnsf = scaling_inv @ trnsf @ scaling
         # trnsf = trnsf
-        trnsf[:3, :3] = trnsf[:3, :3][:, [2, 1, 0]]
-        trnsf[:3, :3] = trnsf[:3, :3][[2, 1, 0],:]
-        trnsf[:3, 3] = trnsf[:3, 3][[2, 1, 0]]
+        # trnsf[:3, :3] = trnsf[:3, :3][:, [2, 1, 0]]
+        # trnsf[:3, :3] = trnsf[:3, :3][[2, 1, 0],:]
+        # trnsf[:3, 3] = trnsf[:3, 3][[2, 1, 0]]
 
         # print(trnsf)
         trnsf = self.model.compose_trnsf([trnsf, trnsf_float])
         # print(trnsf)
 
-        t = self.viewer.dims.current_step[self.axis.index("T")]
-        layer.affine = trnsf
+        # t = self.viewer.dims.current_step[self.axis.index("T")]
+        # layer.affine = np.linalg.inv(trnsf)
         self.model._save_transformation_global(trnsf, t+1, self.model._origin)
+        self.update_images(None, refresh=True)
         # self.model._transfs[t+1] = trnsf
 
-    def update_images(self, event):
+    def update_images(self, event, refresh=False):
         # Get current time step
         t = self.viewer.dims.current_step[self.axis.index("T")]
 
         # Check if t has actually changed
-        if hasattr(self, "_last_t") and self._last_t == t:
+        if hasattr(self, "_last_t") and self._last_t == t and not refresh:
             return  # Skip update if t is the same as before
 
         # Store the new value of t
         self._last_t = t  
 
         # Now update the affine transformations only if necessary
-        self.viewer.layers["Dataset (corrected)"].affine = self.model._load_transformation_global(t, self.model._origin)
-        self.viewer.layers["Dataset t+1"].affine = self.model._load_transformation_global(t+1, self.model._origin)
+        self.viewer.layers["Dataset (corrected)"].affine = np.linalg.inv(self.model._load_transformation_global(t, self.model._origin))
+        self.viewer.layers["Dataset t+1"].affine = np.linalg.inv(self.model._load_transformation_global(min(t+1, self.model._t_max-1), self.model._origin))
+
         # self.viewer.layers["Dataset (corrected)"].affine = self.model._transfs[t]
         # self.viewer.layers["Dataset t+1"].affine = self.model._transfs[t + 1]
 
@@ -2138,17 +2520,19 @@ class AffineRegistrationWidget(QWidget):
             self.model._save_transformation_global(trnsf, t_, self.model._origin)
             # self.model._transfs[t_] = trnsf
             # self.model._transfs[t_] = self.model._transfs[t+1]
-
+        self.viewer.dims.set_current_step(self.axis.index("T"), min(self.model._t_max - 1, t + 1))
+    
     def propagate_backwards(self, accumulated_affine):
         t = self.viewer.dims.current_step[self.axis.index("T")]
         trnsf = self.model._load_transformation_global(t, self.model._origin)
         for t_ in range(t-1, -1, -1):
             self.model._save_transformation_global(trnsf, t_, self.model._origin)
             # self.model._transfs[t_] = self.model._transfs[t-1]
+        self.viewer.dims.set_current_step(self.axis.index("T"), max(0, t - 1))
 
     def rotate(self, layer, axis):
         angle = np.radians(self.rotation_slider.findChild(QSlider).value())
-        accumulated_affine = layer.affine.affine_matrix[2:,2:]
+        accumulated_affine = layer.affine.affine_matrix[-self.model._n_spatial-1:,-self.model._n_spatial-1:]
         center = np.array(layer.data.shape[-3:], dtype=float) / 2.0
         center = center*layer.scale[-3:]
         # For 3D rotation, build the 4×4 incremental transform.
@@ -2176,7 +2560,7 @@ class AffineRegistrationWidget(QWidget):
         # Update the layer’s affine transform
         layer.affine = accumulated_affine
         t = self.viewer.dims.current_step[self.axis.index("T")]
-        self.model._save_transformation_global(accumulated_affine, t+1, self.model._origin)
+        self.model._save_transformation_global(np.linalg.inv(accumulated_affine), t+1, self.model._origin)
         # self.model._transfs[t+1] = accumulated_affine
         # for t_ in range(t+1, self.model._t_max):
         #     self.model._transfs[t_] = accumulated_affine
@@ -2185,7 +2569,7 @@ class AffineRegistrationWidget(QWidget):
         step = self.translation_slider.findChild(QSlider).value()
         
         # Get the current affine transformation (6×6 matrix)
-        accumulated_affine = layer.affine.affine_matrix[2:,2:]
+        accumulated_affine = layer.affine.affine_matrix[-self.model._n_spatial-1:,-self.model._n_spatial-1:]
 
         # Build a 6×6 translation matrix
         T_translate = np.eye(4)  # Identity matrix
@@ -2197,7 +2581,7 @@ class AffineRegistrationWidget(QWidget):
         # Properly assign the new affine transformation
         layer.affine = accumulated_affine
         t = self.viewer.dims.current_step[self.axis.index("T")]
-        self.model._save_transformation_global(accumulated_affine, t+1, self.model._origin)
+        self.model._save_transformation_global(np.linalg.inv(accumulated_affine), t+1, self.model._origin)
         # self.model._transfs[t+1] = accumulated_affine
 
     def on_keyboard_clockwise_rotate(self, viewer):

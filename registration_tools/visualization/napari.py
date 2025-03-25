@@ -71,7 +71,7 @@ def add_vectors(viewer, model, time_axis, scale=None, downsample=(1,1,1), **kwar
     viewer.add_vectors([], scale=scale, name="vectorfield", **kwargs)
     _update_vectors(viewer, model, time_axis, downsample, None)
     # viewer.dims.events.current_step.connect(_update_vectors)
-    viewer.dims.events.current_step.connect(lambda event: _update_vectors(viewer, model, time_axis, event))
+    viewer.dims.events.current_step.connect(lambda event: _update_vectors(viewer, model, time_axis, downsample, event))
 
 def _update_vectors(viewer, model, axis, downsample, event):
 
