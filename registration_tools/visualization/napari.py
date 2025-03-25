@@ -56,6 +56,45 @@ def add_image_difference(viewer, dataset, dt=1, cmap1="red", cmap2="green", opac
     viewer.add_image(img1, scale=scale[::-1], colormap=cmap1, opacity=opacity1, **kwargs)
     viewer.add_image(img2, scale=scale[::-1], colormap=cmap2, opacity=opacity2, **kwargs)
 
+def add_vectors(viewer, model, time_axis, scale=None, downsample=(1,1,1), **kwargs):
+    """
+    Plots the vectors in the model in the viewer.
+
+    Args:
+        viewer (napari.Viewer): The napari viewer instance.
+        model (Registration): The registration object.
+        scale (tuple, optional): Scale for the vectors. Default is (1, 1, 1).
+        downsample (tuple, optional): downsample factor for the vectors. Default is (1, 1, 1).
+        verbosity (int, optional): Verbosity level. Default is 1.
+    """
+
+    viewer.add_vectors([], scale=scale, name="vectorfield", **kwargs)
+    _update_vectors(viewer, model, time_axis, downsample, None)
+    # viewer.dims.events.current_step.connect(_update_vectors)
+    viewer.dims.events.current_step.connect(lambda event: _update_vectors(viewer, model, time_axis, event))
+
+def _update_vectors(viewer, model, axis, downsample, event):
+
+    if "vectorfield" in viewer.layers:
+        vectors = viewer.layers["vectorfield"]
+    else:
+        return
+            
+    t = viewer.dims.current_step[axis]
+
+    for i in range(model._t_max):
+        if model._trnsf_exists_relative(t, i):
+            trnsf = model._load_transformation_relative(t, i)
+            mask = trnsf[:,0,0] % downsample[0] == 0
+            trnsf = trnsf[mask,:,:]
+            mask = trnsf[:,0,1] % downsample[1] == 0
+            trnsf = trnsf[mask,:,:]
+            if model._n_spatial == 3:
+                mask = trnsf[:,0,2] % downsample[2] == 0
+                trnsf = trnsf[mask,:,:]
+            vectors.data = trnsf
+            break
+
 def make_video(viewer, save_file, time_channel=0, fps=10, zooms=None, angles=None, canvas_only=True):
     """
     Creates a video from the napari viewer by taking screenshots of all time points.
