@@ -95,6 +95,45 @@
     <span class="n">viewer</span><span class="o">.</span><span class="n">add_image</span><span class="p">(</span><span class="n">img2</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="n">scale</span><span class="p">[::</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">colormap</span><span class="o">=</span><span class="n">cmap2</span><span class="p">,</span> <span class="n">opacity</span><span class="o">=</span><span class="n">opacity2</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">add_vectors</span><span class="p">(</span><span class="n">viewer</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">time_axis</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">downsample</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">),</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Plots the vectors in the model in the viewer.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        viewer (napari.Viewer): The napari viewer instance.</span>
+<span class="sd">        model (Registration): The registration object.</span>
+<span class="sd">        scale (tuple, optional): Scale for the vectors. Default is (1, 1, 1).</span>
+<span class="sd">        downsample (tuple, optional): downsample factor for the vectors. Default is (1, 1, 1).</span>
+<span class="sd">        verbosity (int, optional): Verbosity level. Default is 1.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">viewer</span><span class="o">.</span><span class="n">add_vectors</span><span class="p">([],</span> <span class="n">scale</span><span class="o">=</span><span class="n">scale</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;vectorfield&quot;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+    <span class="n">_update_vectors</span><span class="p">(</span><span class="n">viewer</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">time_axis</span><span class="p">,</span> <span class="n">downsample</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="c1"># viewer.dims.events.current_step.connect(_update_vectors)</span>
+    <span class="n">viewer</span><span class="o">.</span><span class="n">dims</span><span class="o">.</span><span class="n">events</span><span class="o">.</span><span class="n">current_step</span><span class="o">.</span><span class="n">connect</span><span class="p">(</span><span class="k">lambda</span> <span class="n">event</span><span class="p">:</span> <span class="n">_update_vectors</span><span class="p">(</span><span class="n">viewer</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">time_axis</span><span class="p">,</span> <span class="n">downsample</span><span class="p">,</span> <span class="n">event</span><span class="p">))</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_update_vectors</span><span class="p">(</span><span class="n">viewer</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">axis</span><span class="p">,</span> <span class="n">downsample</span><span class="p">,</span> <span class="n">event</span><span class="p">):</span>
+
+    <span class="k">if</span> <span class="s2">&quot;vectorfield&quot;</span> <span class="ow">in</span> <span class="n">viewer</span><span class="o">.</span><span class="n">layers</span><span class="p">:</span>
+        <span class="n">vectors</span> <span class="o">=</span> <span class="n">viewer</span><span class="o">.</span><span class="n">layers</span><span class="p">[</span><span class="s2">&quot;vectorfield&quot;</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span>
+            
+    <span class="n">t</span> <span class="o">=</span> <span class="n">viewer</span><span class="o">.</span><span class="n">dims</span><span class="o">.</span><span class="n">current_step</span><span class="p">[</span><span class="n">axis</span><span class="p">]</span>
+
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">_t_max</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">model</span><span class="o">.</span><span class="n">_trnsf_exists_relative</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">i</span><span class="p">):</span>
+            <span class="n">trnsf</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">_load_transformation_relative</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="n">trnsf</span><span class="p">[:,</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span> <span class="o">%</span> <span class="n">downsample</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span>
+            <span class="n">trnsf</span> <span class="o">=</span> <span class="n">trnsf</span><span class="p">[</span><span class="n">mask</span><span class="p">,:,:]</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="n">trnsf</span><span class="p">[:,</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">]</span> <span class="o">%</span> <span class="n">downsample</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span>
+            <span class="n">trnsf</span> <span class="o">=</span> <span class="n">trnsf</span><span class="p">[</span><span class="n">mask</span><span class="p">,:,:]</span>
+            <span class="k">if</span> <span class="n">model</span><span class="o">.</span><span class="n">_n_spatial</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+                <span class="n">mask</span> <span class="o">=</span> <span class="n">trnsf</span><span class="p">[:,</span><span class="mi">0</span><span class="p">,</span><span class="mi">2</span><span class="p">]</span> <span class="o">%</span> <span class="n">downsample</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span>
+                <span class="n">trnsf</span> <span class="o">=</span> <span class="n">trnsf</span><span class="p">[</span><span class="n">mask</span><span class="p">,:,:]</span>
+            <span class="n">vectors</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">trnsf</span>
+            <span class="k">break</span>
+
 <div class="viewcode-block" id="make_video">
 <a class="viewcode-back" href="../../../API_visualization.html#registration_tools.visualization.make_video">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">make_video</span><span class="p">(</span><span class="n">viewer</span><span class="p">,</span> <span class="n">save_file</span><span class="p">,</span> <span class="n">time_channel</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">fps</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span> <span class="n">zooms</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">angles</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">canvas_only</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>

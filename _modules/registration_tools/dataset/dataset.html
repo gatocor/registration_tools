@@ -311,7 +311,7 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">_axis_data</span> <span class="o">=</span> <span class="n">axis_data</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_n_axis_data</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">axis_data</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Axis data must have the same length as the number of dimensions in the data.&quot;</span><span class="p">)</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Axis data must have the same length as the number of dimensions in the data. Dataset has </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_data</span><span class="o">.</span><span class="n">ndim</span><span class="si">}</span><span class="s2"> dimensions and axis_data provided is </span><span class="si">{</span><span class="n">axis_data</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Invalid data format for axis_data&quot;</span><span class="p">)</span>
         
@@ -322,7 +322,7 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">_axis_files</span> <span class="o">=</span> <span class="n">axis_files</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_n_axis_files</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">axis_files</span><span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Axis files must have the same length as the number of dimensions in the files.&quot;</span><span class="p">)</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Axis files must have the same length as the number of dimensions in the files. Image has </span><span class="si">{</span><span class="n">img</span><span class="o">.</span><span class="n">ndim</span><span class="si">}</span><span class="s2"> dimensions and axis_files is provided </span><span class="si">{</span><span class="n">axis_files</span><span class="si">}</span><span class="s2">.&quot;</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Invalid data format for axis_files&quot;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">dtype</span> <span class="o">=</span> <span class="n">img</span><span class="o">.</span><span class="n">dtype</span>
