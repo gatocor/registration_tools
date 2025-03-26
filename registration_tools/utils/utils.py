@@ -89,7 +89,11 @@ def apply_function_in_time_dask(dataset, function, axis=None, scale=None, out=No
         return function(image, **kwargs)
     
     # Create delayed arrays for each image, applying the custom function
-    dataset_dask = da.from_zarr(dataset)
+    try:
+        dataset_dask = da.from_zarr(dataset)
+    except:
+        dataset_dask = da.from_array(dataset)
+                                                      
     delayed_arrays = [
         da.from_delayed(_apply_function(dataset_dask[_make_index(idx, axis)], function, **kwargs), shape=modified.shape, dtype=dataset.dtype) 
         for idx in range(t)
@@ -102,7 +106,8 @@ def apply_function_in_time_dask(dataset, function, axis=None, scale=None, out=No
         if out is None:
             data = new_array.compute()
         else:
-            new_array.to_zarr(out, chunks=(1,*modified.shape))
+            new_array.to_zarr(out)
+            # new_array.to_zarr(out, chunks=(1,*modified.shape))
 
     # Add attributes to the Zarr file (such as axis and scale)
     if out is None:
@@ -113,10 +118,7 @@ def apply_function_in_time_dask(dataset, function, axis=None, scale=None, out=No
     data.attrs['axis'] = new_axis
     data.attrs['scale'] = new_scale
     
-    if out is None:
-        return data
-    else:
-        return
+    return data
     
 def apply_function_in_time(dataset, function, axis=None, scale=None, out=None, new_axis=None, new_scale=None, **kwargs):
     """

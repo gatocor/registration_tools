@@ -9,7 +9,7 @@ import zarr
 import dask.array as da
 
 from skimage.io import imread, imsave
-from ..utils.auxiliar import _make_index
+from ..utils.auxiliar import _make_index, make_index
 
 def add_image(viewer, dataset, split_channel=None, scale=None, **kwargs):
     """
@@ -56,7 +56,7 @@ def add_image_difference(viewer, dataset, dt=1, cmap1="red", cmap2="green", opac
     viewer.add_image(img1, scale=scale[::-1], colormap=cmap1, opacity=opacity1, **kwargs)
     viewer.add_image(img2, scale=scale[::-1], colormap=cmap2, opacity=opacity2, **kwargs)
 
-def add_vectors(viewer, model, time_axis, scale=None, downsample=(1,1,1), **kwargs):
+def add_vectors(viewer, model, time_axis, mask=None, mask_axis=None, scale=None, downsample=(1,1,1), **kwargs):
     """
     Plots the vectors in the model in the viewer.
 
@@ -68,12 +68,18 @@ def add_vectors(viewer, model, time_axis, scale=None, downsample=(1,1,1), **kwar
         verbosity (int, optional): Verbosity level. Default is 1.
     """
 
-    viewer.add_vectors([], scale=scale, name="vectorfield", **kwargs)
-    _update_vectors(viewer, model, time_axis, downsample, None)
-    # viewer.dims.events.current_step.connect(_update_vectors)
-    viewer.dims.events.current_step.connect(lambda event: _update_vectors(viewer, model, time_axis, downsample, event))
+    if mask_axis is None:
+        try:
+            mask_axis = mask.attrs["axis"]
+        except:
+            raise ValueError("The mask_axis must be provided")
 
-def _update_vectors(viewer, model, axis, downsample, event):
+    viewer.add_vectors([], scale=scale, name="vectorfield", **kwargs)
+    _update_vectors(viewer, model, time_axis, mask, mask_axis, downsample, None)
+    # viewer.dims.events.current_step.connect(_update_vectors)
+    viewer.dims.events.current_step.connect(lambda event: _update_vectors(viewer, model, time_axis, mask, mask_axis, downsample, event))
+
+def _update_vectors(viewer, model, axis, mask, mask_axis, downsample, event):
 
     if "vectorfield" in viewer.layers:
         vectors = viewer.layers["vectorfield"]
@@ -83,15 +89,25 @@ def _update_vectors(viewer, model, axis, downsample, event):
     t = viewer.dims.current_step[axis]
 
     for i in range(model._t_max):
-        if model._trnsf_exists_relative(t, i):
-            trnsf = model._load_transformation_relative(t, i)
-            mask = trnsf[:,0,0] % downsample[0] == 0
-            trnsf = trnsf[mask,:,:]
-            mask = trnsf[:,0,1] % downsample[1] == 0
-            trnsf = trnsf[mask,:,:]
-            if model._n_spatial == 3:
-                mask = trnsf[:,0,2] % downsample[2] == 0
-                trnsf = trnsf[mask,:,:]
+        if model._registration_direction == "forward":
+            p = (t,i)
+        else:
+            p = (i,t)
+        if model._trnsf_exists_relative(*p):
+            trnsf = model._load_transformation_relative(*p)
+            if mask is not None:
+                slicing = make_index(mask_axis, T=t)
+                mask_ = mask[slicing]
+                m = trnsf[:,0,:].astype(int)
+                m = mask_[m[:,0],m[:,1],m[:,2]].astype(bool)
+                trnsf = trnsf[m,:,:]
+            # mask = trnsf[:,0,0].astype(int) % downsample[0] == 0
+            # trnsf = trnsf[mask,:,:]
+            # mask = trnsf[:,0,1].astype(int) % downsample[1] == 0
+            # trnsf = trnsf[mask,:,:]
+            # if model._n_spatial == 3:
+            #     mask = trnsf[:,0,2].astype(int) % downsample[2] == 0
+            #     trnsf = trnsf[mask,:,:]
             vectors.data = trnsf
             break
 

@@ -159,9 +159,9 @@ class Registration:
 
         for name, trnsf in self._transfs.items():
             if "global" in name:
-                self.write_trnsf(f"{self._out}/trnsf_global/{name}.trnsf")
+                self.write_trnsf(trnsf, f"{self._out}/trnsf_global/{name}.trnsf")
             elif "relative" in name:
-                self.write_trnsf(f"{self._out}/trnsf/{name}.trnsf")
+                self.write_trnsf(trnsf, f"{self._out}/trnsf/{name}.trnsf")
 
     def load(self, out):
         """
@@ -210,15 +210,19 @@ class Registration:
 
     def _load_transformation_relative(self, pos_float, pos_ref):
         if self._out is None:
-            if f"trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf" not in self._transfs:
-                raise ValueError(f"The transformation between {pos_float:04d} and {pos_ref:04d} the specified positions does not exist.")
-            else:
+            if f"trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf" in self._transfs:
                 return self._transfs[f"trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf"]
-        else:
-            if not os.path.exists(f"{self._out}/trnsf_relative/trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf"):
-                raise ValueError("The transformation between the specified positions does not exist.")
+            elif f"trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf.npy" in self._transfs:
+                return self._transfs[f"trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf"]
             else:
+                raise ValueError(f"The transformation between {pos_float:04d} and {pos_ref:04d} the specified positions does not exist.")
+        else:
+            if os.path.exists(f"{self._out}/trnsf_relative/trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf"):
                 return self.read_trnsf(f"{self._out}/trnsf_relative/trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf")
+            elif os.path.exists(f"{self._out}/trnsf_relative/trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf.npy"):
+                return self.read_trnsf(f"{self._out}/trnsf_relative/trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf")
+            else:
+                raise ValueError("The transformation between the specified positions does not exist.")
 
     def _load_transformation_global(self, pos_float, pos_ref):
         if self._out is None:
@@ -234,15 +238,15 @@ class Registration:
 
     def _trnsf_exists_relative(self, pos_float, pos_ref):
         if self._out is None:
-            return f"trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf" in self._transfs.keys()   
+            return f"trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf" in self._transfs.keys() or f"trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf.npy" in self._transfs.keys()   
         else:
-            return os.path.exists(f"{self._out}/trnsf_relative/trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf")
+            return os.path.exists(f"{self._out}/trnsf_relative/trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf") or os.path.exists(f"{self._out}/trnsf_relative/trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf.npy")
     
     def _trnsf_exists_global(self, pos_float, pos_ref):
         if self._out is None:
-            return f"trnsf_global_{pos_float:04d}_{pos_ref:04d}.trnsf" in self._transfs.keys()
+            return f"trnsf_global_{pos_float:04d}_{pos_ref:04d}.trnsf" in self._transfs.keys() or f"trnsf_global_{pos_float:04d}_{pos_ref:04d}.trnsf.npy" in self._transfs.keys()
         else:
-            return os.path.exists(f"{self._out}/trnsf_global/trnsf_global_{pos_float:04d}_{pos_ref:04d}.trnsf")
+            return os.path.exists(f"{self._out}/trnsf_global/trnsf_global_{pos_float:04d}_{pos_ref:04d}.trnsf") or os.path.exists(f"{self._out}/trnsf_global/trnsf_global_{pos_float:04d}_{pos_ref:04d}.trnsf.npy")
         
     def _padding_box_to_points(self, padding_reference, scale):
         return np.array(np.meshgrid(*[np.array(i) for i in padding_reference])).T.reshape(-1, self._n_spatial) * np.array(scale)
@@ -333,10 +337,19 @@ class Registration:
         return transformed_img.get() if GPU_AVAILABLE else transformed_img
 
     def write_trnsf(self, trnsf, out):
-        np.savetxt(out, trnsf, fmt='%.6f')
+        if trnsf.ndim == 2:
+            np.savetxt(out, trnsf, fmt='%.6f')
+        else:
+            np.save(out, trnsf)
 
     def read_trnsf(self, out):
-        return np.loadtxt(out)
+        if self._registration_type == "vectorfield":
+            try:
+                return np.load(out+".npy", allow_pickle=True)
+            except:
+                return np.zeros((1,2,3))
+        else:
+            return np.loadtxt(out)
 
     def image2array(self, img):
         return img
@@ -1860,15 +1873,18 @@ class RegistrationVT(Registration):
     # def compose_trnsf(self, trnsfs):
     #     return vt.compose_trsf(trnsfs)
     
-    def _vectorfield2array(self, trnsf, scale):
+    def _vectorfield2array(self, trnsf, scale, stride=5):
 
-        points = np.meshgrid(*[np.arange(0, i) for i in self._box])
+        points = np.meshgrid(*[np.arange(0, i, j) for i,j in zip(self._box, scale)])
         points = np.vstack([i.ravel() for i in points]).T
         points = points[:,::-1]
         points_vt = vt.vtPointList(points)
         points_vt_out = vt.apply_trsf_to_points(points_vt, trnsf)
         vectorfield = points_vt_out.copy_to_array()[:,:self._n_spatial] - points
         p,d = points.shape
+
+        points = np.floor(points/scale[::-1])
+        vectorfield /= scale[::-1]
 
         return np.concatenate([points[:,::-1].reshape(p,1,d), -vectorfield[:,::-1].reshape(p,1,d)], axis=1)
 
