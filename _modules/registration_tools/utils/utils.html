@@ -122,7 +122,11 @@
         <span class="k">return</span> <span class="n">function</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
     
     <span class="c1"># Create delayed arrays for each image, applying the custom function</span>
-    <span class="n">dataset_dask</span> <span class="o">=</span> <span class="n">da</span><span class="o">.</span><span class="n">from_zarr</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">dataset_dask</span> <span class="o">=</span> <span class="n">da</span><span class="o">.</span><span class="n">from_zarr</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
+    <span class="k">except</span><span class="p">:</span>
+        <span class="n">dataset_dask</span> <span class="o">=</span> <span class="n">da</span><span class="o">.</span><span class="n">from_array</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
+                                                      
     <span class="n">delayed_arrays</span> <span class="o">=</span> <span class="p">[</span>
         <span class="n">da</span><span class="o">.</span><span class="n">from_delayed</span><span class="p">(</span><span class="n">_apply_function</span><span class="p">(</span><span class="n">dataset_dask</span><span class="p">[</span><span class="n">_make_index</span><span class="p">(</span><span class="n">idx</span><span class="p">,</span> <span class="n">axis</span><span class="p">)],</span> <span class="n">function</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">),</span> <span class="n">shape</span><span class="o">=</span><span class="n">modified</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dataset</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span> 
         <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">t</span><span class="p">)</span>
@@ -135,7 +139,8 @@
         <span class="k">if</span> <span class="n">out</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">data</span> <span class="o">=</span> <span class="n">new_array</span><span class="o">.</span><span class="n">compute</span><span class="p">()</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">new_array</span><span class="o">.</span><span class="n">to_zarr</span><span class="p">(</span><span class="n">out</span><span class="p">,</span> <span class="n">chunks</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="o">*</span><span class="n">modified</span><span class="o">.</span><span class="n">shape</span><span class="p">))</span>
+            <span class="n">new_array</span><span class="o">.</span><span class="n">to_zarr</span><span class="p">(</span><span class="n">out</span><span class="p">)</span>
+            <span class="c1"># new_array.to_zarr(out, chunks=(1,*modified.shape))</span>
 
     <span class="c1"># Add attributes to the Zarr file (such as axis and scale)</span>
     <span class="k">if</span> <span class="n">out</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -146,10 +151,7 @@
     <span class="n">data</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s1">&#39;axis&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">new_axis</span>
     <span class="n">data</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s1">&#39;scale&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">new_scale</span>
     
-    <span class="k">if</span> <span class="n">out</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">data</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="k">return</span>
+    <span class="k">return</span> <span class="n">data</span>
     
 <div class="viewcode-block" id="apply_function_in_time">
 <a class="viewcode-back" href="../../../API_utils.html#registration_tools.utils.apply_function_in_time">[docs]</a>
