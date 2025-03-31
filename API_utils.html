@@ -36,56 +36,6 @@
   <section id="utils">
 <h1>Utils<a class="headerlink" href="#utils" title="Link to this heading">¶</a></h1>
 <p>Functions to manipulate datasets.</p>
-<dl class="py function" id="module-registration_tools.utils">
-<dt class="sig sig-object py" id="registration_tools.utils.apply_function_in_time">
-<span class="sig-prename descclassname"><span class="pre">registration_tools.utils.</span></span><span class="sig-name descname"><span class="pre">apply_function_in_time</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">function</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">axis</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">new_axis</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">new_scale</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/registration_tools/utils/utils.html#apply_function_in_time"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#registration_tools.utils.apply_function_in_time" title="Link to this definition">¶</a></dt>
-<dd><p>Apply a given function to a dataset along the time dimension.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>dataset</strong> (<em>array-like</em>) – The input dataset to which the function will be applied.</p></li>
-<li><p><strong>function</strong> (<em>callable</em>) – The function to apply to the dataset. It should accept an array-like object as its first argument.</p></li>
-<li><p><strong>axis</strong> (<em>str</em><em>, </em><em>optional</em>) – The axis labels of the dataset. Must contain the time dimension ‘T’.</p></li>
-<li><p><strong>scale</strong> (<em>list</em><em> or </em><em>tuple</em><em>, </em><em>optional</em>) – The scale of the dataset along each axis.</p></li>
-<li><p><strong>out</strong> (<em>out</em><em>, </em><em>optional</em>) – An optional file to store the results. If not provided, a new array will be created.</p></li>
-<li><p><strong>new_axis</strong> (<em>str</em><em>, </em><em>optional</em>) – The axis labels of the modified data. Must contain the time dimension ‘T’.</p></li>
-<li><p><strong>new_scale</strong> (<em>list</em><em> or </em><em>tuple</em><em>, </em><em>optional</em>) – The scale of the modified data along each axis.</p></li>
-<li><p><strong>**kwargs</strong> (<em>dict</em>) – Additional keyword arguments to pass to the function.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>The modified dataset with the function applied along the time dimension. If <cite>out</cite> is provided, the function returns None.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>array-like</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="registration_tools.utils.project">
-<span class="sig-prename descclassname"><span class="pre">registration_tools.utils.</span></span><span class="sig-name descname"><span class="pre">project</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataset</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">projection_axis</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">axis</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">scale</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">out</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">style</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'max'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/registration_tools/utils/utils.html#project"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#registration_tools.utils.project" title="Link to this definition">¶</a></dt>
-<dd><p>Project a dataset along a specified axis using either maximum or mean projection.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>dataset</strong> (<em>array-like</em>) – The input dataset to be projected.</p></li>
-<li><p><strong>projection_axis</strong> (<em>str</em>) – The axis along which to project the dataset. Must be one of ‘X’, ‘Y’, or ‘Z’.</p></li>
-<li><p><strong>axis</strong> (<em>str</em><em>, </em><em>optional</em>) – The axis labels of the dataset. If not provided, it will be inferred.</p></li>
-<li><p><strong>scale</strong> (<em>tuple</em><em>, </em><em>optional</em>) – The scale of each axis in the dataset. If not provided, it will be inferred.</p></li>
-<li><p><strong>out</strong> (<em>str</em><em>, </em><em>optional</em>) – The output file to store the result. If not provided, a new array will be created.</p></li>
-<li><p><strong>style</strong> (<em>str</em><em>, </em><em>optional</em>) – The projection style to use. Must be either ‘max’ for maximum projection or ‘mean’ for mean projection. Default is ‘max’.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>The projected dataset.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>array-like</p>
-</dd>
-</dl>
-</dd></dl>
-
 </section>
 
 
