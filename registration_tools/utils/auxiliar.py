@@ -83,13 +83,14 @@ def _get_spatial_dims(axis):
 
 def _create_data(shape, dtype, axis, scale, out=None):
     
+    chunks = tuple([j if i in "XYZ" else 1 for i, j in zip(axis, shape)])
     if out is None:
         store = zarr.storage.MemoryStore()
-        data = zarr.create_array(store=store, shape=shape, dtype=dtype)
+        data = zarr.create_array(store=store, shape=shape, dtype=dtype, chunks=chunks)
         data.attrs["axis"] = axis
         data.attrs["scale"] = scale
     elif isinstance(out, str) and out.endswith('.zarr'):
-        data = zarr.open(out, mode='w', shape=shape, dtype=dtype)
+        data = zarr.open(out, mode='w', shape=shape, dtype=dtype, chunks=chunks)
         data.attrs["axis"] = axis
         data.attrs["scale"] = scale
 
