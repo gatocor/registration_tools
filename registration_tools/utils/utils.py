@@ -5,11 +5,19 @@ import os
 from .auxiliar import _get_axis_scale, _make_index, _get_spatial_dims, _dict_axis_shape, _create_data, make_index
 import zarr
 from copy import deepcopy
+import dask
 import dask.array as da
 from dask.diagnostics import ResourceProfiler
-from dask.distributed import LocalCluster
+from dask.distributed import LocalCluster, Lock, Worker, get_worker
 from .progressbar import TqdmProgressBar
 import psutil
+import threading
+import multiprocessing
+import time
+import gc
+import logging
+from .gpuprofiler import GpuProfiler
+import tempfile
 
 try:
     import cupy as cp
@@ -20,7 +28,7 @@ try:
 except ImportError:
     GPU_AVAILABLE = False
 
-def apply_function_in_time_dask(dataset, function, axis=None, scale=None, out=None, new_axis=None, new_scale=None, cluster=LocalCluster, cluster_kwargs={}, infer_n_workers=True, verbose=True, **kwargs):
+def apply_function(dataset, function, axis=None, axis_slicing="T", scale=None, out=None, new_axis=None, new_scale=None, cluster=None, cluster_kwargs={}, n_workers=None, n_workers_processing=None, buffer=1.1, verbose=True, **kwargs):
     """
     Apply a given function to a dataset along the time dimension.
 
@@ -39,6 +47,204 @@ def apply_function_in_time_dask(dataset, function, axis=None, scale=None, out=No
         array-like : The modified dataset with the function applied along the time dimension. If `out` is provided, the function returns None.
     """
 
+    logging.getLogger("distributed").setLevel(logging.ERROR)
+
+    def load(ids, data, axis, axis_slicing):
+        # print(f"loading {i} {get_worker().name}")
+        # time.sleep(1)
+        d = {j:i for i,j in zip(ids, axis_slicing)}
+        index = make_index(axis, **d)
+        data = data[index]
+        return data
+    
+    def img_reshape(img, new_axis, axis_slicing):
+        # print(f"Reshaping {t} {get_worker().name}")
+        # time.sleep(1)
+        d = {i:np.newaxis for i in axis_slicing}
+        index = make_index(new_axis, **d)
+        img = img[index]
+        return img
+
+    def save(ids, data, axis, axis_slicing, zarr_array):
+        # print(f"Saving {t} {get_worker().name}")
+        # time.sleep(10)
+        d = {j:slice(i,i+1,None) for i,j in zip(ids, axis_slicing)}
+        index = make_index(axis, **d)
+        zarr_array[index] = data
+        return
+
+    axis, scale = _get_axis_scale(dataset, axis, scale)
+    s = [j for i,j in zip(axis,dataset.shape) if i in axis_slicing]
+    if new_axis is None:
+        new_axis = axis
+    if scale is None:
+        new_scale = scale
+
+    # Create delayed arrays for each image, applying the custom function
+    try:
+        dataset_dask = da.from_zarr(dataset)
+    except:
+        dataset_dask = da.from_array(dataset)
+    dataset_dask = dataset_dask.rechunk([1 if j in axis_slicing else i for i,j in zip(dataset.shape, axis)])
+
+    if cluster is None:
+        cluster_ = LocalCluster(n_workers=1, threads_per_worker=1)
+    else:
+        cluster_ = cluster
+
+    client = cluster_.get_client()
+
+    try:
+        id = (0,)*len(axis_slicing)
+        with ResourceProfiler(dt=0.01) as rprof, GpuProfiler(dt=0.01) as gprof:
+            image = client.submit(load, id, dataset_dask, axis, axis_slicing)#, workers=workers_load)
+            modified = client.submit(function, image, id)
+            modified = client.submit(img_reshape, modified, new_axis, axis_slicing)
+            modified = modified.result()
+    except Exception as e:
+        raise e
+    finally:
+        client.close()
+        cluster_.close()
+
+    available_memory = psutil.virtual_memory().available / 1e9  # Convert bytes to GB
+    if verbose:
+        print(f"Available memory: {available_memory} GB")
+    
+    if cluster is None:
+        n_max_workers = psutil.cpu_count(logical=True)
+    else:
+        n_max_workers = len(cluster_.workers)
+    if verbose:
+        print(f"Max number of workers: {n_max_workers}")
+
+    if n_workers is None:
+        peak_memory_gb = max([entry[1]/1e3 for entry in rprof.results])*buffer
+        if verbose:
+            print(f"Peak memory: {peak_memory_gb/buffer} GB {peak_memory_gb} GB (buffered) {peak_memory_gb / available_memory} % of available memory (buffered)")
+        n_workers_ = max(1,int(np.floor(available_memory / peak_memory_gb)))  # Add some buffer
+    else:
+        n_workers_ = n_workers
+    n_workers_ = min(n_workers_, n_max_workers)
+    if verbose:
+        print(f"Number of workers: {n_workers_}")
+
+    if n_workers_processing is None and GPU_AVAILABLE:
+        total_gpu_memory_gb = gprof.total_memory_mb / 1e3
+        peak_gpu_memory_gb = gprof.peak_memory_mb / 1e3 * buffer
+        if verbose:
+            print(f"Peak GPU memory: {peak_gpu_memory_gb/buffer} GB {peak_gpu_memory_gb} GB (buffered) {peak_gpu_memory_gb / total_gpu_memory_gb} % of total GPU memory")
+        n_workers_processing_ = max(1,int(np.floor(total_gpu_memory_gb / peak_gpu_memory_gb)))  # Add some buffer
+    elif n_workers_processing is None:
+        n_workers_processing_ = n_workers_
+    else:
+        n_workers_processing_ = n_workers_processing
+    n_workers_processing_ = min(n_workers_processing_, n_workers_)
+    if verbose:
+        print(f"Number of workers processing: {n_workers_processing_}")
+
+    if len(axis) != len(modified.shape) and (new_axis is None):
+        raise ValueError("The shape of the modified data is different from the original data. Please specify the new axis.")
+    elif new_axis is None:
+        new_axis = axis
+    elif len(new_axis) != len(modified.shape):
+        raise ValueError(f"The new_axis must have the same length as the modified data shape. Provided axis: {new_axis}, new_axis: {modified.shape} of length {len(modified.shape)}.")
+    
+    if new_scale is None:
+        spatial_dims = _get_spatial_dims(axis)
+        original_spatial_shape = [dataset.shape[axis.index(dim)] for dim in spatial_dims]
+        spatial_dims = _get_spatial_dims(new_axis)
+        new_axis_ = [i if i in "XYZ" else "" for i in new_axis]
+        modified_spatial_shape = [modified.shape[new_axis_.index(dim)] for dim in spatial_dims]
+
+        if original_spatial_shape == modified_spatial_shape:
+            new_scale = scale
+        else:
+            raise ValueError("The spatial dimensions of the modified data do not match the original data. Please specify the new scale.")
+
+    #Update shape
+    new_shape = tuple([modified.shape[new_axis.index(i)] if i not in axis_slicing else dataset.shape[axis.index(i)] for i in new_axis])
+
+    if out is None:
+        tmpdir = tempfile.mkdtemp()
+        store = os.path.join(tmpdir, "temp.zarr")
+        data = zarr.create_array(store, shape=new_shape, dtype=modified.dtype, chunks=modified.shape)
+    else:
+        data = zarr.create_array(out, shape=new_shape, dtype=modified.dtype, chunks=modified.shape)
+        # data = zarr.open_array(out, mode="r+")
+
+    if cluster is None:
+        cluster_ = LocalCluster(n_workers=n_workers_, threads_per_worker=1)
+
+    client = cluster_.get_client()
+
+    # workers_load = [cluster_.workers[i].worker_address for i in range(min(n_process_images, n_workers), n_workers)]
+    if isinstance(n_workers_processing_, int):
+        workers_process = [cluster_.workers[i].worker_address for i in range(n_workers_processing_)]
+    else:
+        workers_process = [cluster_.workers[i].worker_address for i in n_workers_processing_]
+        
+    try:
+        futures = []
+        l = [i.flatten() for i in np.meshgrid(*[range(j) for j in s])]
+        pbar = tqdm(total=len(l[0]), desc="Processing time frames", position=0, leave=True)
+        for i in zip(*l):
+            while len([i for i in futures if i.status == "pending"]) >= n_workers_:
+                # print(len([i for i in futures if i.status == "pending"]))
+                time.sleep(0.1)
+            # print(len([i for i in futures if i.status == "pending"]))
+            image = client.submit(load, i, dataset_dask, axis, axis_slicing)#, workers=workers_load)
+            processed = client.submit(function, image, i, workers=workers_process)
+            processed = client.submit(img_reshape, processed, new_axis, axis_slicing)
+            processed_zarr = client.submit(save, i, processed, new_axis, axis_slicing, data)
+            futures.append(processed_zarr)
+
+            if len([i for i in futures if i.status == "finished"]) > pbar.n:
+                pbar.update(len([i for i in futures if i.status == "finished"]) - pbar.n)
+
+        while len([i for i in futures if i.status == "pending"]) > 0:
+            time.sleep(0.1)
+            if len([i for i in futures if i.status == "finished"]) > pbar.n:
+                pbar.update(len([i for i in futures if i.status == "finished"]) - pbar.n)
+
+        client.gather(futures)
+
+    except Exception as e:
+        raise e
+    finally:
+        client.close()
+        cluster_.close()
+
+    # Add attributes to the Zarr file (such as axis and scale)
+    if out is not None:
+        data = zarr.open_array(out, mode="r+")
+    
+    data.attrs['axis'] = new_axis
+    data.attrs['scale'] = new_scale
+    
+    return data
+
+def apply_function_in_time_dask(dataset, function, axis=None, scale=None, out=None, new_axis=None, new_scale=None, cluster=None, cluster_kwargs={}, n_workers=None, n_workers_processing=None, buffer=1.1, verbose=True, **kwargs):
+    """
+    Apply a given function to a dataset along the time dimension.
+
+    Parameters:
+
+        dataset (array-like) : The input dataset to which the function will be applied.
+        function (callable) : The function to apply to the dataset. It should accept an array-like object as its first argument.
+        axis (str, optional) : The axis labels of the dataset. Must contain the time dimension 'T'.
+        scale (list or tuple, optional) : The scale of the dataset along each axis.
+        out (out, optional) : An optional file to store the results. If not provided, a new array will be created.
+        new_axis (str, optional) : The axis labels of the modified data. Must contain the time dimension 'T'.
+        new_scale (list or tuple, optional) : The scale of the modified data along each axis.
+        **kwargs (dict) : Additional keyword arguments to pass to the function.
+
+    Returns:
+        array-like : The modified dataset with the function applied along the time dimension. If `out` is provided, the function returns None.
+    """
+
+    logging.getLogger("distributed").setLevel(logging.ERROR)
+
     axis, scale = _get_axis_scale(dataset, axis, scale)
 
     if "T" not in axis:
@@ -46,6 +252,8 @@ def apply_function_in_time_dask(dataset, function, axis=None, scale=None, out=No
     if new_axis is not None:
         if "T" not in axis:
             raise ValueError("The new_axis must contain the time dimension 'T'.")
+    else:
+        new_axis = axis
 
     t = _dict_axis_shape(axis, dataset.shape)["T"]
 
@@ -61,33 +269,64 @@ def apply_function_in_time_dask(dataset, function, axis=None, scale=None, out=No
     new_axis_pos = [i for i,j in enumerate(new_axis) if j not in axis]
     slices = [j if i != "T" else 1 for i,j in zip(new_axis, new_shape)]
 
-    available_memory = psutil.virtual_memory().available / 1e9  # Convert bytes to GB
-    cluster_kwargs_ = deepcopy(cluster_kwargs)
-    cluster_kwargs_['n_workers'] = 1
-    cluster_ = cluster(**cluster_kwargs_)
+    if cluster is None:
+        cluster_ = LocalCluster(n_workers=1, threads_per_worker=1)
+    else:
+        cluster_ = cluster
+
     client = cluster_.get_client()
 
     index = make_index(axis, T=slice(None,1,None))
-    with ResourceProfiler(dt=0.01) as rprof:
+    with ResourceProfiler(dt=0.01) as rprof, GpuProfiler(dt=0.01) as gprof:
         data = dataset_dask[index]
         modified = data.map_blocks(
                         function,        
                         dtype=dataset_dask.dtype,   
                         chunks=slices,
                         drop_axis=drop_axis_pos,
-                        new_axis=new_axis_pos
+                        new_axis=new_axis_pos,
+                        **kwargs
                     )
-        modified = modified.compute()
+    modified = modified.compute()
 
+    client.gater(modified)
     client.close()
 
-    peak_memory_gb = max([entry[1]/1e3 for entry in rprof.results])
-    n_workers = max(1,int(np.floor(available_memory / (np.ceil(peak_memory_gb)))))  # Add some buffer
-
-    if verbose and infer_n_workers:
+    available_memory = psutil.virtual_memory().available / 1e9  # Convert bytes to GB
+    if verbose:
         print(f"Available memory: {available_memory} GB")
-        print(f"Peak memory: {peak_memory_gb} GB")
-        print(f"Maximum number of workers: {n_workers}")
+    
+    if cluster is None:
+        n_max_workers = psutil.cpu_count(logical=True)
+    else:
+        n_max_workers = len(cluster_.workers)
+    if verbose:
+        print(f"Max number of workers: {n_max_workers}")
+
+    if n_workers is None:
+        peak_memory_gb = max([entry[1]/1e3 for entry in rprof.results])*buffer
+        if verbose:
+            print(f"Peak memory: {peak_memory_gb/buffer} GB {peak_memory_gb} GB (buffered) {peak_memory_gb / available_memory} % of available memory (buffered)")
+        n_workers_ = max(1,int(np.floor(available_memory / peak_memory_gb)))  # Add some buffer
+    else:
+        n_workers_ = n_workers
+    n_workers_ = min(n_workers_, n_max_workers)
+    if verbose:
+        print(f"Number of workers: {n_workers_}")
+
+    if n_workers_processing is None and GPU_AVAILABLE:
+        total_gpu_memory_gb = gprof.total_memory_mb / 1e3
+        peak_gpu_memory_gb = gprof.peak_memory_mb / 1e3 * buffer
+        if verbose:
+            print(f"Peak GPU memory: {peak_gpu_memory_gb/buffer} GB {peak_gpu_memory_gb} GB (buffered) {peak_gpu_memory_gb / total_gpu_memory_gb} % of total GPU memory")
+        n_workers_processing_ = max(1,int(np.floor(total_gpu_memory_gb / peak_gpu_memory_gb)))  # Add some buffer
+    elif n_workers_processing is None:
+        n_workers_processing_ = n_workers_
+    else:
+        n_workers_processing_ = n_workers_processing
+    n_workers_processing_ = min(n_workers_processing_, n_workers_)
+    if verbose:
+        print(f"Number of workers processing: {n_workers_processing_}")
 
     if len(axis) != len(modified.shape) and (new_axis is None):
         raise ValueError("The shape of the modified data is different from the original data. Please specify the new axis.")
@@ -110,71 +349,82 @@ def apply_function_in_time_dask(dataset, function, axis=None, scale=None, out=No
 
     #Update shape
     new_shape = []
-    d = _dict_axis_shape(axis, dataset.shape)
-    d = _dict_axis_shape(new_axis.replace("T",""), modified.shape)
+    d = _dict_axis_shape(axis, modified.shape)
+    # d = _dict_axis_shape(new_axis.replace("T",""), modified.shape)
     for i,a in enumerate(new_axis):
         if a in d.keys():
             new_shape.append(d[a])
         else:
             new_shape.append(t)
-    
-    if GPU_AVAILABLE:
-        lock = Lock()
-        def _apply_function(image, function, lock, **kwargs):
-            """
-            Apply a custom function to an image.
-            """
-            with lock:
-                img = function(image, **kwargs)
-            # img = function(image, **kwargs)
-            return img
+        
+    if out is None:
+        store = zarr.storage.MemoryStore()
+        data = zarr.create_array(store, shape=new_shape, dtype=modified.dtype, chunks=tuple(slices))
     else:
-        lock = None
-        def _apply_function(image, function, lock=None, **kwargs):
-            """
-            Apply a custom function to an image.
-            """
-            return function(image, **kwargs)
+        data = zarr.create_array(out, shape=new_shape, dtype=modified.dtype, chunks=tuple(slices))
 
-    new_array = dataset_dask.map_blocks(
-        _apply_function, 
-        function=function,
-        lock=lock, 
-        dtype=dataset_dask.dtype,
-        chunks=slices,
-        drop_axis=drop_axis_pos,
-        new_axis=new_axis_pos
-    )
-    
-    if infer_n_workers and "n_workers" not in cluster_kwargs:
-        cluster_kwargs = deepcopy(cluster_kwargs)
-        cluster_kwargs['n_workers'] = n_workers
+    def load(i,data,axis):
+        # print(f"loading {i} {get_worker().name}")
+        # time.sleep(1)
+        index = make_index(axis, T=slice(i,i+1,None))
+        data = data[index]
+        # print("Loaded ",i)
+        return data
 
-    print(cluster_kwargs)
-    cluster_ = cluster(**cluster_kwargs)
+    def save(t, data, new_axis, zarr_array):
+        # print(f"Saving {t} {get_worker().name}")
+        # time.sleep(10)
+        index = make_index(new_axis, T=slice(t,t+1,None))
+        zarr_array[index] = data
+        return
+
+    if cluster is None:
+        cluster_ = LocalCluster(n_workers=n_workers_, threads_per_worker=1)
+
     client = cluster_.get_client()
 
-    if out is None:
-        future = client.compute(new_array)
-        pb = TqdmProgressBar([future], total=t)
+    # workers_load = [cluster_.workers[i].worker_address for i in range(min(n_process_images, n_workers), n_workers)]
+    if isinstance(n_workers_processing_, int):
+        workers_process = [cluster_.workers[i].worker_address for i in range(n_workers_processing_)]
     else:
-        arr = new_array.to_zarr(out, compute=False)
-        future = client.compute(arr)
-        pb = TqdmProgressBar([future], total=t)    
+        workers_process = [cluster_.workers[i].worker_address for i in n_workers_processing_]
+        
+    try:
+        futures = []
+        pbar = tqdm(total=t, desc="Processing time frames", position=0, leave=True)
+        for i in range(t):
+            while len([i for i in futures if i.status == "pending"]) >= n_workers_:
+                # print(len([i for i in futures if i.status == "pending"]))
+                time.sleep(0.1)
+            # print(len([i for i in futures if i.status == "pending"]))
+            image = client.submit(load, i, dataset_dask, axis)#, workers=workers_load)
+            processed = client.submit(function, image, i, workers=workers_process)
+            processed_zarr = client.submit(save, i, processed, new_axis, data)
+            futures.append(processed_zarr)
 
-    client.close()
+            if len([i for i in futures if i.status == "finished"]) > pbar.n:
+                pbar.update(len([i for i in futures if i.status == "finished"]) - pbar.n)
+
+        while len([i for i in futures if i.status == "pending"]) > 0:
+            time.sleep(0.1)
+            if len([i for i in futures if i.status == "finished"]) > pbar.n:
+                pbar.update(len([i for i in futures if i.status == "finished"]) - pbar.n)
+
+    except Exception as e:
+        raise e
+    finally:
+        client.gather(futures)
+        client.close()
 
     # Add attributes to the Zarr file (such as axis and scale)
-    if out is None:
-        data = zarr.array(data)
-    else:
+    if out is not None:
         data = zarr.open_array(out, mode="r+")
     
     data.attrs['axis'] = new_axis
     data.attrs['scale'] = new_scale
     
     return data
-    
+
 def apply_function_in_time(dataset, function, axis=None, scale=None, out=None, new_axis=None, new_scale=None, **kwargs):
     """
     Apply a given function to a dataset along the time dimension.
@@ -245,7 +495,7 @@ def apply_function_in_time(dataset, function, axis=None, scale=None, out=None, n
 
     return data
 
-def downsample(dataset, factor, axis=None, scale=None, out=None, style="zoom", order=1):
+def downsample(dataset, factor, axis=None, scale=None, out=None, style="zoom", order=1, verbose=False, **kwargs):
     """
     Downsample a dataset by a given factor along each spatial dimension.
 
@@ -268,19 +518,26 @@ def downsample(dataset, factor, axis=None, scale=None, out=None, style="zoom", o
 
     new_scale = tuple([s/f for s,f in zip(scale, factor)])
 
-    if "C" in axis:
-        factor = tuple([1] + list(factor))
+    zoom_factor = [factor["XYZ".index(f)] for i, f in enumerate(axis) if f in "XYZ"]
 
-    return apply_function_in_time_dask(
+    axis_slicing = [i for i in axis if i not in "XYZ"]
+
+    def zoom(data, zoom=factor, order=1):
+        return ndix.zoom(data, zoom_factor, order=order)
+
+    return apply_function(
                     dataset, 
-                    ndix.zoom, 
+                    zoom, 
                     axis=axis,
+                    axis_slicing=axis_slicing,
                     scale=scale, 
                     out=out, 
                     new_axis=axis, 
                     new_scale=new_scale, 
-                    zoom=factor, 
-                    order=order)
+                    order=order,
+                    verbose=verbose,
+                    **kwargs
+                    )
 
 def project(dataset, projection_axis, axis=None, scale=None, out=None, style="max"):
     """

@@ -11,7 +11,7 @@ import dask.array as da
 from skimage.io import imread, imsave
 from ..utils.auxiliar import _make_index, make_index
 
-def add_image(viewer, dataset, split_channel=None, scale=None, **kwargs):
+def add_image(viewer, dataset, split_channel=None, scale=None, padding=None, **kwargs):
     """
     Plots the images in the dataset in the viewer.
 
@@ -26,14 +26,21 @@ def add_image(viewer, dataset, split_channel=None, scale=None, **kwargs):
     """
 
     if isinstance(dataset, zarr.Array):
-        axis = dataset.attrs["axis"]
-        scale = dataset.attrs["scale"]
+        if "axis" in dataset.attrs:
+            axis = dataset.attrs["axis"]
+        if "scale" in dataset.attrs:
+            scale = dataset.attrs["scale"]    
+        if "padding" in dataset.attrs:
+            affine = dataset.attrs["padding"]
+        else:
+            affine = np.eye(dataset.ndim+1)
 
     if split_channel is not None:
-        for i in range(2):
-            viewer.add_image(da.from_zarr(dataset)[i,:,:,:,:])
+        for i in range(dataset.shape[axis.index("C")]):
+            slicing = make_index(axis, C=i)
+            viewer.add_image(da.from_zarr(dataset)[slicing], scale=scale, affine=np.array(affine), **kwargs)
     else:
-        viewer.add_image(dataset, scale=scale, **kwargs)
+        viewer.add_image(dataset, scale=scale, affine=np.array(affine), **kwargs)
 
 def add_image_difference(viewer, dataset, dt=1, cmap1="red", cmap2="green", opacity1=1, opacity2=0.5, scale=None, **kwargs):
 

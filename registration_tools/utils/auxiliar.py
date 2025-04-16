@@ -46,21 +46,60 @@ def _get_axis_scale(mask, axis, scale):
             scale = mask.attrs["scale"]
         else:
             raise ValueError("The scale cannot be inferred from dataset data and must be specified.")
+
+    if len(axis) != len(mask.shape):
+        raise ValueError("The axis must have the same length as the dataset shape.")
         
+    if "T" not in axis:
+        raise ValueError("The axis must contain the time dimension 'T'.")
+
     return axis, scale
 
 def _shape_padded(shape, axis, padding):
     
-    new_shape=[]
-    pos = 0
-    for i,(j,k) in enumerate(zip(axis,shape)):
-        if j in "XYZ":
-            new_shape.append(padding[pos][1]-padding[pos][0])
-            pos += 1
-        else:
-            new_shape.append(k)
+    if padding is not None:
+        if np.array(padding).shape != (2, len([i for i in axis if i in "XYZ"])):
+            raise ValueError("The padding must have the same length as the number of spatial dimensions.")
 
-    return new_shape
+        new_shape=[]
+        pos = 0
+        p = np.array(padding).sum(axis=1)
+        for i,(j,k) in enumerate(zip(axis,shape)):
+            if j in "XYZ":
+                new_shape.append(k+p[pos])
+                pos += 1
+            else:
+                new_shape.append(k)
+
+        return new_shape
+    else:
+        return shape
+
+def _trnsf_padded(padding, dims):
+    if padding is not None:
+        padding_trnsf = np.eye(dims+1, dims+1)
+        padding_trnsf[:-1, -1] = np.array(padding)[:,0]
+
+        return padding_trnsf
+    else:
+        return np.eye(dims+1, dims+1)
+    
+def _image_padded(img, padding):
+    if padding is not None:
+        if np.array(padding).shape != (2, img.ndim):
+            raise ValueError("The padding must have the same length as the number of spatial dimensions.")
+        
+        p = np.array(padding).sum(axis=1)
+        if np.all(p == 0):
+            img_padded = img
+        else:
+            img_shape = np.array(img.shape) + p
+            img_padded = np.zeros(img_shape, dtype=img.dtype)
+            img_padded[tuple(slice(i[0], j+i[0]) for i,j in zip(padding, img.shape))] = img
+
+        return img_padded
+    else:
+        return img
 
 def _shape_downsampled(shape, axis, downsample):
 

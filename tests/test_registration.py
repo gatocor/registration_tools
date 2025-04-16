@@ -22,7 +22,7 @@ class TestExampleData(unittest.TestCase):
             (2, 1, np.uint8, (1, 1, 1), None, None, 'backward', 10),
             (2, 1, np.uint8, (1, 1, 1), None, None, 'forward', 1),
             (2, 1, np.uint8, (1, 1, 1), None, None, 'forward', 2),
-            (2, 1, np.uint8, (1, 1, 1), None, None, 'forward', 10),
+            (2, 1, np.uint8, (1, 1, 1), None, None, 'forward', 10), 
             (2, 1, np.uint8, (1, 1, 1), None, 'trnsf', 'backward', 1),
             (2, 1, np.uint8, (1, 1, 1), 'dataset_registered.zarr', None, 'backward', 1),
             (2, 1, np.uint8, (1, 1, 1), 'dataset_registered.zarr', 'trnsf', 'backward', 1),
@@ -55,7 +55,6 @@ class TestExampleData(unittest.TestCase):
             (3, 2, np.uint8, (1, 1, 1), 'dataset_registered.zarr', None, 'backward', 1),
             (3, 2, np.uint8, (1, 1, 1), 'dataset_registered.zarr', 'trnsf', 'backward', 1),
         ]:
-            
             with self.subTest(dim=dim, channels=channels, dtype=dtype, stride=stride, out_trnsf=out_trnsf, out_dataset=out_dataset, direction=direction, stepping=stepping):
                 # Fit_apply
                 shutil.rmtree("dataset_registered.zarr", ignore_errors=True)
@@ -186,7 +185,7 @@ class TestExampleData(unittest.TestCase):
 
                 # Apply to downsampled dataset
                 shutil.rmtree("dataset_registered.zarr", ignore_errors=True)
-                dataset_downsampled = rt_utils.downsample(dataset, [0.5 for _ in range(dim)])
+                dataset_downsampled = rt_utils.downsample(dataset, [0.5 for _ in range(dim)], n_workers=1, n_workers_processing=1)
                 dataset_registered = model.apply(
                     dataset_downsampled,
                     out=out_dataset
@@ -216,23 +215,80 @@ class TestExampleData(unittest.TestCase):
                 # Check argmax position for all times
                 for t in iter:
                     if channels == 1:
-                        shape = dataset_downsampled[1].shape
-                        scale = np.array(dataset_downsampled.attrs["scale"])[:dim]
-                        # print(t, scale, shape)
-                        # print(((np.array(np.unravel_index(dataset[pos].argmax(), shape)), np.array(np.unravel_index(dataset[t].argmax(), shape)))*scale))
-                        # print(((np.array(np.unravel_index(dataset_registered[pos].argmax(), shape)), np.array(np.unravel_index(dataset_registered[t].argmax(), shape)))*scale))
+                        shape = dataset[0].shape
+                        shape_downsampled = dataset_downsampled[0].shape
+                        scale = np.array(dataset.attrs["scale"])[:dim]
+                        scale_downsample = np.array(dataset_downsampled.attrs["scale"])[:dim]
+                        # print(t, scale, pos, shape, np.unravel_index(dataset_downsampled[pos].argmax(), shape), shape_downsampled, np.unravel_index(dataset_downsampled[pos].argmax(), shape_downsampled))
+                        # print(((np.array(np.unravel_index(dataset_downsampled[pos].argmax(), shape_downsampled)), np.array(np.unravel_index(dataset_downsampled[t].argmax(), shape_downsampled)))*scale))
+                        # print(((np.array(np.unravel_index(dataset_registered[pos].argmax(), shape_downsampled)), np.array(np.unravel_index(dataset_registered[t].argmax(), shape_downsampled)))*scale))
                         # print()
-                        self.assertTrue(np.linalg.norm((np.array(np.unravel_index(dataset_downsampled[pos].argmax(), shape)) - np.array(np.unravel_index(dataset_downsampled[t].argmax(), shape)))*scale) >
-                                        np.linalg.norm((np.array(np.unravel_index(dataset_downsampled[pos].argmax(), shape)) - np.array(np.unravel_index(dataset_registered[t].argmax(), shape)))*scale),
+                        self.assertTrue(np.linalg.norm((np.array(np.unravel_index(dataset[pos].argmax(), shape)) - np.array(np.unravel_index(dataset[t].argmax(), shape)))*scale) >
+                                        np.linalg.norm((np.array(np.unravel_index(dataset_downsampled[pos].argmax(), shape_downsampled)) - np.array(np.unravel_index(dataset_registered[t].argmax(), shape_downsampled)))*scale_downsample),
                                         f"Expected center of mass to be close to the same position.")
                     else:
                         shape = dataset_downsampled[t,0].shape
+                        shape_downsampled = dataset_downsampled[t,0].shape
                         scale = np.array(dataset_downsampled.attrs["scale"])[:dim]
-                        self.assertTrue(np.linalg.norm((np.array(np.unravel_index(dataset_downsampled[pos,0].argmax(), shape)) - np.array(np.unravel_index(dataset_downsampled[t,0].argmax(), shape)))*scale) >
-                                        np.linalg.norm((np.array(np.unravel_index(dataset_downsampled[pos,0].argmax(), shape)) - np.array(np.unravel_index(dataset_registered[t,0].argmax(), shape)))*scale),
+                        scale_downsample = np.array(dataset_downsampled.attrs["scale"])[:dim]
+                        self.assertTrue(np.linalg.norm((np.array(np.unravel_index(dataset[pos,0].argmax(), shape)) - np.array(np.unravel_index(dataset[t,0].argmax(), shape)))*scale) >
+                                        np.linalg.norm((np.array(np.unravel_index(dataset_downsampled[pos,0].argmax(), shape_downsampled)) - np.array(np.unravel_index(dataset_registered[t,0].argmax(), shape_downsampled)))*scale_downsample),
                                         f"Expected center of mass to be close to the same position.")
-                        self.assertTrue(np.linalg.norm((np.array(np.unravel_index(dataset_downsampled[pos,0].argmax(), shape)) - np.array(np.unravel_index(dataset_downsampled[t,1].argmax(), shape)))*scale) >
-                                        np.linalg.norm((np.array(np.unravel_index(dataset_downsampled[pos,0].argmax(), shape)) - np.array(np.unravel_index(dataset_registered[t,1].argmax(), shape)))*scale),
+                        self.assertTrue(np.linalg.norm((np.array(np.unravel_index(dataset[pos,0].argmax(), shape)) - np.array(np.unravel_index(dataset[t,1].argmax(), shape)))*scale) >
+                                        np.linalg.norm((np.array(np.unravel_index(dataset_downsampled[pos,0].argmax(), shape_downsampled)) - np.array(np.unravel_index(dataset_registered[t,1].argmax(), shape_downsampled)))*scale_downsample),
+                                        f"Expected center of mass to be close to the same position.")
+
+                # Apply to downsampled dataset
+                shutil.rmtree("dataset_registered.zarr", ignore_errors=True)
+                dataset_registered = model.apply(
+                    dataset,
+                    out=out_dataset,
+                    padding=[[50,50],[50,50],[50,50]][:dim]
+                )
+                if direction == "backward":
+                    pos = 0
+                    iter = range(1,dataset.shape[0])
+                else:
+                    pos = 9
+                    iter = range(dataset.shape[0]-2,-1,-1)
+
+                # viewer = napari.Viewer()
+                # viewer.add_image(dataset[pos], scale=dataset.attrs["scale"], colormap="red", name=f"dataset t={pos}")
+                # rt_vis.add_image(viewer, dataset, opacity=0.5, name="dataset")
+                # rt_vis.add_image(viewer, dataset_registered, opacity=0.5, colormap="green", name="dataset_registered")
+                # viewer.dims.ndisplay = dim
+                # viewer.dims.current_step = (0,0,0)
+                # napari.run()
+
+                # Check dtype
+                self.assertEqual(dataset_registered.dtype, np.dtype(dtype), 
+                                f"Expected dtype {dtype}, but got {dataset_registered.dtype}")
+                # Check dimensions
+                new_shape = np.array(dataset.shape); new_shape[-dim:] += 100; new_shape = tuple(new_shape)
+                self.assertEqual(new_shape, dataset_registered.shape, 
+                                f"Expected {new_shape} dimensions (including channels), but got {dataset_registered.shape}")
+                # Check argmax position for all times
+                for t in iter:
+                    if channels == 1:
+                        shape = dataset[0].shape
+                        shape_padding = dataset_registered[0].shape
+                        scale = np.array(dataset.attrs["scale"])[:dim]
+                        # print(t, scale, pos, shape, np.unravel_index(dataset[pos].argmax(), shape), shape_padding, np.unravel_index(dataset_registered[pos].argmax(), shape_padding))
+                        # print((np.array(np.unravel_index(dataset[pos].argmax(), shape))*scale, np.array(np.unravel_index(dataset[t].argmax(), shape))*scale))
+                        # print((np.array(np.unravel_index(dataset_registered[pos].argmax(), shape_padding))*scale, np.array(np.unravel_index(dataset_registered[t].argmax(), shape_padding))*scale))
+                        # print()
+                        self.assertTrue(np.linalg.norm((np.array(np.unravel_index(dataset[pos].argmax(), shape)) - np.array(np.unravel_index(dataset[t].argmax(), shape)))*scale) >
+                                        np.linalg.norm((np.array(np.unravel_index(dataset_registered[pos].argmax(), shape_padding)) - np.array(np.unravel_index(dataset_registered[t].argmax(), shape_padding)))*scale),
+                                        f"Expected center of mass to be close to the same position.")
+                    else:
+                        shape = dataset_downsampled[t,0].shape
+                        shape_padding = dataset_downsampled[t,0].shape
+                        scale = np.array(dataset_downsampled.attrs["scale"])[:dim]
+                        self.assertTrue(np.linalg.norm((np.array(np.unravel_index(dataset[pos,0].argmax(), shape)) - np.array(np.unravel_index(dataset[t,0].argmax(), shape)))*scale) >
+                                        np.linalg.norm((np.array(np.unravel_index(dataset_registered[pos,0].argmax(), shape_padding)) - np.array(np.unravel_index(dataset_registered[t,0].argmax(), shape_padding)))*scale),
+                                        f"Expected center of mass to be close to the same position.")
+                        self.assertTrue(np.linalg.norm((np.array(np.unravel_index(dataset[pos,0].argmax(), shape)) - np.array(np.unravel_index(dataset[t,1].argmax(), shape)))*scale) >
+                                        np.linalg.norm((np.array(np.unravel_index(dataset_registered[pos,0].argmax(), shape_padding)) - np.array(np.unravel_index(dataset_registered[t,1].argmax(), shape_padding)))*scale),
                                         f"Expected center of mass to be close to the same position.")
 
 if __name__ == "__main__":
