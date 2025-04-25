@@ -27,7 +27,6 @@ def make_index(axis, downsample=(1,1,1), **kwargs):
             index[i] = kwargs[ax]
 
     return tuple(index)
-    
 
 def _get_axis_scale(mask, axis, scale):
 
@@ -58,7 +57,7 @@ def _get_axis_scale(mask, axis, scale):
 def _shape_padded(shape, axis, padding):
     
     if padding is not None:
-        if np.array(padding).shape != (2, len([i for i in axis if i in "XYZ"])):
+        if np.array(padding).shape != (len([i for i in axis if i in "XYZ"]), 2):
             raise ValueError("The padding must have the same length as the number of spatial dimensions.")
 
         new_shape=[]
@@ -86,7 +85,7 @@ def _trnsf_padded(padding, dims):
     
 def _image_padded(img, padding):
     if padding is not None:
-        if np.array(padding).shape != (2, img.ndim):
+        if np.array(padding).shape != (img.ndim, 2):
             raise ValueError("The padding must have the same length as the number of spatial dimensions.")
         
         p = np.array(padding).sum(axis=1)

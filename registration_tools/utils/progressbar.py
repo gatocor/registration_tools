@@ -4,6 +4,25 @@ from contextlib import suppress
 import time
 # dask.config.set(scheduler='synchronous')
 import sys
+from dask.callbacks import Callback
+from dask.distributed import Client, Lock, LocalCluster
+from tqdm import tqdm
+
+class ProgressBar(Callback):
+    def __init__(self, total_tasks):
+        self.total_tasks = total_tasks  # Pass the total number of blocks as a parameter
+
+    def _start_state(self, dsk, state):
+        # Initialize tqdm with the number of blocks (tasks) to be processed
+        self._tqdm = tqdm(total=self.total_tasks, desc="Dask Progress")
+
+    def _posttask(self, key, result, dsk, state, worker_id):
+        # Update the progress bar after each task completes
+        self._tqdm.update(1)
+
+    def _finish(self, dsk, state, errored):
+        # Close the progress bar when the computation finishes
+        self._tqdm.close()
 
 class TqdmProgressBar(TextProgressBar):
 

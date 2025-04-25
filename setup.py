@@ -7,8 +7,10 @@ setup(
     install_requires=[
         'scikit-image',
         'zarr>=3.0.3',
-        'h5py',
-        'dask'
+        'h5py>=3',
+        'dask[distributed]>=2025',
+        'simpleitk>=2',
+        'pynvml>=12'
     ],
     extras_require={
         'vt-python': ['vt-python'],

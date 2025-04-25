@@ -9,9 +9,9 @@ import zarr
 import dask.array as da
 
 from skimage.io import imread, imsave
-from ..utils.auxiliar import _make_index, make_index
+from ..utils.auxiliar import make_index
 
-def add_image(viewer, dataset, split_channel=None, scale=None, padding=None, **kwargs):
+def add_image(viewer, dataset, split_channel=None, scale=None, padding=None, affine=None, **kwargs):
     """
     Plots the images in the dataset in the viewer.
 
@@ -32,8 +32,9 @@ def add_image(viewer, dataset, split_channel=None, scale=None, padding=None, **k
             scale = dataset.attrs["scale"]    
         if "padding" in dataset.attrs:
             affine = dataset.attrs["padding"]
-        else:
-            affine = np.eye(dataset.ndim+1)
+    
+    if affine is None:
+        affine = np.eye(dataset.ndim+1)
 
     if split_channel is not None:
         for i in range(dataset.shape[axis.index("C")]):
@@ -63,7 +64,9 @@ def add_image_difference(viewer, dataset, dt=1, cmap1="red", cmap2="green", opac
     viewer.add_image(img1, scale=scale[::-1], colormap=cmap1, opacity=opacity1, **kwargs)
     viewer.add_image(img2, scale=scale[::-1], colormap=cmap2, opacity=opacity2, **kwargs)
 
-def add_vectors(viewer, model, time_axis, mask=None, mask_axis=None, scale=None, downsample=(1,1,1), **kwargs):
+_vector_callbacks = {}
+
+def add_vectors(viewer, vectors, time_axis=0, edge_width=0.2, vector_style="arrow", **kwargs):
     """
     Plots the vectors in the model in the viewer.
 
@@ -75,48 +78,25 @@ def add_vectors(viewer, model, time_axis, mask=None, mask_axis=None, scale=None,
         verbosity (int, optional): Verbosity level. Default is 1.
     """
 
-    if mask_axis is None:
-        try:
-            mask_axis = mask.attrs["axis"]
-        except:
-            raise ValueError("The mask_axis must be provided")
-
-    viewer.add_vectors([], scale=scale, name="vectorfield", **kwargs)
-    _update_vectors(viewer, model, time_axis, mask, mask_axis, downsample, None)
+    viewer.add_vectors([], name="vectorfield", edge_width=edge_width, vector_style=vector_style, **kwargs)
+    _update_vectors(viewer, vectors, time_axis, None)
     # viewer.dims.events.current_step.connect(_update_vectors)
-    viewer.dims.events.current_step.connect(lambda event: _update_vectors(viewer, model, time_axis, mask, mask_axis, downsample, event))
+    def callback(event):
+        _update_vectors(viewer, vectors, time_axis, event)
 
-def _update_vectors(viewer, model, axis, mask, mask_axis, downsample, event):
+    _vector_callbacks[id(viewer)] = callback
+    viewer.dims.events.current_step.connect(_vector_callbacks[id(viewer)])
 
-    if "vectorfield" in viewer.layers:
-        vectors = viewer.layers["vectorfield"]
-    else:
-        return
+def disconnect(viewer):
+    viewer_id = id(viewer)
+    if viewer_id in _vector_callbacks:
+        viewer.dims.events.current_step.disconnect(_vector_callbacks[viewer_id])
+        del _vector_callbacks[viewer_id]
+
+def _update_vectors(viewer, vectors, time_axis, event):
             
-    t = viewer.dims.current_step[axis]
-
-    for i in range(model._t_max):
-        if model._registration_direction == "forward":
-            p = (t,i)
-        else:
-            p = (i,t)
-        if model._trnsf_exists_relative(*p):
-            trnsf = model._load_transformation_relative(*p)
-            if mask is not None:
-                slicing = make_index(mask_axis, T=t)
-                mask_ = mask[slicing]
-                m = trnsf[:,0,:].astype(int)
-                m = mask_[m[:,0],m[:,1],m[:,2]].astype(bool)
-                trnsf = trnsf[m,:,:]
-            # mask = trnsf[:,0,0].astype(int) % downsample[0] == 0
-            # trnsf = trnsf[mask,:,:]
-            # mask = trnsf[:,0,1].astype(int) % downsample[1] == 0
-            # trnsf = trnsf[mask,:,:]
-            # if model._n_spatial == 3:
-            #     mask = trnsf[:,0,2].astype(int) % downsample[2] == 0
-            #     trnsf = trnsf[mask,:,:]
-            vectors.data = trnsf
-            break
+    t = viewer.dims.current_step[time_axis]
+    viewer.layers["vectorfield"].data = vectors[vectors[:,0,0]==t,:,1:]
 
 def make_video(viewer, save_file, time_channel=0, fps=10, zooms=None, angles=None, canvas_only=True):
     """

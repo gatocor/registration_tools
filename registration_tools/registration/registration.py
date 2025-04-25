@@ -5,57 +5,37 @@ from skimage.io import imread, imsave
 import skimage.measure as skm
 import scipy.ndimage as ndi
 import shutil
-import vt
-from ..dataset.dataset import Dataset
 import json
 from tqdm import tqdm
 import time
 import warnings  # Add this import
 from copy import deepcopy
 import zarr
-from ..utils.auxiliar import _get_axis_scale, _make_index, make_index, _dict_axis_shape, _suppress_stdout_stderr, _shape_downsampled, _shape_padded, _trnsf_padded, _image_padded
-from ..utils.utils import apply_function
 import tempfile
 import time
 from copy import deepcopy
 import threading
 import queue
 import dask.array as da
+from pathlib import Path
 # from dask.diagnostics import ProgressBar
-from dask.callbacks import Callback
-from dask.distributed import Client, Lock, LocalCluster
-
-class ProgressBar(Callback):
-    def __init__(self, total_tasks):
-        self.total_tasks = total_tasks  # Pass the total number of blocks as a parameter
-
-    def _start_state(self, dsk, state):
-        # Initialize tqdm with the number of blocks (tasks) to be processed
-        self._tqdm = tqdm(total=self.total_tasks, desc="Dask Progress")
-
-    def _posttask(self, key, result, dsk, state, worker_id):
-        # Update the progress bar after each task completes
-        self._tqdm.update(1)
-
-    def _finish(self, dsk, state, errored):
-        # Close the progress bar when the computation finishes
-        self._tqdm.close()
 
 try:
-    import cupy as cp
-    import cupyx.scipy.ndimage as cndi
-    import cucim.skimage.measure as cskm
-    GPU_AVAILABLE = True
-    print("GPU_AVAILABLE!, Steps that can be accelerated with CUDA will be passed to the GPU.")
-except ImportError:
-    GPU_AVAILABLE = False
+    import vt
+except:
+    None
+import SimpleITK as sitk
 
-import napari
-from napari.qt.threading import thread_worker
-from qtpy.QtWidgets import QVBoxLayout, QWidget, QSlider, QLabel, QPushButton, QLineEdit, QHBoxLayout, QGridLayout
-from qtpy.QtCore import Qt
-from napari.utils.events import Event
-from vispy.util.keys import ALT, CONTROL
+from ..dataset.dataset import Dataset
+from ..utils.auxiliar import _dict_axis_shape, _shape_padded, _get_axis_scale, _make_index, _image_padded, _suppress_stdout_stderr, _trnsf_padded, make_index
+from ..utils.utils import apply_function
+from ..constants import GPU_AVAILABLE, USE_GPU
+
+REGISTRATION_TYPES_VT = ["translation", "translation2D", "translation3D", "rotation", "rotation2D", "rotation3D", "rigid", "rigid2D", "rigid3D", "affine", "affine2D", "affine3D", "vectorfield", "vectorfield2D", "vectorfield3D"]
+SITK_TRANSFORMATIONS = ["TranslationTransform", "VersorTransform", "VersorRigid3DTransform", "Euler2DTransform", "Euler3DTransform", "Similarity2DTransform", "Similarity3DTransform", "ScaleTransform", "ScaleVersor3DTransform", "ScaleSkewVersor3DTransform", "ComposeScaleSkewVersor3DTransform", "AffineTransform", "BSplineTransform", "DisplacementFieldTransform"] 
+SITK_METRICS = ["MeanSquares",  "Demons",  "Correlation",  "ANTSNeighborhoodCorrelation",  "JointHistogramMutualInformation",  "MattesMutualInformation"]        
+SITK_OPTIMIZERS = ["Exhaustive", "Nelder-Mead", "Powell", "Evolutionary", "GradientDescent", "GradientDescentLineSearch", "RegularStepGradientDescent", "ConjugateGradientLineSearch", "L-BFGS-B"]       
+SITK_SAMPLING = ["None", "Random", "Regular"]
 
 class Registration:
     """
@@ -119,7 +99,7 @@ class Registration:
         self._perform_global_trnsf = None
         self._registration_direction = None
         self._registration_type = None
-        self._padding_box = None
+        self._padding = None
         self._out = None
         self._n_spatial = None
         self._fitted = False
@@ -162,9 +142,9 @@ class Registration:
 
         for name, trnsf in self._transfs.items():
             if "global" in name:
-                self.write_trnsf(trnsf, f"{self._out}/trnsf_global/{name}.trnsf")
+                self.write_trnsf(trnsf, f"{self._out}/trnsf_global/{name}")
             elif "relative" in name:
-                self.write_trnsf(trnsf, f"{self._out}/trnsf/{name}.trnsf")
+                self.write_trnsf(trnsf, f"{self._out}/trnsf/{name}")
 
     def load(self, out):
         """
@@ -201,55 +181,53 @@ class Registration:
 
     def _save_transformation_relative(self, trnsf, pos_float, pos_ref):
         if self._out is None:
-            self._transfs[f"trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf"] = trnsf
+            self._transfs[f"trnsf_relative_{pos_float:04d}_{pos_ref:04d}"] = trnsf
         else:
-            self.write_trnsf(trnsf, f"{self._out}/trnsf_relative/trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf")
+            self.write_trnsf(trnsf, f"{self._out}/trnsf_relative/trnsf_relative_{pos_float:04d}_{pos_ref:04d}")
 
     def _save_transformation_global(self, trnsf, pos_float, pos_ref):
         if self._out is None:
-            self._transfs[f"trnsf_global_{pos_float:04d}_{pos_ref:04d}.trnsf"] = trnsf
+            self._transfs[f"trnsf_global_{pos_float:04d}_{pos_ref:04d}"] = trnsf
         else:
-            self.write_trnsf(trnsf, f"{self._out}/trnsf_global/trnsf_global_{pos_float:04d}_{pos_ref:04d}.trnsf")
+            self.write_trnsf(trnsf, f"{self._out}/trnsf_global/trnsf_global_{pos_float:04d}_{pos_ref:04d}")
 
     def _load_transformation_relative(self, pos_float, pos_ref):
         if self._out is None:
-            if f"trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf" in self._transfs:
-                return self._transfs[f"trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf"]
-            elif f"trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf.npy" in self._transfs:
-                return self._transfs[f"trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf"]
+            if f"trnsf_relative_{pos_float:04d}_{pos_ref:04d}" in self._transfs:
+                return self._transfs[f"trnsf_relative_{pos_float:04d}_{pos_ref:04d}"]
             else:
                 raise ValueError(f"The transformation between {pos_float:04d} and {pos_ref:04d} the specified positions does not exist.")
         else:
-            if os.path.exists(f"{self._out}/trnsf_relative/trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf"):
-                return self.read_trnsf(f"{self._out}/trnsf_relative/trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf")
-            elif os.path.exists(f"{self._out}/trnsf_relative/trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf.npy"):
-                return self.read_trnsf(f"{self._out}/trnsf_relative/trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf")
+            if self._trnsf_exists_relative(pos_float, pos_ref):
+                return self.read_trnsf(f"{self._out}/trnsf_relative/trnsf_relative_{pos_float:04d}_{pos_ref:04d}")
             else:
                 raise ValueError("The transformation between the specified positions does not exist.")
 
     def _load_transformation_global(self, pos_float, pos_ref):
         if self._out is None:
-            if f"trnsf_global_{pos_float:04d}_{pos_ref:04d}.trnsf" not in self._transfs:
+            if f"trnsf_global_{pos_float:04d}_{pos_ref:04d}" not in self._transfs:
                 raise ValueError(f"The transformation between {pos_float:04d} and {pos_ref:04d} the specified positions does not exist.")
             else:
-                return self._transfs[f"trnsf_global_{pos_float:04d}_{pos_ref:04d}.trnsf"]
+                return self._transfs[f"trnsf_global_{pos_float:04d}_{pos_ref:04d}"]
         else:
-            if not os.path.exists(f"{self._out}/trnsf_global/trnsf_global_{pos_float:04d}_{pos_ref:04d}.trnsf"):
-                raise ValueError(f"The transformation between {pos_float:04d} and {pos_ref:04d} the specified positions does not exist.")
+            if self._trnsf_exists_global(pos_float, pos_ref):
+                return self.read_trnsf(f"{self._out}/trnsf_global/trnsf_global_{pos_float:04d}_{pos_ref:04d}")
             else:
-                return self.read_trnsf(f"{self._out}/trnsf_global/trnsf_global_{pos_float:04d}_{pos_ref:04d}.trnsf")
+                raise ValueError("The transformation between the specified positions does not exist.")
 
     def _trnsf_exists_relative(self, pos_float, pos_ref):
         if self._out is None:
-            return f"trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf" in self._transfs.keys() or f"trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf.npy" in self._transfs.keys()   
+            return f"trnsf_relative_{pos_float:04d}_{pos_ref:04d}" in self._transfs.keys()   
         else:
-            return os.path.exists(f"{self._out}/trnsf_relative/trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf") or os.path.exists(f"{self._out}/trnsf_relative/trnsf_relative_{pos_float:04d}_{pos_ref:04d}.trnsf.npy")
+            base_path = Path(f"{self._out}/trnsf_relative/trnsf_relative_{pos_float:04d}_{pos_ref:04d}")
+            return bool(list(base_path.parent.glob(base_path.name + ".*")))
     
     def _trnsf_exists_global(self, pos_float, pos_ref):
         if self._out is None:
-            return f"trnsf_global_{pos_float:04d}_{pos_ref:04d}.trnsf" in self._transfs.keys() or f"trnsf_global_{pos_float:04d}_{pos_ref:04d}.trnsf.npy" in self._transfs.keys()
+            return f"trnsf_global_{pos_float:04d}_{pos_ref:04d}" in self._transfs.keys()
         else:
-            return os.path.exists(f"{self._out}/trnsf_global/trnsf_global_{pos_float:04d}_{pos_ref:04d}.trnsf") or os.path.exists(f"{self._out}/trnsf_global/trnsf_global_{pos_float:04d}_{pos_ref:04d}.trnsf.npy")
+            base_path = Path(f"{self._out}/trnsf_global/trnsf_global_{pos_float:04d}_{pos_ref:04d}")
+            return bool(list(base_path.parent.glob(base_path.name + ".*")))
         
     def _padding_box_to_points(self, padding_reference, scale):
         return np.array(np.meshgrid(*[np.array(i) for i in padding_reference])).T.reshape(-1, self._n_spatial) * np.array(scale)
@@ -316,8 +294,8 @@ class Registration:
         
     def apply_trnsf(self, image, trnsf, scale, padding):
 
-        nx = cp if GPU_AVAILABLE else np 
-        ndix = cndi if GPU_AVAILABLE else ndi
+        nx = cp if GPU_AVAILABLE and USE_GPU else np 
+        ndix = cndi if GPU_AVAILABLE and USE_GPU else ndi
 
         # Extract rotation and translation
         trnsf = nx.array(trnsf)
@@ -344,22 +322,20 @@ class Registration:
 
         transformed_img = ndix.affine_transform(image_, rotation_matrix, offset=translation)
 
-        return transformed_img.get() if GPU_AVAILABLE else transformed_img
+        return transformed_img.get() if GPU_AVAILABLE and USE_GPU else transformed_img
+
+    def apply_trnsf_to_points(self, points, trnsf):
+
+        points_ = trnsf @ np.concatenate((points, np.ones((points.shape[0], 1))), axis=1).T
+        points_ = points_.T[:, :-1]
+
+        return points_
 
     def write_trnsf(self, trnsf, out):
-        if trnsf.ndim == 2:
-            np.savetxt(out, trnsf, fmt='%.6f')
-        else:
-            np.save(out, trnsf)
+        np.savetxt(out+".trnsf", trnsf, fmt='%.6f')
 
     def read_trnsf(self, out):
-        if self._registration_type == "vectorfield":
-            try:
-                return np.load(out+".npy", allow_pickle=True)
-            except:
-                return np.zeros((1,2,3))
-        else:
-            return np.loadtxt(out)
+        return np.loadtxt(out+".trnsf")
 
     def image2array(self, img):
         return img
@@ -417,10 +393,6 @@ class Registration:
 
         # Compute box
         self._box = tuple([int(i) for i in np.array(dataset.shape)[[axis.index(ax) for ax in axis if ax in "XYZ"]] * np.array(scale)])
-
-        # Compute padding box
-        padding_reference = [(0,j) for i,j in _dict_axis_shape(axis, dataset.shape).items() if i in "XYZ"][::-1]
-        self._padding_box = [(0,j) for i,j in _dict_axis_shape(axis, dataset.shape).items() if i in "XYZ"][::-1]
 
         # Stepping
         self._stepping = stepping
@@ -518,354 +490,11 @@ class Registration:
                         ])
                         self._save_transformation_global(trnsf_global, pos_float, self._origin)
 
-                # padding_reference = [(0,j) for i,j in _dict_axis_shape(axis, dataset.shape).items() if i in "XYZ"][::-1]
-                # padding_box = self._points_to_padding_box(self.apply_trnsf_to_points(self._padding_box_to_points(padding_reference, scale[::-1]), trnsf_global), scale)
-                # self._padding_box = [(int(min(i[0], j[0])), int(max(i[1], j[1]))) for i, j in zip(self._padding_box, padding_box)]
-
-            if self._out is not None:
-                self._padding_box = self._padding_box[::-1]
-                self.save()
-                self._padding_box = self._padding_box[::-1]
-
             pos_ref_current = pos_float
         
-        self._padding_box = self._padding_box[::-1]
         self._fitted = True
         if self._out is not None:
             self.save()
-
-    # def apply_old(self, dataset, out=None, axis=None, scale=None, downsample=None, save_behavior="Continue", transformation="global", padding=False, verbose=False, **kwargs):
-    #     """
-    #     Registers a dataset and saves the results to the specified path.
-    #     """
-
-    #     save_behaviors = ["NotOverwrite", "Overwrite", "Continue"]
-
-    #     if not self._fitted:
-    #         raise ValueError("The registration object has not been fitted. Please fit the registration object before applying it.")
-
-    #     # Check inputs
-    #     axis, scale = _get_axis_scale(dataset, axis, scale)
-        
-    #     if len(axis) != len(dataset.shape):
-    #         raise ValueError("The axis must have the same length as the dataset shape.")
-        
-    #     if "T" not in axis:
-    #         raise ValueError("The axis must contain the time dimension 'T'.")
-                        
-    #     if save_behavior not in save_behaviors:
-    #         raise ValueError(f"save_behavior should be one of the following: {save_behaviors}.")
-
-    #     # Check downsample
-    #     self._n_spatial = len([i for i in axis if i in "XYZ"])
-    #     if downsample is None:
-    #         downsample = (1,) * self._n_spatial
-    #     else:
-    #         downsample = downsample
-
-    #     if not all(isinstance(d, int) for d in downsample):
-    #         raise ValueError("All elements in downsample must be integers.")
-    #     elif len(downsample) != self._n_spatial:
-    #         raise ValueError(f"downsample must have the same length as the number of spatial dimensions ({self._n_spatial}).")
-
-    #     # Scale
-    #     new_scale = tuple([i * j for i, j in zip(scale, downsample)])
-
-    #     # Shape
-    #     if padding:
-    #         padded_shape = _shape_padded(dataset.shape, axis, self._padding_box)
-    #     else:
-    #         padded_shape = dataset.shape
-    #     new_shape = _shape_downsampled(padded_shape, axis, downsample)
-        
-    #     # Setup output
-    #     if out is None:
-    #         store = zarr.storage.MemoryStore()
-    #         data = zarr.create_array(
-    #             store=store,
-    #             shape=new_shape,
-    #             dtype=dataset.dtype,
-    #             **kwargs
-    #         )
-    #         data.attrs["axis"] = axis
-    #         data.attrs["scale"] = new_scale
-    #         data.attrs["computed"] = []
-    #     elif isinstance(out, str):# and out.endswith(".zarr"):
-    #         if os.path.exists(out) and save_behavior == "NotOverwrite":
-    #             raise ValueError("The output file already exists. If you want to overwrite it, set save_behavior='Overwrite'.")
-    #         elif os.path.exists(out) and save_behavior == "Continue":
-    #             out_path, out_file = os.path.split(out)
-    #             data = zarr.open_array(out_file, path=out_path)
-    #             if "computed" not in data.attrs:
-    #                 data.attrs["computed"] = []
-    #         elif os.path.exists(out) and save_behavior == "Overwrite":
-    #             shutil.rmtree(out)
-    #             data = zarr.create_array(
-    #                 store=out,
-    #                 shape=new_shape,
-    #                 dtype=dataset.dtype,
-    #                 **kwargs
-    #             )
-    #             data.attrs["axis"] = axis
-    #             data.attrs["scale"] = new_scale
-    #             data.attrs["computed"] = []
-    #         else:
-    #             data = zarr.create_array(
-    #                 store=out,
-    #                 shape=new_shape,
-    #                 dtype=dataset.dtype,
-    #                 **kwargs
-    #             )
-    #             data.attrs["axis"] = axis
-    #             data.attrs["scale"] = new_scale
-    #             data.attrs["computed"] = []
-    #     else:
-    #         raise ValueError("The output must be None or a the name to a zarr file.")
-
-    #     mt = np.eye(4)
-    #     # if padding:
-    #     #     padding_drift = [i[0]*j for i,j in zip(self._padding_box, scale)][::-1]
-    #     #     mt[:3,3] = np.array(padding_drift)
-    #     #     padding_trnsf = vt.vtTransformation(mt)
-
-    #     if self._registration_direction == "backward":
-    #         origin = 0
-    #         iterator = range(1, new_shape[np.where([i == "T" for i in axis])[0][0]])
-    #     else:
-    #         origin = new_shape[np.where([i == "T" for i in axis])[0][0]] - 1
-    #         iterator = range(new_shape[np.where([i == "T" for i in axis])[0][0]] - 2, -1, -1)
-
-    #     if "C" in axis:
-    #         for ch in range(new_shape[np.where([i == "C" for i in axis])[0][0]]):
-    #             img = self._get_image(dataset, origin, axis, ch, downsample)
-    #             if padding:
-    #                 im = self.apply_trnsf(img, padding_trnsf, new_scale)
-    #             else:
-    #                 im = img
-    #             data[_make_index(origin, axis, ch)] = self.image2array(im)
-    #     else:
-    #         data[_make_index(origin, axis, None)] = dataset[_make_index(dataset.shape[np.where([i == "T" for i in axis])[0][0]] - 1, axis, None, downsample)]
-
-    #     for t in tqdm(iterator, desc=f"Applying registration to images", unit="", total=self._t_max-1):
-    #         #Skip is computed
-    #         if t in data.attrs["computed"]:
-    #                 continue
-
-    #         if transformation == "global":
-    #             if not self._trnsf_exists_global(t, origin):
-    #                 raise ValueError("The global transformation does not exist.")
-    #             trnsf = self._load_transformation_global(t, origin)
-    #         else:
-    #             if not self._trnsf_exists_relative(t, origin):
-    #                 raise ValueError("The relative transformation does not exist.")
-    #             trnsf = self._load_transformation_relative(t, origin)
-
-    #         if "C" in axis:
-    #             for ch in range(new_shape[np.where([i == "C" for i in axis])[0][0]]):
-    #                 img = self._get_image(dataset, t, axis, ch, downsample)
-    #                 if padding:
-    #                     joint_trnsf = self.compose_trnsf([trnsf,padding_trnsf])
-    #                 else:
-    #                     joint_trnsf = trnsf
-    #                 im_trnsf = self.apply_trnsf(img, joint_trnsf, new_scale)
-    #                 data[_make_index(t, axis, ch)] = self.image2array(im_trnsf)
-    #         else:
-    #             img = self._get_image(dataset, t, axis, None, downsample)
-    #             if padding:
-    #                 joint_trnsf = self.compose_trnsf([trnsf,padding_trnsf])
-    #             else:
-    #                 joint_trnsf = trnsf
-    #             im = self.apply_trnsf(img, joint_trnsf, new_scale)
-    #             data[_make_index(t, axis, None)] = self.image2array(im)
-
-    #         data.attrs["computed"].append(t)
-        
-    #     return data
-
-    # def apply_old(self, dataset, out=None, axis=None, scale=None, downsample=None, save_behavior="Continue", transformation="global", padding=False, verbose=False, num_loading_threads=1, num_preloaded_images=1, **kwargs):
-    #     """
-    #     Registers a dataset and saves the results to the specified path.
-    #     """
-
-    #     save_behaviors = ["NotOverwrite", "Overwrite", "Continue"]
-
-    #     if not self._fitted:
-    #         raise ValueError("The registration object has not been fitted. Please fit the registration object before applying it.")
-
-    #     # Check inputs
-    #     axis, scale = _get_axis_scale(dataset, axis, scale)
-        
-    #     if len(axis) != len(dataset.shape):
-    #         raise ValueError("The axis must have the same length as the dataset shape.")
-        
-    #     if "T" not in axis:
-    #         raise ValueError("The axis must contain the time dimension 'T'.")
-                        
-    #     if save_behavior not in save_behaviors:
-    #         raise ValueError(f"save_behavior should be one of the following: {save_behaviors}.")
-
-    #     # Check downsample
-    #     self._n_spatial = len([i for i in axis if i in "XYZ"])
-    #     if downsample is None:
-    #         downsample = (1,) * self._n_spatial
-    #     else:
-    #         downsample = downsample
-
-    #     if not all(isinstance(d, int) for d in downsample):
-    #         raise ValueError("All elements in downsample must be integers.")
-    #     elif len(downsample) != self._n_spatial:
-    #         raise ValueError(f"downsample must have the same length as the number of spatial dimensions ({self._n_spatial}).")
-
-    #     # Scale
-    #     new_scale = tuple([i * j for i, j in zip(scale, downsample)])
-
-    #     # Shape
-    #     if padding:
-    #         padded_shape = _shape_padded(dataset.shape, axis, self._padding_box)
-    #     else:
-    #         padded_shape = dataset.shape
-    #     new_shape = _shape_downsampled(padded_shape, axis, downsample)
-        
-    #     # Setup output
-    #     if out is None:
-    #         store = zarr.storage.MemoryStore()
-    #         data = zarr.create_array(
-    #             store=store,
-    #             shape=new_shape,
-    #             dtype=dataset.dtype,
-    #             **kwargs
-    #         )
-    #         data.attrs["axis"] = axis
-    #         data.attrs["scale"] = new_scale
-    #         data.attrs["computed"] = []
-    #     elif isinstance(out, str):# and out.endswith(".zarr"):
-    #         if os.path.exists(out) and save_behavior == "NotOverwrite":
-    #             raise ValueError("The output file already exists. If you want to overwrite it, set save_behavior='Overwrite'.")
-    #         elif os.path.exists(out) and save_behavior == "Continue":
-    #             out_path, out_file = os.path.split(out)
-    #             data = zarr.open_array(out_file, path=out_path)
-    #             if "computed" not in data.attrs:
-    #                 data.attrs["computed"] = []
-    #         elif os.path.exists(out) and save_behavior == "Overwrite":
-    #             shutil.rmtree(out)
-    #             data = zarr.create_array(
-    #                 store=out,
-    #                 shape=new_shape,
-    #                 dtype=dataset.dtype,
-    #                 **kwargs
-    #             )
-    #             data.attrs["axis"] = axis
-    #             data.attrs["scale"] = new_scale
-    #             data.attrs["computed"] = []
-    #         else:
-    #             data = zarr.create_array(
-    #                 store=out,
-    #                 shape=new_shape,
-    #                 dtype=dataset.dtype,
-    #                 **kwargs
-    #             )
-    #             data.attrs["axis"] = axis
-    #             data.attrs["scale"] = new_scale
-    #             data.attrs["computed"] = []
-    #     else:
-    #         raise ValueError("The output must be None or a the name to a zarr file.")
-
-    #     mt = np.eye(4)
-    #     # if padding:
-    #     #     padding_drift = [i[0]*j for i,j in zip(self._padding_box, scale)][::-1]
-    #     #     mt[:3,3] = np.array(padding_drift)
-    #     #     padding_trnsf = vt.vtTransformation(mt)
-
-    #     if self._registration_direction == "backward":
-    #         origin = 0
-    #         iterator = range(0, new_shape[np.where([i == "T" for i in axis])[0][0]])
-    #     else:
-    #         origin = new_shape[np.where([i == "T" for i in axis])[0][0]] - 1
-    #         iterator = range(new_shape[np.where([i == "T" for i in axis])[0][0]] - 1, -1, -1)
-
-    #     # Create a preloading buffer and threading event
-    #     buffer_queue = queue.Queue(maxsize=num_preloaded_images)  # Buffer with 2 preloaded images
-    #     # A list of events to synchronize threads
-    #     events = [threading.Event() for _ in range(num_loading_threads)]
-    #     task_queue = queue.Queue()
-    #     for ord, task in enumerate(deepcopy(iterator)):
-    #         task_queue.put((ord, task))  # Include index to preserve task order
-
-    #     # Launch threads
-    #     # Create a ThreadPoolExecutor to manage the workers
-    #     task_worker_threads = []
-    #     assignement = {}
-    #     for _ in range(num_loading_threads):
-    #         thread = threading.Thread(target=self._preload_images_in_thread, args=(_, events, dataset, axis, scale, None, downsample, task_queue, buffer_queue, num_loading_threads, assignement))
-    #         task_worker_threads.append(thread)
-    #         thread.start()
-
-    #     # # start = time.time() 
-    #     # if "C" in axis:
-    #     #     for ch in range(new_shape[np.where([i == "C" for i in axis])[0][0]]):
-    #     #         img = self._get_image(dataset, origin, axis, ch, downsample)
-    #     #         if padding:
-    #     #             im = self.apply_trnsf(img, padding_trnsf, new_scale)
-    #     #         else:
-    #     #             im = img
-    #     #         data[_make_index(origin, axis, ch)] = im
-    #     # else:
-    #     #     data[_make_index(origin, axis, None)] = dataset[_make_index(dataset.shape[np.where([i == "T" for i in axis])[0][0]] - 1, axis, None, downsample)]
-    #     # # print(f"Time to get image: {time.time()-start}")
-
-    #     data_ = np.zeros([i for i,j in zip(new_shape, axis) if j != "T"])
-    #     for t in tqdm(iterator, desc=f"Applying registration to images", unit="", total=self._t_max-1):
-
-    #         _, image = buffer_queue.get()
-
-    #         # print(f"Loading {t}")
-    #         # total_time = time.time() 
-    #         #Skip is computed
-    #         if t in data.attrs["computed"]:
-    #                 continue
-
-    #         if transformation == "global":
-    #             if not self._trnsf_exists_global(t, origin):
-    #                 raise ValueError(f"The global transformation between {t} and {origin} does not exist.")
-    #             trnsf = self._load_transformation_global(t, origin)
-    #         else:
-    #             if not self._trnsf_exists_relative(t, origin):
-    #                 raise ValueError(f"The relative transformation between {t} and {origin} does not exist.")
-    #             trnsf = self._load_transformation_relative(t, origin)
-
-    #         if "C" in axis:
-    #             for ch in range(new_shape[np.where([i == "C" for i in axis])[0][0]]):
-    #                 start = time.time()
-    #                 img = image[ch]
-    #                 if padding:
-    #                     joint_trnsf = self.compose_trnsf([trnsf,padding_trnsf])
-    #                 else:
-    #                     joint_trnsf = trnsf
-    #                 # print(f"Time to get image: {time.time()-start}")
-    #                 # start = time.time()
-    #                 im_trnsf = self.apply_trnsf(img, joint_trnsf, new_scale)
-    #                 # print(f"Time to apply trnsf: {time.time()-start}")
-    #                 # start = time.time()
-    #                 data_[ch] = im_trnsf
-    #                 # print(f"Time to save partial image: {time.time()-start}")
-
-    #             # start = time.time()
-    #             data[_make_index(t, axis, None)] = data_
-    #             # print(f"Time to save image: {time.time()-start}")
-    #         else:
-    #             img = image
-    #             if padding:
-    #                 joint_trnsf = self.compose_trnsf([trnsf,padding_trnsf])
-    #             else:
-    #                 joint_trnsf = trnsf
-    #             im = self.apply_trnsf(img, joint_trnsf, new_scale)
-    #             data[_make_index(t, axis, None)] = im
-
-    #         data.attrs["computed"].append(t)
-
-    #         # print(f"Total time: {time.time()-total_time}")
-        
-    #     return data
 
     def apply(self, dataset, out=None, axis=None, scale=None, 
                 save_behavior="Continue", transformation="global", padding=None,
@@ -884,7 +513,10 @@ class Registration:
         # Check inputs
         axis, scale = _get_axis_scale(dataset, axis, scale)                                
         # Check padding
+        if padding is None:
+            padding = self._padding
         new_shape = _shape_padded(dataset.shape, axis, padding)
+        self._padding = padding
 
         # Determine time axis index
         time_idx = axis.index("T")
@@ -906,6 +538,7 @@ class Registration:
             out=out,
             verbose=verbose,
             new_scale=scale,
+            desc=f"Applying registration to images",
         )
         data.attrs["padding"] = np.linalg.inv(_trnsf_padded(padding, self._n_spatial)).tolist()
 
@@ -966,12 +599,11 @@ class Registration:
         # Compute box
         self._box = tuple([int(i) for i in np.array(dataset.shape)[[axis.index(ax) for ax in axis if ax in "XYZ"]] * np.array(scale)])
 
-        # Compute padding box
-        padding_reference = [(0,j) for i,j in _dict_axis_shape(axis, dataset.shape).items() if i in "XYZ"][::-1]
-        self._padding_box = [(0,j) for i,j in _dict_axis_shape(axis, dataset.shape).items() if i in "XYZ"][::-1]
-
         # New shape
+        if padding is None:
+            padding = self._padding
         new_shape = _shape_padded(dataset.shape, axis, padding)
+        self._padding = padding
 
         # Suppress skimage warnings for low contrast images
         warnings.filterwarnings("ignore", category=UserWarning, message=".*low contrast image.*")
@@ -1155,17 +787,6 @@ class Registration:
                             trnsf
                         ])
                         self._save_transformation_global(trnsf_global, pos_float, self._origin)
-            # print(f"Global transformation: {time.time()-start:.2f}")
-                #check data extremes
-                # padding_reference = [(0,j) for i,j in _dict_axis_shape(axis, dataset.shape).items() if i in "XYZ"][::-1]
-                # points_vt = vt.vtPointList(self._padding_box_to_points(padding_reference, scale[::-1]))
-                # points_vt_out = vt.apply_trsf_to_points(points_vt, vt.inv_trsf(trnsf_global))
-                # padding_box = self._points_to_padding_box(points_vt_out.copy_to_array(), scale[::-1])
-                # self._padding_box = [(int(min(i[0], j[0])), int(max(i[1], j[1]))) for i, j in zip(self._padding_box, padding_box)]
-            if self._out is not None:
-                self._padding_box = self._padding_box[::-1]
-                self.save()
-                self._padding_box = self._padding_box[::-1]
             if pos_float in data.attrs["computed"]:
                 continue
             if perform_global_trnsf:
@@ -1178,7 +799,7 @@ class Registration:
                     img_ = img_total[ch]
                     # print(f"Getting image: {time.time()-start:.2f}")
                     # start = time.time()
-                    im_trnsf = self.apply_trnsf(img_, trnsf_img, new_scale)
+                    im_trnsf = self.apply_trnsf(img_, trnsf_img, new_scale, padding)
                     # print(f"Applying transformation: {time.time()-start:.2f}")
                     # start = time.time()
                     data_[ch] = im_trnsf
@@ -1197,7 +818,6 @@ class Registration:
         for thread in task_worker_threads:
             thread.join()
 
-        self._padding_box = self._padding_box[::-1]
         self._fitted = True
         if self._out is not None:
             self.save()
@@ -1208,11 +828,143 @@ class Registration:
         else:
             return data
 
-    def vectorfield(self, mask=None, axis=None, scale=None, out=None, n_points=20, transformation="relative", **kwargs):
+    def propagate(self):
+        if self._registration_direction == "forward":
+            self.propagate_backwards()
+        elif self._registration_direction == "backward":
+            self.propagate_forwards()
+
+    def propagate_forwards(self):
+        trnsf_global = np.eye(self._n_spatial+1)
+        for t_ in range(0, self._t_max):
+            trnsf = self._load_transformation_relative(t_, self._origin)
+            trnsf_global = self.compose_trnsf([trnsf_global, trnsf])
+            self._save_transformation_global(trnsf_global, t_, self._origin)
+    
+    def propagate_backwards(self):
+        trnsf_global = np.eye(self._n_spatial+1)
+        for t_ in range(self._t_max-1, -1, -1):
+            trnsf = self._load_transformation_relative(t_, self._origin)
+            trnsf_global = self.compose_trnsf([trnsf_global, trnsf])
+            self._save_transformation_global(trnsf_global, t_, self._origin)
+
+    def fit_manual(self, dataset, out=None, axis=None, scale=None, use_channel=None, stepping=None, direction="backward", verbose=False):
+
+        try:
+            import napari
+            from ..widgets.widgets import AffineRegistrationWidget
+        except:
+            raise ImportError("Napari is not installed. Please install it to use this function.")
+
+        self._perform_global_trnsf = True
+        self._out = out
+        if self._out is not None:
+            if os.path.exists(self._out):
+                self.load(out)
+            else:
+                self.save()
+    
+        if direction not in ["backward", "forward"]:
+            raise ValueError("The direction must be either 'backward' or 'forward'.")
+        self._registration_direction = direction
+
+        # Check inputs
+        axis, scale = _get_axis_scale(dataset, axis, scale)
+
+        self._scale = scale
+        self._axis = axis
+
+        self._t_max = _dict_axis_shape(axis, dataset.shape)["T"]
+
+        self._n_spatial = sum([i in "XYZ" for i in axis])
+
+        self._spatial_shape = tuple([j for i,j in _dict_axis_shape(axis, dataset.shape).items() if i in "XYZ"])
+
+        self._arrow_scale = np.sqrt(np.sum(np.array([j for i, j in _dict_axis_shape(axis, dataset.shape).items() if i in "XYZ"])**2)) / 4
+
+        ax_ = [j for i,j in _dict_axis_shape(axis, dataset.shape).items() if i in "XYZ"]
+
+        if self._registration_direction == "backward":
+            c = +1
+        else:
+            c = -1
+
+        viewer = napari.Viewer()
+        dataset_dask = da.from_array(dataset, chunks=dataset.shape)
+
+        if self._registration_direction == "backward":
+            c = +1
+            # Align: Dataset[0:-1], Dataset_t+1[1:]
+            ref_slice     = make_index(self._axis, T=slice(0, -1))  # i
+            shifted_slice = make_index(self._axis, T=slice(1, None))  # i+1
+        else:
+            c = -1
+            # Align: Dataset[1:], Dataset_t-1[0:-1]
+            ref_slice     = make_index(self._axis, T=slice(1, None))  # i
+            shifted_slice = make_index(self._axis, T=slice(0, -1))    # i-1
+
+        # Add the sliced dataset (aligned in time)
+        _layer_dataset = viewer.add_image(dataset_dask[ref_slice], scale=scale, name="Dataset", opacity=0.5)
+        _layer_corrected = viewer.add_image(dataset_dask[ref_slice], scale=scale, name="Dataset (corrected)", opacity=0.5, colormap="green")
+        _layer_next = viewer.add_image(dataset_dask[shifted_slice], scale=scale, name=f"Dataset t{c}", opacity=0.5, colormap="red")
+
+        viewer.add_shapes(
+            data=np.array([]),
+            shape_type='polygon',
+            edge_color='yellow',
+            edge_width=1,
+            face_color='transparent',
+            opacity=0.1,
+            name='Original Bounding Box',
+            blending='translucent_no_depth'
+        )
+
+        # Add to napari as polygons
+        viewer.add_shapes(
+            data=np.array([]),
+            shape_type='polygon',
+            edge_color='white',
+            edge_width=1,
+            face_color='transparent',
+            opacity=0.1,
+            name='Bounding Box',
+            blending='translucent_no_depth'
+        )
+
+        if direction == "backward":
+            self._origin = 0
+        else:
+            self._origin = self._t_max-1
+
+        for t in range(self._t_max):
+            if not self._trnsf_exists_relative(t, self._origin):
+                self._save_transformation_relative(np.eye(self._n_spatial+1), t, self._origin)
+        self.propagate()
+
+        if self._n_spatial == 2:
+            viewer.dims.ndisplay = 2
+        else:
+            viewer.dims.ndisplay = 3
+
+        start_pos = [0] * len(self._axis)
+        start_pos[self._axis.index("T")] = 0 if self._registration_direction == "backward" else self._t_max-2
+        viewer.dims.current_step = start_pos
+        widget = AffineRegistrationWidget(self, viewer, axis)
+        widget._layer_dataset = _layer_dataset        
+        widget._layer_corrected = _layer_corrected
+        widget._layer_next = _layer_next        
+        viewer.window.add_dock_widget(widget, area='right')
+        napari.run()
+
+        self._fitted = True
+        if self._out is not None:
+            self.save()
+
+    def vectorfield(self, mask=None, out=None, axis=None, scale=None, n_points=20, transformation="relative", **kwargs):
 
         if not self._fitted:
             raise ValueError("The registration object has not been fitted. Please fit the registration object before applying it.")
-
+            
         # Check inputs
         mesh = np.meshgrid(*[np.linspace(0, i, n_points) for i in self._box])
         points = np.vstack([i.ravel() for i in mesh]).T
@@ -1223,18 +975,17 @@ class Registration:
             mesh_mask = np.meshgrid(*[np.round(np.linspace(0, j-1, n_points)).astype(int) for i, j in d.items() if i in "XYZ"])
             # mesh_mask = np.concatenate([i.reshape(-1,1) for i in mesh_mask],axis=1)
             if "T" not in axis:
-                keep_points = points[mask[*mesh_mask].flatten()][:,::-1]
+                keep_points = points[mask[*mesh_mask].flatten()]
         else:
-            keep_points = points[:,::-1]
+            keep_points = points
 
-        n_spatial = len([i for i in axis if i in "XYZ"])
         if out is None:
             store = zarr.storage.MemoryStore()
-            data = zarr.create_array(store=store, shape=(0,2,n_spatial+1), dtype=float, **kwargs)
+            data = zarr.create_array(store=store, shape=(0,2,self._n_spatial+1), dtype=float, **kwargs)
         elif isinstance(out, str) and out.endswith(".zarr"):
             data = zarr.create_array(
                 store=out,
-                shape=(0,2,n_spatial+1),
+                shape=(0,2,self._n_spatial+1),
                 dtype=float,
                 **kwargs
             )
@@ -1250,22 +1001,24 @@ class Registration:
 
         for t, t_next in tqdm(zip(iterator, iterator_next), desc=f"Computing vectorfield", unit="", total=self._t_max-1):
             if mask is not None and "T" in axis:
-                keep_points = points[mask[_make_index(t,axis)][*mesh_mask].flatten()][:,::-1]
+                keep_points = points[mask[make_index(axis, T=t)][*mesh_mask].flatten()]
+            else:
+                keep_points = points
 
             if transformation == "global":
                 trnsf = self._load_transformation_global(t, self._origin)
             elif transformation == "relative":
                 trnsf = self._load_transformation_relative(t, t_next)
              
-            points_vt = vt.vtPointList(keep_points)
-            points_vt_out = vt.apply_trsf_to_points(points_vt, trnsf)
-            vectorfield = points_vt_out.copy_to_array() - keep_points
+            points_out = self.apply_trnsf_to_points(keep_points, trnsf)
+            vectorfield = points_out - keep_points
+            # vectorfield = keep_points
             l = vectorfield.shape[0]
-            data_add = np.zeros((l,2,n_spatial+1))
+            data_add = np.zeros((l,2,self._n_spatial+1))
             data_add[:,0,0] = t
             data_add[:,1,0] = 0
-            data_add[:,0,1:] = keep_points[:,::-1]
-            data_add[:,1,1:] = -vectorfield[:,::-1]
+            data_add[:,0,1:] = keep_points
+            data_add[:,1,1:] = vectorfield
 
             data.append(data_add, axis=0)
 
@@ -1288,20 +1041,19 @@ class Registration:
             mesh_mask = np.meshgrid(*[np.round(np.linspace(0, j-1, n_points)).astype(int) for i, j in d.items() if i in "XYZ"])
             # mesh_mask = np.concatenate([i.reshape(-1,1) for i in mesh_mask],axis=1)
             if "T" not in axis:
-                keep_points = points[mask[*mesh_mask].flatten()][:,::-1]
-            else:
-                raise ValueError("The mask cannot contain the time dimension 'T'.")
+                keep_points = points[mask[*mesh_mask].flatten()]
+            # else:
+            #     raise ValueError("The mask cannot contain the time dimension 'T'.")
         else:
-            keep_points = points[:,::-1]
+            keep_points = points
 
-        n_spatial = len([i for i in axis if i in "XYZ"])
         if out is None:
             store = zarr.storage.MemoryStore()
-            data = zarr.create_array(store=store, shape=(0,n_spatial+2), dtype=float, **kwargs)
+            data = zarr.create_array(store=store, shape=(0,self._n_spatial+2), dtype=float, **kwargs)
         elif isinstance(out, str) and out.endswith(".zarr"):
             data = zarr.create_array(
                 store=out,
-                shape=(0,n_spatial+2),
+                shape=(0,self._n_spatial+2),
                 dtype=float,
                 **kwargs
             )
@@ -1318,10 +1070,10 @@ class Registration:
             t = 0
                     
         l = keep_points.shape[0]
-        data_add = np.zeros((l,n_spatial+2))
+        data_add = np.zeros((l,self._n_spatial+2))
         data_add[:,0] = range(len(keep_points))
         data_add[:,1] = t
-        data_add[:,2:] = keep_points[:,::-1]
+        data_add[:,2:] = keep_points
         data.append(data_add, axis=0)
 
         for t, t_next in tqdm(zip(iterator, iterator_next), desc=f"Computing trajectories", unit="", total=self._t_max-1):
@@ -1331,14 +1083,13 @@ class Registration:
             elif transformation == "relative":
                 trnsf = self._load_transformation_relative(t, t_next)
              
-            points_vt = vt.vtPointList(keep_points)
-            points_vt_out = vt.apply_trsf_to_points(points_vt, trnsf)
-            keep_points = keep_points - (points_vt_out.copy_to_array()-keep_points)
+            points_out = self.apply_trnsf_to_points(keep_points, trnsf)
+            keep_points = keep_points - (points_out-keep_points)
             l = keep_points.shape[0]
-            data_add = np.zeros((l,n_spatial+2))
+            data_add = np.zeros((l,self._n_spatial+2))
             data_add[:,0] = range(len(keep_points))
             data_add[:,1] = t_next
-            data_add[:,2:] = keep_points[:,::-1]
+            data_add[:,2:] = keep_points
 
             data.append(data_add, axis=0)
 
@@ -1374,6 +1125,32 @@ class Registration:
             axis2[i,1,:] = pos2[:3]*np.sqrt(np.sum(scale**2))/4
 
         return axis1, axis2
+
+    def score_registration(self, img_float, img_ref, scale, 
+            metric="MeanSquares", **kwargs):
+            
+        if metric not in SITK_METRICS:
+            raise ValueError(f"Metric {metric} is not supported. Supported metrics are: {SITK_METRICS}")
+
+        img_float_sitk = sitk.GetImageFromArray(img_float.astype(np.float32))
+        img_float_sitk.SetSpacing(scale[::-1])
+        img_ref_sitk = sitk.GetImageFromArray(img_ref.astype(np.float32))
+        img_ref_sitk.SetSpacing(scale[::-1])
+
+        evaluator = sitk.ImageRegistrationMethod()
+        if metric == "MeanSquares":
+            evaluator.SetMetricAsMeanSquares(**kwargs)  # or any other metric
+        elif metric == "Correlation":
+            evaluator.SetMetricAsCorrelation(**kwargs)
+        elif metric == "JointHistogram":
+            evaluator.SetMetricAsJointHistogram(**kwargs)
+        # evaluator.SetMetricAsMeanSquares()  # or any other metric
+        evaluator.SetOptimizerAsGradientDescent(0.1,100)
+        evaluator.SetInitialTransform(sitk.TranslationTransform(2))
+        evaluator.SetInterpolator(sitk.sitkLinear)
+        score = evaluator.MetricEvaluate(img_ref_sitk, img_float_sitk)
+
+        return score
 
 def get_pyramid_levels(dataset, maximum_size = 100, verbose = True):
     """
@@ -1575,6 +1352,38 @@ class RegistrationVT(Registration):
 
         return registration_args
     
+    def apply_trnsf(self, image, trnsf, scale, padding):
+
+        vtImage = self._array2image(image, scale)
+
+        img = vt.apply_trsf(vtImage, trnsf).copy_to_array()
+
+        return img
+
+    def apply_trnsf_to_points(self, points, trnsf):
+        """
+        Apply a SimpleITK transform to a list/array of points.
+        
+        Parameters:
+        - points: (N, D) numpy array of N D-dimensional points (D=2 or 3)
+        - trnsf: SimpleITK.Transform (can be affine, displacement field, etc.)
+        
+        Returns:
+        - Transformed points as numpy array of shape (N, D)
+        """
+
+        vtPoints = vt.vtPointList(points[:,::-1].tolist())
+        vtPoints_ = vt.apply_trsf_to_points(vtPoints, vt.invert(trnsf))
+        # print(vtPoints_.copy_to_array()[:,:self._n_spatial][:,::-1])
+
+        return vtPoints_.copy_to_array()[:,:self._n_spatial][:,::-1]
+
+    def write_trnsf(self, trnsf, out):
+        vt.write_trnsf(trnsf, out+".trnsf")
+
+    def read_trnsf(self, out):
+        return vt.read_trnsf(out+".trnsf")
+
     def register(self, img_float, img_ref, scale, verbose=False):
 
         img_float_vt = self._array2image(img_float, scale)
@@ -1617,9 +1426,6 @@ class RegistrationVT(Registration):
             compensation[:self._n_spatial, -1] = center.copy_to_array()[0] - center_moved.copy_to_array()[0]
             trnsf = vt.compose_trsf([vt.vtTransformation(compensation), trnsf])
 
-        if self._registration_type == "vectorfield":
-            return self._vectorfield2array(trnsf, scale)
-
         #Invert axis order to make it consistent with input order
         if self._n_spatial == 2:
             v = [0,1,-1]
@@ -1627,9 +1433,9 @@ class RegistrationVT(Registration):
         else:
             v = [0,1,2,-1]
             v_ = [2,1,0,-1]
-        trnsf = trnsf.copy_to_array()
-        trnsf = trnsf[:,v_]
-        trnsf = trnsf[v_,:]
+        # trnsf = trnsf.copy_to_array()
+        # trnsf = trnsf[:,v_]
+        # trnsf = trnsf[v_,:]
 
         return trnsf
     
@@ -1756,6 +1562,379 @@ class RegistrationVT(Registration):
 #         that the most lowest level, ie #0, refers to the original image). For
 #         intermediary levels, values are linearly interpolated.
 
+class RegistrationSITK(Registration):
+    """
+    A class to perform image registration.
+
+    Parameters:
+        out (str, optional): Output path to save the registration results. Default is None.
+        registration_type (str, optional): Type of registration to perform. Default is "rigid".
+        perform_global_trnsf (bool, optional): Whether to perform global transformation. Default is None.
+        pyramid_lowest_level (int, optional): Lowest level of the pyramid for multi-resolution registration. Default is 0.
+        pyramid_highest_level (int, optional): Highest level of the pyramid for multi-resolution registration. Default is 3.
+        registration_direction (str, optional): Direction of registration, either "forward" or "backward". Default is "backward".
+        args_registration (str, optional): Additional arguments for the registration process. Default is an empty string.
+
+    Attributes:
+        registration_type (str): The type of registration to perform.
+        perform_global_trnsf (bool): Whether to perform global transformation.
+        pyramid_lowest_level (int): The lowest level of the pyramid.
+        pyramid_highest_level (int): The highest level of the pyramid.
+        registration_direction (str): The direction of registration.
+        args_registration (str): Additional arguments for registration.
+        _n_spatial (None): Placeholder for number of spatial dimensions.
+        _fitted (bool): Whether the registration object has been fitted.
+        _box (None): Placeholder for the bounding box.
+        _t_max (None): Placeholder for the maximum time point.
+        _origin (None): Placeholder for the origin.
+        _transfs (dict): Dictionary to store transformations.
+    Methods:
+        save(out=None, overwrite=False):
+        load(out):
+        _create_folder():
+            Creates the necessary folders for saving the registration object.
+        _save_transformation_relative(trnsf, pos_float, pos_ref):
+            Saves the relative transformation.
+        _save_transformation_global(trnsf, pos_float, pos_ref):
+            Saves the global transformation.
+        _load_transformation_relative(pos_float, pos_ref):
+            Loads the relative transformation.
+        _load_transformation_global(pos_float, pos_ref):
+            Loads the global transformation.
+        _trnsf_exists_relative(pos_float, pos_ref):
+            Checks if the relative transformation exists.
+        _trnsf_exists_global(pos_float, pos_ref):
+            Checks if the global transformation exists.
+        fit(dataset, use_channel=None, axis=None, scale=None, downsample=None, save_behavior="Continue", verbose=False):
+        apply(dataset, out=None, axis=None, scale=None, downsample=None, save_behavior="Continue", transformation="global", verbose=False, **kwargs):
+            Applies the registration to a dataset and saves the results to the specified path.
+        fit_apply(dataset, out=None, use_channel=None, axis=None, scale=None, downsample=None, save_behavior="Continue", transformation="global", verbose=False):
+            Fits and applies the registration to a dataset and saves the results to the specified path.
+        vectorfield(mask=None, axis=None, scale=None, out=None, n_points=20, transformation="relative", **kwargs):
+            Computes the vector field of the registration.
+        trajectories(mask=None, axis=None, scale=None, out=None, n_points=20, transformation="relative", **kwargs):
+            Computes the trajectories of the registration.
+    """
+
+    def __init__(self, 
+            registration_type,
+            metric="MeanSquares", 
+            optimizer="RegularStepGradientDescent",
+            sampling="None",
+            optimizer_learningRate=1,
+            optimizer_minStep=1e-5,
+            optimizer_numberOfIterations=500,
+            optimizer_gradientMagnitudeTolerance=1e-10,        
+            optimizer_radius=1,
+            pyramid_shrink_factor=(1,),
+            pyramid_smoothing_sigmas=(0,),
+            displacement_field_smoothing_sigmas=0.,
+        ):
+        """
+        Initialize the registration object with the specified parameters.
+
+        Parameters:
+        registration_type (str, optional): Type of registration to perform. Default is "rigid".
+        pyramid_lowest_level (int, optional): Lowest level of the pyramid for multi-resolution registration. Default is 0.
+        pyramid_highest_level (int, optional): Highest level of the pyramid for multi-resolution registration. Default is 3.
+        args_registration (str, optional): Additional arguments for the registration process. Default is an empty string.
+        """
+
+        super().__init__()
+
+        if registration_type not in SITK_TRANSFORMATIONS:
+            raise ValueError(f"Invalid registration type: {registration_type}. Supported types are: {SITK_TRANSFORMATIONS}")
+
+        if metric not in SITK_METRICS:
+            raise ValueError(f"Invalid metric: {metric}. Supported metrics are: {SITK_METRICS}")
+
+        if optimizer not in SITK_OPTIMIZERS:
+            raise ValueError(f"Invalid optimizer: {optimizer}. Supported optimizers are: {SITK_OPTIMIZERS}")
+        
+        if sampling not in SITK_SAMPLING:
+            raise ValueError(f"Invalid sampling: {sampling}. Supported samplings are: {SITK_SAMPLING}")
+
+        self._registration_type = registration_type
+        self._metric = metric
+        self._sampling = sampling
+        self._optimizer = optimizer
+        self._optimizer_learningRate = optimizer_learningRate
+        self._optimizer_minStep = optimizer_minStep
+        self._optimizer_numberOfIterations = optimizer_numberOfIterations
+        self._optimizer_gradientMagnitudeTolerance = optimizer_gradientMagnitudeTolerance
+        self._optimizer_radius = optimizer_radius
+        self._pyramid_shrink_factor = pyramid_shrink_factor
+        self._pyramid_smoothing_sigmas = pyramid_smoothing_sigmas
+        self._displacement_field_smoothing_sigmas = displacement_field_smoothing_sigmas
+
+    def setMetric(self, R):
+
+        if self._metric == "MeanSquares":
+            R.SetMetricAsMeanSquares()
+        elif self._metric == "Demons":
+            R.SetMetricAsDemons()
+        elif self._metric == "Correlation":
+            R.SetMetricAsCorrelation()
+        elif self._metric == "ANTSNeighborhoodCorrelation":
+            R.SetMetricAsANTSNeighborhoodCorrelation(
+                self._optimizer_radius
+            )
+        elif self._metric == "JointHistogramMutualInformation":
+            R.SetMetricAsJointHistogramMutualInformation()
+        elif self._metric == "MattesMutualInformation":
+            R.SetMetricAsMattesMutualInformation()
+        else:
+            raise ValueError(f"Invalid metric: {self._metric}. Supported metrics are: {SITK_METRICS}")
+        
+    def setOptimizer(self, R):
+
+        if self._optimizer == "Exhaustive":
+            R.SetOptimizerAsExhaustive(self._optimizer_iterations, 0.1)
+        elif self._optimizer == "Nelder-Mead":
+            R.SetOptimizerAsNelderMead()
+        elif self._optimizer == "Powell":
+            R.SetOptimizerAsPowell()
+        elif self._optimizer == "Evolutionary":
+            R.SetOptimizerAsEvolutionary()
+        elif self._optimizer == "GradientDescent":
+            # help(R.SetOptimizerAsGradientDescent)
+            R.SetOptimizerAsGradientDescent(
+                learningRate=self._optimizer_learningRate,
+                numberOfIterations=self._optimizer_numberOfIterations,
+            )
+            R.SetOptimizerScalesFromIndexShift()
+        elif self._optimizer == "GradientDescentLineSearch":
+            # help(R.SetOptimizerAsGradientDescentLineSearch)
+            R.SetOptimizerAsGradientDescentLineSearch(
+                learningRate=self._optimizer_learningRate,
+                numberOfIterations=self._optimizer_numberOfIterations,
+            )
+            R.SetOptimizerScalesFromIndexShift()
+        elif self._optimizer == "RegularStepGradientDescent":
+            # help(R.SetOptimizerAsRegularStepGradientDescent)
+            R.SetOptimizerAsRegularStepGradientDescent(
+                learningRate=self._optimizer_learningRate,
+                numberOfIterations=self._optimizer_numberOfIterations,
+                minStep=self._optimizer_minStep,
+            )
+            R.SetOptimizerScalesFromIndexShift()
+        elif self._optimizer == "ConjugateGradientLineSearch":
+            # help(R.SetOptimizerAsRegularStepGradientDescent)
+            R.SetOptimizerAsConjugateGradientLineSearch(
+                learningRate=self._optimizer_learningRate,
+                numberOfIterations=self._optimizer_numberOfIterations,
+            )
+            R.SetOptimizerScalesFromIndexShift()
+        elif self._optimizer == "L-BFGS-B":
+            R.SetOptimizerAsLBFGSB()
+        else:
+            raise ValueError(f"Invalid optimizer: {self._optimizer}. Supported optimizers are: {SITK_OPTIMIZERS}")
+        
+    def setSampling(self, R):
+
+        if self._sampling == "None":
+            R.SetSamplingStrategy(sitk.sitkNone)
+        elif self._sampling == "Random":
+            R.SetSamplingStrategy(sitk.sitkRandom)
+        elif self._sampling == "Regular":
+            R.SetSamplingStrategy(sitk.sitkRegular)
+        else:
+            raise ValueError(f"Invalid sampling: {self._sampling}. Supported samplings are: {SITK_SAMPLING}")
+
+    def setInitialTransform(self, R, dims, img_ref=None):
+
+        displacementTx = None   
+        if self._registration_type == "TranslationTransform":
+            R.SetInitialTransform(sitk.TranslationTransform(dims))
+        elif self._registration_type == "VersorTransform":
+            R.SetInitialTransform(sitk.VersorTransform(dims))
+        elif self._registration_type == "VersorRigid3DTransform":
+            R.SetInitialTransform(sitk.VersorRigid3DTransform())
+        elif self._registration_type == "Euler2DTransform":
+            R.SetInitialTransform(sitk.Euler2DTransform())
+        elif self._registration_type == "Euler3DTransform":
+            R.SetInitialTransform(sitk.Euler3DTransform())
+        elif self._registration_type == "Similarity2DTransform":
+            R.SetInitialTransform(sitk.Similarity2DTransform())
+        elif self._registration_type == "Similarity3DTransform":
+            R.SetInitialTransform(sitk.Similarity3DTransform())
+        elif self._registration_type == "ScaleTransform":
+            R.SetInitialTransform(sitk.ScaleTransform(dims))
+        elif self._registration_type == "ScaleVersor3DTransform":
+            R.SetInitialTransform(sitk.ScaleVersor3DTransform())
+        elif self._registration_type == "ScaleSkewVersor3DTransform":
+            R.SetInitialTransform(sitk.ScaleSkewVersor3DTransform())
+        elif self._registration_type == "ComposeScaleSkewVersor3DTransform":
+            R.SetInitialTransform(sitk.ComposeScaleSkewVersor3DTransform())
+        elif self._registration_type == "AffineTransform":
+            R.SetInitialTransform(sitk.AffineTransform(dims))
+        elif self._registration_type == "BSplineTransform":
+            R.SetInitialTransform(sitk.BSplineTransform(dims))
+        elif self._registration_type == "DisplacementFieldTransform":
+            displacementField = sitk.Image(img_ref.GetSize(), sitk.sitkVectorFloat64)
+            displacementTx = sitk.DisplacementFieldTransform(displacementField)
+            displacementTx.SetSmoothingGaussianOnUpdate(
+                varianceForUpdateField=0.0, varianceForTotalField=self._displacement_field_smoothing_sigmas
+            )
+            R.SetInitialTransform(displacementTx, inPlace=True)
+        else:
+            raise ValueError(f"Invalid registration type: {self._registration_type}. Supported types are: {SITK_TRANSFORMATIONS}")
+        
+        return displacementTx
+    
+    def setPyramid(self, R):
+        R.SetShrinkFactorsPerLevel(self._pyramid_shrink_factor)
+        R.SetSmoothingSigmasPerLevel(self._pyramid_smoothing_sigmas)
+
+    def trnsf2array(self, R):
+
+        if self._registration_type == "TranslationTransform":
+            trnsf = np.eye(self._n_spatial+1)
+            trnsf[:self._n_spatial,-1] = np.array(R.GetOffset())[::-1]
+        elif self._registration_type == "VersorTransform":
+            raise NotImplementedError("VersorTransform is not implemented yet.")
+        elif self._registration_type == "VersorRigid3DTransform":
+            raise NotImplementedError("VersorRigid3DTransform is not implemented yet.")
+        elif self._registration_type == "Euler2DTransform" or self._registration_type == "Euler3DTransform":
+            trnsf = np.eye(self._n_spatial+1)
+            trnsf[:self._n_spatial,:self._n_spatial] = np.array(R.GetMatrix()).reshape((self._n_spatial, self._n_spatial))[:,::-1][::-1,:]
+            trnsf[:self._n_spatial,-1] = np.array(R.GetTranslation())[::-1]
+        elif self._registration_type == "Similarity2DTransform":
+            raise NotImplementedError("Similarity2DTransform is not implemented yet.")
+        elif self._registration_type == "Similarity3DTransform":
+            raise NotImplementedError("Similarity3DTransform is not implemented yet.")
+        elif self._registration_type == "ScaleTransform":
+            raise NotImplementedError("ScaleTransform is not implemented yet.")
+        elif self._registration_type == "ScaleVersor3DTransform":
+            raise NotImplementedError("ScaleVersor3DTransform is not implemented yet.")
+        elif self._registration_type == "ScaleSkewVersor3DTransform":
+            raise NotImplementedError("ScaleSkewVersor3DTransform is not implemented yet.")
+        elif self._registration_type == "ComposeScaleSkewVersor3DTransform":
+            raise NotImplementedError("ComposeScaleSkewVersor3DTransform is not implemented yet.")
+        elif self._registration_type == "AffineTransform":
+            trnsf = np.eye(self._n_spatial+1)
+            trnsf[:self._n_spatial,:self._n_spatial] = np.array(R.GetMatrix()).reshape((self._n_spatial, self._n_spatial))[:,::-1]
+            trnsf[:self._n_spatial,-1] = np.array(trnsf.GetOffset())[::-1]
+        elif self._registration_type == "BSplineTransform":
+            raise NotImplementedError("BSplineTransform is not implemented yet.")
+        elif self._registration_type == "DisplacementFieldTransform":
+            # print(R.GetDisplacementField())
+            df_image = R.GetDisplacementField()  # SimpleITK image
+
+            # Get numpy array of displacements (shape: H x W x 2)
+            displacement = sitk.GetArrayFromImage(df_image)  # shape: (rows, cols, 2)
+
+            # Get physical coordinates of each pixel
+            size = df_image.GetSize()  # (width, height)
+            spacing = df_image.GetSpacing()
+            origin = df_image.GetOrigin()
+            direction = np.array(df_image.GetDirection()).reshape((2, 2))
+
+            # Build grid of physical positions
+            rows, cols = np.indices((size[1], size[0]))  # numpy uses (row, col)
+            coords = np.stack([cols, rows], axis=-1)  # shape: (H, W, 2)
+
+            # Convert to physical space
+            coords = coords * spacing  # apply spacing
+            coords = coords @ direction.T  # apply direction
+            coords += origin  # apply origin
+
+            # Flatten both coordinate and displacement fields
+            start_points = coords.reshape(-1, 2)[:,::-1]
+            vectors = -displacement.reshape(-1, 2)[:,::-1]
+
+            # Build Napari vector array: (N, 2, 2)
+            trnsf = np.stack([start_points, vectors], axis=1)
+            # raise NotImplementedError("DisplacementFieldTransform is not implemented yet.")
+        else:
+            raise ValueError(f"Invalid registration type: {self._registration_type}. Supported types are: {SITK_TRANSFORMATIONS}")
+
+        return trnsf
+    
+    def apply_trnsf(self, image, trnsf, scale, padding):
+
+        img_float_sitk = sitk.GetImageFromArray(image.astype(np.float32))
+        img_float_sitk.SetSpacing(scale[::-1])
+
+        resampler = sitk.ResampleImageFilter()
+        resampler.SetReferenceImage(img_float_sitk)         # use ref image geometry
+        resampler.SetInterpolator(sitk.sitkLinear)
+        resampler.SetDefaultPixelValue(0)
+        resampler.SetTransform(trnsf)                     # this maps img_float → img_ref
+        out = resampler.Execute(img_float_sitk)           # apply T to float image
+
+        img = sitk.GetArrayFromImage(out)
+
+        return img
+
+    def invert_trnsf(self, trnsf):
+        if trnsf.GetName() == "DisplacementFieldTransform":
+            inv_df = sitk.InvertDisplacementField(
+                trnsf.GetDisplacementField(),
+            )
+            return sitk.DisplacementFieldTransform(inv_df)
+        else:
+            return trnsf.GetInverse()
+
+    def apply_trnsf_to_points(self, points, trnsf):
+        """
+        Apply a SimpleITK transform to a list/array of points.
+        
+        Parameters:
+        - points: (N, D) numpy array of N D-dimensional points (D=2 or 3)
+        - trnsf: SimpleITK.Transform (can be affine, displacement field, etc.)
+        
+        Returns:
+        - Transformed points as numpy array of shape (N, D)
+        """
+        trnsf_inv = self.invert_trnsf(trnsf)
+        transformed_points = [trnsf_inv.TransformPoint(tuple(p[::-1])) for p in points]
+        return np.array(transformed_points)[:,::-1]
+
+    def write_trnsf(self, trnsf, out):
+        if self._registration_type == "DisplacementFieldTransform":
+            sitk.WriteTransform(trnsf, out+".hdf")
+        else:
+            sitk.WriteTransform(trnsf, out+".txt")
+
+    def read_trnsf(self, out):
+        if self._registration_type == "DisplacementFieldTransform":
+            return sitk.ReadTransform(out+".hdf")
+        else:
+            return sitk.ReadTransform(out+".txt")
+
+    def register(self, img_float, img_ref, scale, verbose=False):
+
+        def command_iteration(method):
+            """ Callback invoked when the optimization process is performing an iteration. """
+            print(
+                f"{method.GetOptimizerIteration():3} "
+                + f"= {method.GetMetricValue():10.5f} "
+                # + f": {method.GetOptimizerPosition()}"
+            )
+
+        img_float_sitk = sitk.GetImageFromArray(img_float.astype(np.float32))
+        img_float_sitk.SetSpacing(scale[::-1])
+        img_ref_sitk = sitk.GetImageFromArray(img_ref.astype(np.float32))
+        img_ref_sitk.SetSpacing(scale[::-1])
+
+        R = sitk.ImageRegistrationMethod()
+        self.setMetric(R)
+        self.setOptimizer(R)
+        self.setPyramid(R)
+        self.setInitialTransform(R, self._n_spatial, img_ref_sitk)
+        R.SetInterpolator(sitk.sitkLinear)
+        # displacementTx = self.setInitialTransform(R, self._n_spatial, img_ref_sitk)
+        
+        if verbose:
+            R.AddCommand(sitk.sitkIterationEvent, lambda: command_iteration(R))
+
+        trnsf = R.Execute(img_ref_sitk, img_float_sitk)
+
+        # trnsf = self.trnsf2array(outTx)
+
+        return trnsf
+
 class RegistrationMoments(Registration):
     def __init__(self, n_axis, align_center=True, align_rotation=True):
         super().__init__()
@@ -1767,9 +1946,9 @@ class RegistrationMoments(Registration):
     def register(self, img_float, img_ref, scale, verbose=False):
         """Compute the transformation (translation + rotation) to align img2 to img1, considering anisotropy."""
 
-        nx = cp if GPU_AVAILABLE else np 
-        ndix = cndi if GPU_AVAILABLE else ndi
-        skmx = cskm if GPU_AVAILABLE else skm
+        nx = cp if GPU_AVAILABLE and USE_GPU else np 
+        ndix = cndi if GPU_AVAILABLE and USE_GPU else ndi
+        skmx = cskm if GPU_AVAILABLE and USE_GPU else skm
         img_float_ = nx.array(img_float)
         img_ref_ = nx.array(img_ref)
         
@@ -1825,622 +2004,4 @@ class RegistrationMoments(Registration):
         # Apply transformation in the correct order
         trnsf = translation_aff_center @ translation_inv_aff @ rotation_matrix_aff @ translation_aff
 
-        return trnsf.get() if GPU_AVAILABLE else trnsf
-    
-class RegistrationManual(Registration):
-    def __init__(self, n_axis=1):
-        super().__init__()
-    
-    def fit(self, dataset, out=None, axis=None, scale=None, use_channel=None, stepping=None, direction="backward", verbose=False):
-
-        self._perform_global_trnsf = True
-        self._out = out
-        if self._out is not None:
-            if os.path.exists(self._out):
-                self.load(out)
-            else:
-                self.save()
-    
-        if direction not in ["backward", "forward"]:
-            raise ValueError("The direction must be either 'backward' or 'forward'.")
-        self._registration_direction = direction
-
-        # Check inputs
-        axis, scale = _get_axis_scale(dataset, axis, scale)
-
-        self._scale = scale
-        self._axis = axis
-
-        self._t_max = _dict_axis_shape(axis, dataset.shape)["T"]
-
-        self._n_spatial = sum([i in "XYZ" for i in axis])
-
-        self._spatial_shape = tuple([j for i,j in _dict_axis_shape(axis, dataset.shape).items() if i in "XYZ"])
-
-        self._arrow_scale = np.sqrt(np.sum(np.array([j for i, j in _dict_axis_shape(axis, dataset.shape).items() if i in "XYZ"])**2)) / 4
-
-        ax_ = [j for i,j in _dict_axis_shape(axis, dataset.shape).items() if i in "XYZ"]
-
-        viewer = napari.Viewer()
-        viewer.add_image(dataset, scale=scale, name="Dataset", opacity=0.5)
-        viewer.add_image(dataset, scale=scale, name="Dataset (corrected)", opacity=0.5, colormap="green")
-        dataset_dask = da.from_array(dataset, chunks=dataset.shape)
-        if self._registration_direction == "backward":
-            slicing = make_index(self._axis, T=slice(1,None,1))
-            print(self._axis, slicing)
-            viewer.add_image(dataset_dask[slicing], scale=scale, name="Dataset t+1", opacity=0.5, colormap="red")
-        else:
-            slicing = make_index(self._axis, T=slice(None,-1,None))
-            viewer.add_image(dataset_dask[slicing], scale=scale, name="Dataset t+1", opacity=0.5, colormap="red")
-
-        viewer.add_shapes(
-            data=np.array([]),
-            shape_type='polygon',
-            edge_color='yellow',
-            edge_width=1,
-            face_color='transparent',
-            opacity=0.1,
-            name='Original Bounding Box',
-            blending='translucent_no_depth'
-        )
-
-        # Add to napari as polygons
-        viewer.add_shapes(
-            data=np.array([]),
-            shape_type='polygon',
-            edge_color='white',
-            edge_width=1,
-            face_color='transparent',
-            opacity=0.1,
-            name='Bounding Box',
-            blending='translucent_no_depth'
-        )
-
-        if direction == "backward":
-            self._origin = 0
-        else:
-            self._origin = self._t_max-1
-
-        if self._out is None:
-            for t in range(self._t_max):
-                self._save_transformation_global(np.eye(4), t, self._origin)
-        elif len(os.listdir(os.path.join(self._out, "trnsf_global"))) == 0:
-            for t in range(self._t_max):
-                self._save_transformation_global(np.eye(4), t, self._origin)
-
-        if self._n_spatial == 2:
-            viewer.dims.ndisplay = 2
-        else:
-            viewer.dims.ndisplay = 3
-        viewer.dims.current_step = (0, 0, 0)
-        widget = AffineRegistrationWidget(self, viewer, axis)
-        viewer.window.add_dock_widget(widget, area='right')
-        napari.run()
-
-        self._fitted = True
-        if self._out is not None:
-            self.save()
-
-class AffineRegistrationWidget(QWidget):
-    
-    def __init__(self, model, viewer, axis):
-        super().__init__()
-
-        self.viewer = viewer
-        self.model = model
-        self.axis = axis
-
-        self._registration_model = RegistrationVT()
-        self._registration_model._n_spatial = model._n_spatial
-        self._registration_model._spatial_shape = model._spatial_shape
-        self._last_t = viewer.dims.current_step[axis.index("T")]
-        self.setWindowTitle("Rotation Widget")
-        self.layout = QVBoxLayout()
-        self.explanation = self.create_explanation()
-        self.register_button = self.create_button("Register", self.register)
-        self.rotation_slider = self.create_slider("Rotation step", 1, 360, 1)
-        self.translation_slider = self.create_slider("Translation Step", 1, np.min(model._spatial_shape), min(1,np.min(model._spatial_shape)//100))
-        self.propagate_backwards_button = self.create_button("Propagate backwards", self.propagate_backwards)
-        self.propagate_forwards_button = self.create_button("Propagate forwards", self.propagate_forwards)
-        self.make_limits()
-        self.setLayout(self.layout)
-
-        faces = self.bounding_box(0, self.model._spatial_shape[0], 0, self.model._spatial_shape[1], 0, self.model._spatial_shape[2])
-        self.viewer.layers["Original Bounding Box"].data = faces
-
-        # viewer.mouse_drag_callbacks.append(self.on_mouse_drag)
-        self.viewer.bind_key("Shift+W",self.on_keyboard_up_translate)
-        self.viewer.bind_key("Shift+S",self.on_keyboard_down_translate)
-        self.viewer.bind_key("Shift+A",self.on_keyboard_left_translate)
-        self.viewer.bind_key("Shift+D",self.on_keyboard_right_translate)
-        self.viewer.bind_key("Shift+Q",self.on_keyboard_counterclockwise_rotate)
-        self.viewer.bind_key("Shift+E",self.on_keyboard_clockwise_rotate)
-        self.viewer.bind_key("Shift+R",self.register)
-        self.viewer.dims.events.current_step.connect(self.update_images)
-        # self.viewer.window._qt_viewer.canvas.setFocus()
-
-    def create_explanation(self):
-        widget = QWidget()
-        layout = QVBoxLayout()
-        label = QLabel(
-            """
-            Shift + W: Translate up.
-            Shift + S: Translate down.
-            Shift + A: Translate left.
-            Shift + D: Translate right.
-            Shift + Q: Rotate counterclockwise.
-            Shift + E: Rotate clockwise.
-
-            Shift + R: Register the transformation.
-            """
-        )
-        layout.addWidget(label)
-        widget.setLayout(layout)
-        self.layout.addWidget(widget)
-        return widget
-
-    def create_button(self, label_text, callback):
-        button = QPushButton(label_text)
-        button.clicked.connect(callback)
-        self.layout.addWidget(button)
-        return button
-
-    def create_slider(self, label_text, min_value, max_value, set_value):
-        widget = QWidget()
-        layout = QVBoxLayout()
-        label = QLabel(f"{label_text}: {set_value}")
-        slider = QSlider(Qt.Horizontal)
-        slider.setMinimum(min_value)
-        slider.setMaximum(max_value)
-        slider.setValue(set_value)
-        slider.valueChanged.connect(lambda value, l=label: l.setText(f"{label_text}: {value}"))
-        layout.addWidget(label)
-        layout.addWidget(slider)
-        widget.setLayout(layout)
-        self.layout.addWidget(widget)
-        return widget
-
-    def make_limits(self):
-        coord_widget = QWidget()
-        coord_layout = QGridLayout()
-        coord_layout.setContentsMargins(0, 0, 0, 0)
-        coord_layout.setSpacing(5)
-
-        # Row 0: Min values
-        self.minX_input, self.minX_field = self.create_labeled_input("Min X", 0)
-        self.minY_input, self.minY_field = self.create_labeled_input("Min Y", 0)
-        if self._registration_model._n_spatial == 3:
-            self.minZ_input, self.minZ_field = self.create_labeled_input("Min Z", 0)
-
-        coord_layout.addWidget(self.minX_input, 0, 0)
-        coord_layout.addWidget(self.minY_input, 0, 1)
-        if self._registration_model._n_spatial == 3:
-            coord_layout.addWidget(self.minZ_input, 0, 2)
-
-        # Row 1: Max values
-        self.maxX_input, self.maxX_field = self.create_labeled_input("Max X", self._registration_model._spatial_shape[0])
-        self.maxY_input, self.maxY_field = self.create_labeled_input("Max Y", self._registration_model._spatial_shape[1])
-        if self._registration_model._n_spatial == 3:
-            self.maxZ_input, self.maxZ_field = self.create_labeled_input("Max Z", self._registration_model._spatial_shape[2])
-
-        coord_layout.addWidget(self.maxX_input, 1, 0)
-        coord_layout.addWidget(self.maxY_input, 1, 1)
-        if self._registration_model._n_spatial == 3:
-            coord_layout.addWidget(self.maxZ_input, 1, 2)
-
-        coord_widget.setLayout(coord_layout)
-        self.layout.addWidget(coord_widget)
-
-        # Connect input changes to bounding_box
-        self.minX_field.textChanged.connect(self.update_bounding_box)
-        self.minY_field.textChanged.connect(self.update_bounding_box)
-        self.maxX_field.textChanged.connect(self.update_bounding_box)
-        self.maxY_field.textChanged.connect(self.update_bounding_box)
-        if self._registration_model._n_spatial == 3:
-            self.minZ_field.textChanged.connect(self.update_bounding_box)
-            self.maxZ_field.textChanged.connect(self.update_bounding_box)
-
-        # Initial box
-        self.update_bounding_box()
-
-    def create_labeled_input(self, label_text, default_value):
-        widget = QWidget()
-        layout = QHBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(3)
-
-        label = QLabel(label_text)
-        label.setFixedWidth(45)
-        input_field = QLineEdit()
-        input_field.setText(str(default_value))
-        input_field.setFixedWidth(60)
-
-        layout.addWidget(label)
-        layout.addWidget(input_field)
-        widget.setLayout(layout)
-
-        return widget, input_field  # Return both
-
-    def bounding_box(self, x_min=None, x_max=None, y_min=None, y_max=None, z_min=None, z_max=None):
-
-        # Define the 8 corners of the box
-        corners = np.array([
-            [z_min, y_min, x_min],
-            [z_max, y_min, x_min],
-            [z_max, y_max, x_min],
-            [z_min, y_max, x_min],
-            [z_min, y_min, x_max],
-            [z_max, y_min, x_max],
-            [z_max, y_max, x_max],
-            [z_min, y_max, x_max],
-        ])
-
-        # Define the 6 faces using 4 vertices each (polygons)
-        faces = [
-            [corners[0], corners[1], corners[2], corners[3]],  # Bottom
-            [corners[4], corners[5], corners[6], corners[7]],  # Top
-            [corners[0], corners[1], corners[5], corners[4]],  # Front
-            [corners[2], corners[3], corners[7], corners[6]],  # Back
-            [corners[1], corners[2], corners[6], corners[5]],  # Right
-            [corners[3], corners[0], corners[4], corners[7]],  # Left
-        ]
-
-        return np.array(faces)
-    
-    def update_bounding_box(self):
-
-        # Get coordinates from UI
-        x_min = float(self.minX_input.findChild(QLineEdit).text())
-        x_max = float(self.maxX_input.findChild(QLineEdit).text())
-        y_min = float(self.minY_input.findChild(QLineEdit).text())
-        y_max = float(self.maxY_input.findChild(QLineEdit).text())
-        z_min = float(self.minZ_input.findChild(QLineEdit).text()) if self._registration_model._n_spatial == 3 else 0
-        z_max = float(self.maxZ_input.findChild(QLineEdit).text()) if self._registration_model._n_spatial == 3 else 0
-
-        faces = self.bounding_box(x_min, x_max, y_min, y_max, z_min, z_max)
-
-        self.viewer.layers["Bounding Box"].data = faces
-
-    def register(self,*args):
-        t = self.viewer.dims.current_step[self.axis.index("T")]
-        if "C" in self.axis:
-            slicing = make_index(self.axis, 
-                                 T = self.viewer.dims.current_step[self.axis.index("T")],
-                                 C = self.viewer.dims.current_step[self.axis.index("C")]
-            )
-            if t == self.model._t_max-1:
-                slicing_ = make_index(self.axis, 
-                                     T = self.viewer.dims.current_step[self.axis.index("T")-1],
-                                     C = self.viewer.dims.current_step[self.axis.index("C")]
-                )
-            else:
-                slicing_ = slicing
-        else:
-            slicing = make_index(self.axis, 
-                                 T = self.viewer.dims.current_step[self.axis.index("T")]
-            )
-            if t == self.model._t_max-1:
-                slicing_ = make_index(self.axis, 
-                                     T = self.viewer.dims.current_step[self.axis.index("T")-1],
-                )
-            else:
-                slicing_ = slicing
-
-        layer = self.viewer.layers["Dataset t+1"]
-        # translation = np.eye(4)
-        # translation[:3, 3] = np.array([0, 0, 20])  # Replace with desired translation values (x, y, z)
-        # trnsf = translation
-        # self.viewer.layers["Dataset t+1"].data[0,t] = ndi.affine_transform(self.viewer.layers["Dataset"].data[0,t], trnsf, order=1)
-        img_ref = self.viewer.layers["Dataset"].data[slicing]
-        img_float = self.viewer.layers["Dataset t+1"].data[slicing_]
-        trnsf_ref = self.model._load_transformation_global(t, self.model._origin)
-        trnsf_float = self.model._load_transformation_global(t+1, self.model._origin)
-        # trnsf_ref = self.model._transfs[t]
-        # trnsf_float = self.model._transfs[t+1]
-        # print(trnsf_ref)
-        # print(trnsf_float)
-        # print(trnsf_float)
-        # trnsf = np.linalg.inv(trnsf)
-        # print(trnsf)
-
-        # Scaling matrices (fixing order of operations)
-        img_ref = self.model.apply_trnsf(img_ref, trnsf_ref, self.model._scale)
-        img_float = self.model.apply_trnsf(img_float, trnsf_float, self.model._scale)
-
-        trnsf = self._registration_model.register(
-            img_float, 
-            img_ref, 
-            self.model._scale, 
-            verbose=True
-        )
-
-        # trnsf= np.linalg.inv(trnsf)
-
-        # trnsf = vt.inv_trsf(trnsf).copy_to_array()
-        # trnsf = trnsf.copy_to_array()
-
-        # trnsf = scaling_inv @ trnsf @ scaling
-        # trnsf = trnsf
-        # trnsf[:3, :3] = trnsf[:3, :3][:, [2, 1, 0]]
-        # trnsf[:3, :3] = trnsf[:3, :3][[2, 1, 0],:]
-        # trnsf[:3, 3] = trnsf[:3, 3][[2, 1, 0]]
-
-        # print(trnsf)
-        trnsf = self.model.compose_trnsf([trnsf, trnsf_float])
-        # print(trnsf)
-
-        # t = self.viewer.dims.current_step[self.axis.index("T")]
-        # layer.affine = np.linalg.inv(trnsf)
-        self.model._save_transformation_global(trnsf, t+1, self.model._origin)
-        self.update_images(None, refresh=True)
-        # self.model._transfs[t+1] = trnsf
-
-    def update_images(self, event, refresh=False):
-        # Get current time step
-        t = self.viewer.dims.current_step[self.axis.index("T")]
-
-        # Check if t has actually changed
-        if hasattr(self, "_last_t") and self._last_t == t and not refresh:
-            return  # Skip update if t is the same as before
-
-        # Store the new value of t
-        self._last_t = t  
-
-        # Now update the affine transformations only if necessary
-        self.viewer.layers["Dataset (corrected)"].affine = np.linalg.inv(self.model._load_transformation_global(t, self.model._origin))
-        self.viewer.layers["Dataset t+1"].affine = np.linalg.inv(self.model._load_transformation_global(min(t+1, self.model._t_max-1), self.model._origin))
-
-        # self.viewer.layers["Dataset (corrected)"].affine = self.model._transfs[t]
-        # self.viewer.layers["Dataset t+1"].affine = self.model._transfs[t + 1]
-
-    def on_mouse_drag_major(self, viewer, event: Event):
-        """Rotate dataset about its center around the camera view direction,
-        accumulating the rotation incrementally.
-        
-        The rotation axis is given by self.viewer.camera.view_direction.
-        """
-        # Only operate if ALT is held (and CONTROL is not)
-        if ALT not in event.modifiers or CONTROL in event.modifiers:
-            return
-
-        # Yield once to start listening for drag events
-        yield
-
-        # Initialize the starting mouse position and an accumulated transform.
-        pos0 = None
-        layer = self.viewer.layers["Dataset t+1"]
-
-        while event.type == "mouse_move":
-            if pos0 is None:
-                pos0 = event.pos
-            else:
-                accumulated_affine = layer.affine.affine_matrix[2:,2:]
-
-                # Compute the center of the dataset.
-                # For a 3D image, we assume layer.data.shape is (z, y, x) and compute center in (x, y, z).
-                center = np.array(layer.data.shape[-3:], dtype=float) / 2.0
-                center = center*layer.scale[-3:]
-
-                y = self.viewer.camera.up_direction
-                y = y / np.linalg.norm(y)
-                z= self.viewer.camera.view_direction
-                z = z / np.linalg.norm(z)
-                x = np.cross(y, z)
-                x = x / np.linalg.norm(x)
-
-                delta = (event.pos - pos0)/10
-
-                t = self.viewer.dims.current_step[self.axis.index("T")]
-                v1 = self.model._axis1[t, 1, :]
-                v2 = v1 + x * delta[0] - y * delta[1]
-                self.model._axis1[t, 1, :] = self.model._axis1[t, 1, :] / np.linalg.norm(self.model._axis1[t, 1, :]) * self.model._arrow_scale
-                
-                v1 /= np.linalg.norm(v1)
-                v2 /= np.linalg.norm(v2)
-                axis = np.cross(v1, v2)
-
-                if np.linalg.norm(axis) < 1e-6:
-                    # No rotation is possible if the vectors are parallel.
-                    # Skip the rest of the loop and wait for the next event.
-                    pos0 = event.pos
-                else:
-                    axis /= np.linalg.norm(axis)
-                    angle_delta = np.arccos(np.dot(v1, v2)) * 0.01                
-
-                    # For 3D rotation, build the 4×4 incremental transform.
-                    # First, translate the center to the origin:
-                    T_translate = np.eye(4)
-                    T_translate[:3, 3] = -center
-                    # Then, translate back:
-                    T_back = np.eye(4)
-                    T_back[:3, 3] = center
-
-                    # Build the 3×3 rotation matrix using Rodrigues' formula.
-                    I = np.eye(3)
-                    K = np.array([
-                        [0, -axis[2], axis[1]],
-                        [axis[2], 0, -axis[0]],
-                        [-axis[1], axis[0], 0]
-                    ])
-                    R_3 = I * np.cos(angle_delta) + np.sin(angle_delta) * K + (1 - np.cos(angle_delta)) * np.outer(axis, axis)
-                    # Embed the 3×3 rotation into a 4×4 homogeneous matrix.
-                    R = np.eye(4)
-                    R[:3, :3] = R_3
-
-                    # Compute the incremental transformation: move to origin, rotate, and move back.
-                    incremental_transform = T_back @ R @ T_translate
-
-                    # Accumulate the transform (apply the new incremental transform on top of the previous one)
-                    accumulated_affine = incremental_transform @ accumulated_affine
-
-                    # Update the layer’s affine transform
-                    layer.affine = accumulated_affine
-
-                    # Update the starting position for the next delta computation.
-                    pos0 = event.pos
-
-            # Yield control back to napari so it can process other events.
-            yield
-
-    def propagate_forwards(self, accumulated_affine):
-        t = self.viewer.dims.current_step[self.axis.index("T")]
-        trnsf = self.model._load_transformation_global(t+1, self.model._origin)
-        for t_ in range(t+2, self.model._t_max):
-            self.model._save_transformation_global(trnsf, t_, self.model._origin)
-            # self.model._transfs[t_] = trnsf
-            # self.model._transfs[t_] = self.model._transfs[t+1]
-        self.viewer.dims.set_current_step(self.axis.index("T"), min(self.model._t_max - 1, t + 1))
-    
-    def propagate_backwards(self, accumulated_affine):
-        t = self.viewer.dims.current_step[self.axis.index("T")]
-        trnsf = self.model._load_transformation_global(t, self.model._origin)
-        for t_ in range(t-1, -1, -1):
-            self.model._save_transformation_global(trnsf, t_, self.model._origin)
-            # self.model._transfs[t_] = self.model._transfs[t-1]
-        self.viewer.dims.set_current_step(self.axis.index("T"), max(0, t - 1))
-
-    def rotate(self, layer, axis):
-        angle = np.radians(self.rotation_slider.findChild(QSlider).value())
-        accumulated_affine = layer.affine.affine_matrix[-self.model._n_spatial-1:,-self.model._n_spatial-1:]
-        center = np.array(layer.data.shape[-3:], dtype=float) / 2.0
-        center = center*layer.scale[-3:]
-        # For 3D rotation, build the 4×4 incremental transform.
-        # First, translate the center to the origin:
-        T_translate = np.eye(4)
-        T_translate[:3, 3] = -center
-        # Then, translate back:
-        T_back = np.eye(4)
-        T_back[:3, 3] = center
-        # Build the 3×3 rotation matrix using Rodrigues' formula.
-        I = np.eye(3)
-        K = np.array([
-            [0, -axis[2], axis[1]],
-            [axis[2], 0, -axis[0]],
-            [-axis[1], axis[0], 0]
-        ])
-        R_3 = I * np.cos(angle) + np.sin(angle) * K + (1 - np.cos(angle)) * np.outer(axis, axis)
-        # Embed the 3×3 rotation into a 4×4 homogeneous matrix.
-        R = np.eye(4)
-        R[:3, :3] = R_3
-        # Compute the incremental transformation: move to origin, rotate, and move back.
-        incremental_transform = T_back @ R @ T_translate
-        # Accumulate the transform (apply the new incremental transform on top of the previous one)
-        accumulated_affine = incremental_transform @ accumulated_affine
-        # Update the layer’s affine transform
-        layer.affine = accumulated_affine
-        t = self.viewer.dims.current_step[self.axis.index("T")]
-        self.model._save_transformation_global(np.linalg.inv(accumulated_affine), t+1, self.model._origin)
-        # self.model._transfs[t+1] = accumulated_affine
-        # for t_ in range(t+1, self.model._t_max):
-        #     self.model._transfs[t_] = accumulated_affine
-
-    def translate(self, layer, axis):
-        step = self.translation_slider.findChild(QSlider).value()
-        
-        # Get the current affine transformation (6×6 matrix)
-        accumulated_affine = layer.affine.affine_matrix[-self.model._n_spatial-1:,-self.model._n_spatial-1:]
-
-        # Build a 6×6 translation matrix
-        T_translate = np.eye(4)  # Identity matrix
-        T_translate[:3, -1] = np.array(axis) * step  # Apply translation correctly
-
-        # Accumulate the transformation
-        accumulated_affine = T_translate @ accumulated_affine  # Ensure correct order
-
-        # Properly assign the new affine transformation
-        layer.affine = accumulated_affine
-        t = self.viewer.dims.current_step[self.axis.index("T")]
-        self.model._save_transformation_global(np.linalg.inv(accumulated_affine), t+1, self.model._origin)
-        # self.model._transfs[t+1] = accumulated_affine
-
-    def on_keyboard_clockwise_rotate(self, viewer):
-        """Rotate dataset about its center around the camera view direction,
-        accumulating the rotation incrementally.
-        
-        The rotation axis is given by self.viewer.camera.view_direction.
-        """
-        layer = self.viewer.layers["Dataset t+1"]
-
-        v = np.array(self.viewer.camera.view_direction)
-        print("clockwise", v)
-
-        self.rotate(layer, -v)
-
-    def on_keyboard_counterclockwise_rotate(self, viewer):
-        """Rotate dataset about its center around the camera view direction,
-        accumulating the rotation incrementally.
-        
-        The rotation axis is given by self.viewer.camera.view_direction.
-        """
-        layer = self.viewer.layers["Dataset t+1"]
-
-        v = np.array(self.viewer.camera.view_direction)
-        print("counterclockwise", v)
-
-        self.rotate(layer, v)
-
-    def on_keyboard_up_translate(self, viewer):
-        """Rotate dataset about its center around the camera view direction,
-        accumulating the rotation incrementally.
-        
-        The rotation axis is given by self.viewer.camera.view_direction.
-        """
-        layer = self.viewer.layers["Dataset t+1"]
-
-        v = self.up_direction()
-        print("up", v)
-
-        self.translate(layer, v)
-
-    def on_keyboard_down_translate(self, viewer):
-        """Rotate dataset about its center around the camera view direction,
-        accumulating the rotation incrementally.
-        
-        The rotation axis is given by self.viewer.camera.view_direction.
-        """
-        layer = self.viewer.layers["Dataset t+1"]
-
-        v = self.up_direction()
-        print("down", v)
-
-        self.translate(layer, -v)
-
-    def on_keyboard_right_translate(self, viewer):
-        """Rotate dataset about its center around the camera view direction,
-        accumulating the rotation incrementally.
-        
-        The rotation axis is given by self.viewer.camera.view_direction.
-        """
-        layer = self.viewer.layers["Dataset t+1"]
-
-        v = self.right_direction()
-        print("right", v)
-
-        self.translate(layer, v)
-
-    def on_keyboard_left_translate(self, viewer):
-        """Rotate dataset about its center around the camera view direction,
-        accumulating the rotation incrementally.
-        
-        The rotation axis is given by self.viewer.camera.view_direction.
-        """
-        layer = self.viewer.layers["Dataset t+1"]
-
-        v = self.right_direction()
-        print("left", v)
-
-        self.translate(layer, -v)
-
-    def up_direction(self):
-        x = self.viewer.camera.up_direction
-        x = x / np.linalg.norm(x)
-        return x
-
-    def right_direction(self):
-        y = self.viewer.camera.up_direction
-        y = y / np.linalg.norm(y)
-        z = self.viewer.camera.view_direction
-        z = z / np.linalg.norm(z)
-        x = np.cross(y, z)
-        x = x / np.linalg.norm(x)
-        return x
+        return trnsf.get() if GPU_AVAILABLE and USE_GPU else trnsf
