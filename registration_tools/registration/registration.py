@@ -1373,7 +1373,7 @@ class RegistrationVT(Registration):
         """
 
         vtPoints = vt.vtPointList(points[:,::-1].tolist())
-        vtPoints_ = vt.apply_trsf_to_points(vtPoints, vt.invert(trnsf))
+        vtPoints_ = vt.apply_trsf_to_points(vtPoints, vt.inv_trsf(trnsf))
         # print(vtPoints_.copy_to_array()[:,:self._n_spatial][:,::-1])
 
         return vtPoints_.copy_to_array()[:,:self._n_spatial][:,::-1]
