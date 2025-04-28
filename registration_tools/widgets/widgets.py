@@ -6,6 +6,7 @@ from napari.utils.events import Event
 from vispy.util.keys import ALT, CONTROL
 
 from ..utils.auxiliar import *
+from .common import *
 
 REGISTRATION_TYPES = [
     "translation",
@@ -592,107 +593,3 @@ class AffineRegistrationWidget(QWidget):
         x = x / np.linalg.norm(x)
         return x
 
-from qtpy.QtWidgets import (
-    QDialog, QVBoxLayout, QLineEdit, QPushButton, QFileDialog, QMessageBox, QHBoxLayout
-)
-import os
-
-class SaveDialog(QDialog):
-    def __init__(self, model, viewer):
-        super().__init__()
-        self.model = model
-        self.viewer = viewer
-        self.setWindowTitle("Save to Directory")
-        self.setMinimumWidth(400)
-        self.init_ui()
-        self.setModal(True)  # Block interaction with the main window
-
-    def init_ui(self):
-        layout = QVBoxLayout()
-
-        # Directory input + browse
-        self.dir_input = QLineEdit()
-        self.dir_input.setPlaceholderText("Select a directory...")
-
-        browse_button = QPushButton("Browse")
-        browse_button.clicked.connect(self.browse_directory)
-
-        dir_layout = QHBoxLayout()
-        dir_layout.addWidget(self.dir_input)
-        dir_layout.addWidget(browse_button)
-        layout.addLayout(dir_layout)
-
-        # Action buttons
-        save_button = QPushButton("Create Directory and Save")
-        close_button = QPushButton("Close Without Saving")
-
-        save_button.clicked.connect(self.save_and_close)
-        close_button.clicked.connect(self.reject)
-
-        layout.addWidget(save_button)
-        layout.addWidget(close_button)
-
-        self.setLayout(layout)
-
-    def browse_directory(self):
-        path = QFileDialog.getExistingDirectory(self, "Select Directory")
-        if path:
-            self.dir_input.setText(path)
-
-    def save_and_close(self):
-        path = self.dir_input.text()
-        if not path:
-            QMessageBox.warning(self, "No Directory", "Please select a directory.")
-            return
-
-        if not os.path.exists(path):
-            self.model._out = path
-        elif not os.listdir(path):
-            self.model._out = path
-        else:
-            QMessageBox.warning(self, "Directory not empty", "Please select an empty directory.")
-
-        # Optional: save logic here
-        self.accept()
-
-# Function to show the dialog from Napari
-def show_save_popup(model, viewer):
-    dialog = SaveDialog(model, viewer)
-    dialog.exec_()
-
-class CloseDialog(QDialog):
-    def __init__(self, model, viewer):
-        super().__init__()
-        self.model = model
-        self.viewer = viewer
-        self.setWindowTitle("Close: Files not saved")
-        self.setMinimumWidth(400)
-        self.init_ui()
-        self.setModal(True)  # Block interaction with the main window
-
-    def init_ui(self):
-        layout = QVBoxLayout()
-
-        # Action buttons
-        save_button = QPushButton("Save")
-        close_button = QPushButton("Close Without Saving")
-
-        save_button.clicked.connect(self.save_and_close)
-        close_button.clicked.connect(self.reject)
-
-        layout.addWidget(save_button)
-        layout.addWidget(close_button)
-
-        self.setLayout(layout)
-
-    def save_and_close(self):
-
-        show_save_popup(self.model, self.viewer)
-
-        # Optional: save logic here
-        self.accept()
-
-# Function to show the dialog from Napari
-def show_close_popup(model, viewer):
-    dialog = CloseDialog(model, viewer)
-    dialog.exec_()

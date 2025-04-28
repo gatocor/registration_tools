@@ -2,7 +2,10 @@ import os
 from contextlib import contextmanager
 import numpy as np
 import zarr
+from collections import namedtuple
 from ..dataset import Dataset
+
+ImgProps = namedtuple("ImgProps", ["shape", "shape_spatial", "axis", "scale", "axis_spatial", "n_spatial"])
 
 def _make_index(t, axis, use_channel=None, downsample=(1,1,1)):
     spatial_order = [i for i in axis if i in "XYZ"]
@@ -27,6 +30,47 @@ def make_index(axis, downsample=(1,1,1), **kwargs):
             index[i] = kwargs[ax]
 
     return tuple(index)
+
+def _get_img_prop(mask, axis, scale):
+
+    if axis is None:
+        if isinstance(mask, Dataset):
+            axis = mask._axis
+        elif isinstance(mask, zarr.Array) and "axis" in mask.attrs:
+            axis = mask.attrs["axis"]
+        else:
+            raise ValueError("The axis cannot be inferred from dataset data and must be specified.")
+            
+    if scale is None:
+        if isinstance(mask, Dataset):
+            scale = mask.scale
+        elif isinstance(mask, zarr.Array) and "scale" in mask.attrs:
+            scale = mask.attrs["scale"]
+        else:
+            raise ValueError("The scale cannot be inferred from dataset data and must be specified.")
+
+    if len(axis) != len(mask.shape):
+        raise ValueError("The axis must have the same length as the dataset shape.")
+        
+    if "T" not in axis:
+        raise ValueError("The axis must contain the time dimension 'T'.")
+
+    shape = mask.shape
+    axis_spatial = str([i for i in "XYZ" if i in axis])
+    n_spatial = len(axis_spatial)
+    shape_spatial = tuple([j for i,j in zip(axis,shape) if i in "XYZ"])
+
+
+    d = ImgProps(
+        shape,
+        shape_spatial,
+        axis,
+        scale,
+        axis_spatial,
+        n_spatial
+    )
+
+    return d
 
 def _get_axis_scale(mask, axis, scale):
 
