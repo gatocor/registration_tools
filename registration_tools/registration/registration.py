@@ -1146,7 +1146,7 @@ class Registration:
             evaluator.SetMetricAsJointHistogram(**kwargs)
         # evaluator.SetMetricAsMeanSquares()  # or any other metric
         evaluator.SetOptimizerAsGradientDescent(0.1,100)
-        evaluator.SetInitialTransform(sitk.TranslationTransform(2))
+        evaluator.SetInitialTransform(sitk.TranslationTransform(self._n_spatial))
         evaluator.SetInterpolator(sitk.sitkLinear)
         score = evaluator.MetricEvaluate(img_ref_sitk, img_float_sitk)
 
