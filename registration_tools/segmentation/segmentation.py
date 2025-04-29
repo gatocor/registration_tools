@@ -37,10 +37,12 @@ class SegmentationManualBlob(Segmentation):
         if labels is not None:
             self._labels = labels
         else:
-            self._labels = np.zeros(self._img_prop.shape, dtype=np.uint16)
+            self._labels = np.zeros(image.shape, dtype=np.uint16)
+
+        print(image.shape)
         
         viewer = napari.Viewer()
-        viewer.add_image(image, scale=scale, name="Image")
+        self._layer_image = viewer.add_image(image, scale=scale, name="Image")
         self._layer_labels = viewer.add_labels(self._labels, scale=scale, name="Labels")
         BlobSegmentationWidget(self, viewer, axis)
         napari.run()
