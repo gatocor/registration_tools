@@ -31,7 +31,7 @@ def make_index(axis, downsample=(1,1,1), **kwargs):
 
     return tuple(index)
 
-def _get_img_prop(mask, axis, scale):
+def _get_img_prop(mask, axis, scale, requires="T"):
 
     if axis is None:
         if isinstance(mask, Dataset):
@@ -51,9 +51,10 @@ def _get_img_prop(mask, axis, scale):
 
     if len(axis) != len(mask.shape):
         raise ValueError("The axis must have the same length as the dataset shape.")
-        
-    if "T" not in axis:
-        raise ValueError("The axis must contain the time dimension 'T'.")
+    
+    missing = [i for i in requires if i not in axis]
+    if len(missing) > 0:
+        raise ValueError(f"The axis must contain the dimensions {requires}. Missing {missing}")
 
     shape = mask.shape
     axis_spatial = str([i for i in "XYZ" if i in axis])

@@ -30,7 +30,7 @@ class SegmentationManualBlob(Segmentation):
 
     def fit_manual(self, image, labels=None, axis=None, scale=None):
 
-        self._img_prop = _get_img_prop(image, axis, scale)
+        self._img_prop = _get_img_prop(image, axis, scale, requires="")
         scale = self._img_prop.scale
         axis = self._img_prop.axis
 
