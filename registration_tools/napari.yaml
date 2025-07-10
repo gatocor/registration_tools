@@ -1,0 +1,25 @@
+name: registration_tools
+display_name: Registration Tools
+contributions:
+  commands:
+    - id: registration_tools.widgets.AnalysisWidget
+      python_name: registration_tools.widgets:AnalysisWidget
+      title: ImageAnalysis
+
+    - id: registration_tools.widgets.PreprocessingWidget
+      python_name: registration_tools.widgets:PreprocessingWidget
+      title: ImagePreprocessing
+
+    # - id: registration_tools.widgets.utils.FilterSelector
+    #   python_name: registration_tools.widgets.utils:FilterSelector
+    #   title: Load skimage data
+
+  widgets:
+    - command: registration_tools.widgets.AnalysisWidget
+      display_name: AnalysisWidget
+
+    - command: registration_tools.widgets.PreprocessingWidget
+      display_name: PreprocessingWidget
+
+    # - command: registration_tools.widgets.utils.FilterSelector
+    #   display_name: Skimage.filters

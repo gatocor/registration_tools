@@ -1,4 +1,4 @@
-import napari
+import widgets
 import numpy as np
 import zarr
 
@@ -39,11 +39,11 @@ class SegmentationManualBlob(Segmentation):
         else:
             self._labels = np.zeros(self._img_prop.shape, dtype=np.uint16)
         
-        viewer = napari.Viewer()
+        viewer = widgets.Viewer()
         viewer.add_image(image, scale=scale, name="Image")
         self._layer_labels = viewer.add_labels(self._labels, scale=scale, name="Labels")
         BlobSegmentationWidget(self, viewer, axis)
-        napari.run()
+        widgets.run()
 
         return self._labels
 

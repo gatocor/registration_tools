@@ -6,11 +6,13 @@ setup(
     packages=find_packages(),
     install_requires=[
         'scikit-image',
-        'zarr>=3.0.3',
+        'zarr>=3.0.0a0',
         'h5py>=3',
         'dask[distributed]>=2025',
         'simpleitk>=2',
-        'pynvml>=12'
+        'pynvml>=12',
+        'pandas',
+        'seaborn'
     ],
     extras_require={
         'vt-python': ['vt-python'],
@@ -23,7 +25,11 @@ setup(
             # Add command line scripts here
             # e.g., 'my-tool=my_package.module:main_function'
         ],
+        "napari.manifest": [
+            "registration_tools = registration_tools:napari.yaml",
+        ],
     },
+    include_package_data=True,
     author='Gabriel Torregrosa Cortés',
     author_email='g.torregrosa@example.com',
     description='A description of your project',
@@ -35,5 +41,5 @@ setup(
         'License :: OSI Approved :: MIT License',
         'Operating System :: OS Independent',
     ],
-    python_requires='>=3.11',
+    python_requires='>=3.10',
 )

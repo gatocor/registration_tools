@@ -1,0 +1,273 @@
+import inspect
+from skimage import exposure
+import numpy as np
+import webbrowser
+import contextlib
+import io
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+
+from qtpy.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QComboBox, QLabel,
+    QFormLayout, QDoubleSpinBox, QCheckBox, QPushButton, QSpinBox, QGroupBox, QLineEdit
+)
+import napari
+
+default_map = {
+}
+
+def cumulative_distribution(image, nbins=256):
+    # Compute cumulative distribution
+    img_cdf, bin_centers = exposure.cumulative_distribution(image, nbins=nbins)
+
+    # Plot it with matplotlib
+    fig, ax = plt.subplots(figsize=(4, 3), dpi=200)
+    ax.plot(bin_centers, img_cdf, color='black')
+    ax.set_title("Cumulative Distribution")
+    ax.set_xlabel("Pixel intensity")
+    ax.set_ylabel("CDF")
+    fig.tight_layout()
+
+    # Convert plot to NumPy array
+    canvas = FigureCanvas(fig)
+    canvas.draw()
+    buf = np.frombuffer(canvas.buffer_rgba(), dtype=np.uint8)
+    image_array = buf.reshape(canvas.get_width_height()[::-1] + (4,))  # (H, W, RGBA)
+
+    plt.close(fig)
+    return image_array
+
+def histogram(image, nbins=256, source_range='image', normalize=False, *, channel_axis=None):
+    # Compute cumulative distribution
+    img_hist, bin_centers = exposure.histogram(
+        image, nbins=nbins, source_range=source_range, normalize=normalize, channel_axis=channel_axis
+    )
+
+    # Plot it with matplotlib
+    fig, ax = plt.subplots(figsize=(4, 3), dpi=200)
+    ax.plot(bin_centers, img_hist, color='black')
+    ax.set_title("Cumulative Distribution")
+    ax.set_xlabel("Pixel intensity")
+    ax.set_ylabel("CDF")
+    fig.tight_layout()
+
+    # Convert plot to NumPy array
+    canvas = FigureCanvas(fig)
+    canvas.draw()
+    buf = np.frombuffer(canvas.buffer_rgba(), dtype=np.uint8)
+    image_array = buf.reshape(canvas.get_width_height()[::-1] + (4,))  # (H, W, RGBA)
+
+    plt.close(fig)
+    return image_array
+
+substitute_functions = {
+    "cumulative_distribution": cumulative_distribution,
+    "histogram": histogram,
+}
+
+def get_help_text(obj):
+    with io.StringIO() as buf, contextlib.redirect_stdout(buf):
+        help(obj)
+        return buf.getvalue()
+
+def get_skimage_exposure_functions():
+    funcs = {}
+    for name, func in inspect.getmembers(exposure, inspect.isfunction):
+        sig = inspect.signature(func)
+        params = sig.parameters
+
+        # Must have "image" parameter
+        if "image" not in params:
+            continue
+
+        # Count how many required parameters there are (no default)
+        required_params = [
+            p for p in params.values()
+            if p.default is inspect.Parameter.empty
+        ]
+
+        if len(required_params) == 0 and [i for i in params.values()][0].name == "image":
+            funcs[name] = func
+        elif len(required_params) == 1 and required_params[0].name == "image":
+            funcs[name] = func
+        elif name in [i[0] for i in default_map.keys()]:
+            funcs[name] = func
+        else:
+            print(f"Skipping {name}: requires multiple parameters or has non-image required parameters ({required_params}). To be implemented.")
+
+    return funcs
+
+filter_func = get_skimage_exposure_functions()
+
+class ExposureWidget(QWidget):
+    def __init__(self, viewer: napari.Viewer, filter_name: str):
+        super().__init__()
+        self.viewer = viewer
+        self.help_text = get_help_text(filter_func[filter_name])
+        if filter_name in substitute_functions.keys():
+            self.filter_func = substitute_functions[filter_name]
+        else:
+            self.filter_func = filter_func[filter_name]
+        self.setWindowTitle(f"Exposure: {filter_name}")
+
+        self.layout = QVBoxLayout()
+        self.setLayout(self.layout)
+
+        # --- Name and help ---
+        name_row = QHBoxLayout()
+        name_row.addWidget(QLabel(filter_name))
+        self.help_button = QPushButton("?")
+        self.help_button.setMinimumHeight(10)
+        self.help_button.setToolTip(self.help_text)
+        self.help_button.clicked.connect(lambda: webbrowser.open(f"https://scikit-image.org/docs/stable/api/skimage.exposure.html#skimage.exposure.{filter_name}"))
+        name_row.addWidget(self.help_button)
+        self.layout.addLayout(name_row)
+
+        # --- Image selector ---
+        image_row = QHBoxLayout()
+        image_row.addWidget(QLabel("Image:"))
+        self.image_selector = QComboBox()
+        self.update_image_layers()
+        image_row.addWidget(self.image_selector)
+        self.layout.addLayout(image_row)
+
+        # --- Output name input ---
+        output_row = QHBoxLayout()
+        output_row.addWidget(QLabel("Output name:"))
+        self.output_name_edit = QLineEdit(f"{self.image_selector.currentText()}_{filter_name}")
+        output_row.addWidget(self.output_name_edit)
+        output_row.addWidget(QLabel("Override:"))
+        self.output_override = QCheckBox()
+        self.output_override.setChecked(True)
+        output_row.addWidget(self.output_override)
+        self.layout.addLayout(output_row)
+
+        # --- Exposure parameters ---
+        self.form = QFormLayout()
+        self.param_widgets = {}
+
+        sig = inspect.signature(self.filter_func)
+        for name, param in sig.parameters.items():
+            if name == "image":
+                continue
+
+            widget = None
+
+            annotation = param.annotation
+
+            if param.default is not inspect.Parameter.empty:
+                default = param.default    
+            elif (filter_name, param.name) in default_map.keys():
+                default = default_map[(filter_name, name)]    
+                annotation = type(default)
+            else:
+                default = None
+
+            if param.annotation == inspect._empty:
+                annotation = type(default)
+
+            # print(param.name, param.annotation, default)
+            if annotation == float:
+                widget = QDoubleSpinBox()
+                widget.setValue(float(default))
+                widget.setSingleStep(0.1)
+                widget.setRange(-1e6, 1e6)
+                self.form.addRow(name, widget)
+            elif annotation == int:
+                widget = QSpinBox()
+                widget.setValue(int(default))
+                widget.setRange(-10000, 10000)
+                self.form.addRow(name, widget)
+            elif annotation == bool:
+                widget = QCheckBox()
+                widget.setChecked(bool(default))
+                self.form.addRow(name, widget)
+            elif annotation == range and isinstance(default, range):
+                widget_start = QSpinBox()
+                widget_start.setRange(-10000, 10000)
+                widget_start.setValue(default.start)
+
+                widget_stop = QSpinBox()
+                widget_stop.setRange(-10000, 10000)
+                widget_stop.setValue(default.stop)
+
+                widget_step = QSpinBox()
+                widget_step.setRange(1, 10000)  # step must be positive
+                widget_step.setValue(default.step)
+
+                # Store the three widgets
+                self.param_widgets[name] = (widget_start, widget_stop, widget_step)
+
+                # Create a container group box
+                widget = QGroupBox(name)
+                sub_layout = QFormLayout()
+                sub_layout.addRow("Start", widget_start)
+                sub_layout.addRow("Stop", widget_stop)
+                sub_layout.addRow("Step", widget_step)
+                widget.setLayout(sub_layout)
+                self.form.addRow(widget)
+            else:
+                print(f"Unsupported parameter type for {name}: {annotation} {default}")
+                continue  # skip unsupported types
+
+            self.param_widgets[name] = widget
+
+        self.layout.addLayout(self.form)
+
+        # --- Apply button ---
+        self.apply_btn = QPushButton("Apply")
+        self.apply_btn.clicked.connect(self.apply_filter)
+        self.layout.addWidget(self.apply_btn)
+
+    def update_image_layers(self):
+        self.image_selector.clear()
+        image_layers = [layer.name for layer in self.viewer.layers if isinstance(layer, napari.layers.Image)]
+        self.image_selector.addItems(image_layers)
+
+    def apply_filter(self):
+        layer_name = self.image_selector.currentText()
+        layer = self.viewer.layers[layer_name] if layer_name in self.viewer.layers else None
+        if layer is None:
+            return
+
+        image = layer.data
+        kwargs = {}
+        for name, widget in self.param_widgets.items():
+            if isinstance(widget, (QDoubleSpinBox, QSpinBox)):
+                kwargs[name] = widget.value()
+            elif isinstance(widget, QCheckBox):
+                kwargs[name] = widget.isChecked()
+
+        result = self.filter_func(image, **kwargs)
+        output_name = self.output_name_edit.text().strip() or f"{self.windowTitle()} result"
+        if self.output_override.isChecked():
+            if output_name in self.viewer.layers:
+                self.viewer.layers.remove(output_name)
+        self.viewer.add_image(result, name=output_name, colormap="gray")
+
+class ExposureSelector(QWidget):
+    def __init__(self, viewer: napari.Viewer):
+        super().__init__()
+        self.viewer = viewer
+        self.setWindowTitle("Skimage Exposure Selector")
+
+        self.layout = QVBoxLayout()
+        self.setLayout(self.layout)
+
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Choose a filter:"))
+        self.dropdown = QComboBox()
+        self.exposure = get_skimage_exposure_functions()
+        self.dropdown.addItems(sorted(self.exposure.keys()))
+        row.addWidget(self.dropdown)
+        self.layout.addLayout(row)
+
+        self.load_btn = QPushButton("Load Exposure UI")
+        self.load_btn.clicked.connect(self.load_filter_ui)
+        self.layout.addWidget(self.load_btn)
+
+    def load_filter_ui(self):
+        name = self.dropdown.currentText()
+        func = self.exposure[name]
+        widget = ExposureWidget(self.viewer, name, func)
+        self.viewer.window.add_dock_widget(widget, name=f"Exposure: {name}", area="right")

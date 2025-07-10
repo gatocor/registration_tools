@@ -1,4 +1,4 @@
-import napari
+import widgets
 from napari.qt.threading import thread_worker
 from qtpy.QtWidgets import QVBoxLayout, QWidget, QSlider, QLabel, QPushButton, QLineEdit, QHBoxLayout, QGridLayout
 from qtpy.QtCore import Qt, QTimer
@@ -6,8 +6,8 @@ from napari.utils.events import Event
 from vispy.util.keys import ALT, CONTROL
 from skimage.segmentation import flood_fill
 
-from ..utils.auxiliar import *
-from .common import *
+from ..utils import *
+from ..common import *
 
 class BlobSegmentationWidget(QWidget):
     

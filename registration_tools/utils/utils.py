@@ -280,14 +280,21 @@ def downsample(dataset, factor, axis=None, scale=None, out=None, style="zoom", o
                     **kwargs
                     )
 
-def project(dataset, projection_axis, axis=None, scale=None, out=None, style="max"):
+def project(dataset, projection_axis, axis=None, axis_slicing="T", scale=None, out=None, style="max"):
 
     """
     Project a dataset along a specified axis using either maximum or mean projection.
     
     Parameters:
-        dataset (array-like)(The input dataset to be projected.) : ection_axis (str)(The axis along which to project the dataset. Must be one of 'X', 'Y', or 'Z'.) :  (str, optional)(The axis labels of the dataset. If not provided, it will be inferred.) : e (tuple, optional)(The scale of each axis in the dataset. If not provided, it will be inferred.) : (str, optional)(The output file to store the result. If not provided, a new array will be created.) : e (str, optional)(The projection style to use. Must be either 'max' for maximum projection or 'mean' for mean projection. Default is 'max'.) : :
-        array-like(The projected dataset.) :  axis, scale = _get_axis_scale(dataset, axis, scale)
+        dataset (array-like or zarr.Array): The input dataset to project.
+        projection_axis (str): The axis along which to project the dataset ('X', 'Y', or 'Z').
+        axis (list of str, optional): The axis labels of the dataset. If not provided, they will be inferred from the dataset.
+        scale (list of float, optional): The scale of the dataset along each axis. If not provided, it will be inferred.
+        out (str, optional): Path to the output Zarr array. If None, a temporary Zarr array will be created.
+        style (str, optional): The projection style to use ('max' for maximum projection or 'mean' for mean projection). Default is 'max'.
+
+    Returns:
+        array: The projected datasety. The array will have updated attributes for axis and scale.
     """
     
     def _max(data, pos=0):
@@ -302,13 +309,12 @@ def project(dataset, projection_axis, axis=None, scale=None, out=None, style="ma
     if projection_axis not in axis: 
         raise ValueError("The projection axis must be present in the dataset axis.")
 
-    pos = axis.replace("T","").index(projection_axis)
     new_axis = axis.replace(projection_axis, "")
     new_scale = tuple([i for i,ax in zip(scale, _get_spatial_dims(axis)) if ax != projection_axis])
 
     if style == "max":
-        return apply_function_in_time_dask(dataset, _max, axis, scale, out, new_axis, new_scale, pos=pos)
+        return apply_function(dataset, _max, axis, axis_slicing, scale, out, new_axis, new_scale)
     elif style == "mean":
-        return apply_function_in_time_dask(dataset, _mean, axis, scale, out, new_axis, new_scale, pos=pos)
+        return apply_function(dataset, _mean, axis, axis_slicing, scale, out, new_axis, new_scale)
     else:
         raise ValueError("The style must be either 'max' or 'mean'.")

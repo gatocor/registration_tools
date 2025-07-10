@@ -498,7 +498,7 @@ class Registration:
 
     def apply(self, dataset, out=None, axis=None, scale=None, 
                 save_behavior="Continue", transformation="global", padding=None,
-                verbose=False, **kwargs):
+                verbose=False):
         """
         Registers a dataset using Dask for parallel processing and saves the results in a Zarr store.
         """
@@ -851,7 +851,7 @@ class Registration:
     def fit_manual(self, dataset, out=None, axis=None, scale=None, use_channel=None, stepping=None, direction="backward", verbose=False):
 
         try:
-            import napari
+            import widgets
             from ..widgets.widgets import AffineRegistrationWidget
         except:
             raise ImportError("Napari is not installed. Please install it to use this function.")
@@ -889,7 +889,7 @@ class Registration:
         else:
             c = -1
 
-        viewer = napari.Viewer()
+        viewer = widgets.Viewer()
         dataset_dask = da.from_array(dataset, chunks=dataset.shape)
 
         if self._registration_direction == "backward":
@@ -954,7 +954,7 @@ class Registration:
         widget._layer_corrected = _layer_corrected
         widget._layer_next = _layer_next        
         viewer.window.add_dock_widget(widget, area='right')
-        napari.run()
+        widgets.run()
 
         self._fitted = True
         if self._out is not None:
@@ -975,7 +975,7 @@ class Registration:
             mesh_mask = np.meshgrid(*[np.round(np.linspace(0, j-1, n_points)).astype(int) for i, j in d.items() if i in "XYZ"])
             # mesh_mask = np.concatenate([i.reshape(-1,1) for i in mesh_mask],axis=1)
             if "T" not in axis:
-                keep_points = points[mask[*mesh_mask].flatten()]
+                keep_points = points[mask[mesh_mask].flatten()]
         else:
             keep_points = points
 
@@ -1001,7 +1001,7 @@ class Registration:
 
         for t, t_next in tqdm(zip(iterator, iterator_next), desc=f"Computing vectorfield", unit="", total=self._t_max-1):
             if mask is not None and "T" in axis:
-                keep_points = points[mask[make_index(axis, T=t)][*mesh_mask].flatten()]
+                keep_points = points[mask[make_index(axis, T=t)][mesh_mask].flatten()]
             else:
                 keep_points = points
 
@@ -1041,7 +1041,7 @@ class Registration:
             mesh_mask = np.meshgrid(*[np.round(np.linspace(0, j-1, n_points)).astype(int) for i, j in d.items() if i in "XYZ"])
             # mesh_mask = np.concatenate([i.reshape(-1,1) for i in mesh_mask],axis=1)
             if "T" not in axis:
-                keep_points = points[mask[*mesh_mask].flatten()]
+                keep_points = points[mask[mesh_mask].flatten()]
             # else:
             #     raise ValueError("The mask cannot contain the time dimension 'T'.")
         else:
@@ -1769,7 +1769,9 @@ class RegistrationSITK(Registration):
         elif self._registration_type == "AffineTransform":
             R.SetInitialTransform(sitk.AffineTransform(dims))
         elif self._registration_type == "BSplineTransform":
-            R.SetInitialTransform(sitk.BSplineTransform(dims))
+            transformDomainMeshSize = [10, 10]  # Number of control points minus spline order
+            bspline_tx = sitk.BSplineTransformInitializer(img_ref, transformDomainMeshSize)
+            R.SetInitialTransform(bspline_tx, inPlace=False)
         elif self._registration_type == "DisplacementFieldTransform":
             displacementField = sitk.Image(img_ref.GetSize(), sitk.sitkVectorFloat64)
             displacementTx = sitk.DisplacementFieldTransform(displacementField)

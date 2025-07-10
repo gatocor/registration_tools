@@ -1,4 +1,4 @@
-import napari
+import widgets
 from napari.qt.threading import thread_worker
 from qtpy.QtWidgets import QVBoxLayout, QWidget, QSlider, QLabel, QPushButton, QLineEdit, QHBoxLayout, QGridLayout
 from qtpy.QtCore import Qt, QTimer

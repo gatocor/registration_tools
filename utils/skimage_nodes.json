@@ -1,0 +1,550 @@
+{
+  "draw": {
+    "bezier_curve": {
+      "name": "bezier_curve",
+      "function_name": "bezier_curve",
+      "type": "function",
+      "inputs": {},
+      "outputs": null,
+      "function": "draw.bezier_curve",
+      "help": "https://scikit-image.org/docs/stable/api/skimage.draw.html#skimage.draw.bezier_curve",
+      "parameters": {
+        "r0": {
+          "type": "type",
+          "default": null
+        },
+        "c0": {
+          "type": "type",
+          "default": null
+        },
+        "r1": {
+          "type": "type",
+          "default": null
+        },
+        "c1": {
+          "type": "type",
+          "default": null
+        },
+        "r2": {
+          "type": "type",
+          "default": null
+        },
+        "c2": {
+          "type": "type",
+          "default": null
+        },
+        "weight": {
+          "type": "type",
+          "default": null
+        },
+        "shape": {
+          "type": "NoneType",
+          "default": null
+        }
+      }
+    },
+    "circle_perimeter": {
+      "name": "circle_perimeter",
+      "function_name": "circle_perimeter",
+      "type": "function",
+      "inputs": {},
+      "outputs": null,
+      "function": "draw.circle_perimeter",
+      "help": "https://scikit-image.org/docs/stable/api/skimage.draw.html#skimage.draw.circle_perimeter",
+      "parameters": {
+        "r": {
+          "type": "type",
+          "default": null
+        },
+        "c": {
+          "type": "type",
+          "default": null
+        },
+        "radius": {
+          "type": "type",
+          "default": null
+        },
+        "method": {
+          "type": "str",
+          "default": "bresenham"
+        },
+        "shape": {
+          "type": "NoneType",
+          "default": null
+        }
+      }
+    },
+    "circle_perimeter_aa": {
+      "name": "circle_perimeter_aa",
+      "function_name": "circle_perimeter_aa",
+      "type": "function",
+      "inputs": {},
+      "outputs": null,
+      "function": "draw.circle_perimeter_aa",
+      "help": "https://scikit-image.org/docs/stable/api/skimage.draw.html#skimage.draw.circle_perimeter_aa",
+      "parameters": {
+        "r": {
+          "type": "type",
+          "default": null
+        },
+        "c": {
+          "type": "type",
+          "default": null
+        },
+        "radius": {
+          "type": "type",
+          "default": null
+        },
+        "shape": {
+          "type": "NoneType",
+          "default": null
+        }
+      }
+    },
+    "disk": {
+      "name": "disk",
+      "function_name": "disk",
+      "type": "function",
+      "inputs": {},
+      "outputs": null,
+      "function": "draw.disk",
+      "help": "https://scikit-image.org/docs/stable/api/skimage.draw.html#skimage.draw.disk",
+      "parameters": {
+        "center": {
+          "type": "type",
+          "default": null
+        },
+        "radius": {
+          "type": "type",
+          "default": null
+        },
+        "shape": {
+          "type": "NoneType",
+          "default": null
+        }
+      }
+    },
+    "ellipse": {
+      "name": "ellipse",
+      "function_name": "ellipse",
+      "type": "function",
+      "inputs": {},
+      "outputs": null,
+      "function": "draw.ellipse",
+      "help": "https://scikit-image.org/docs/stable/api/skimage.draw.html#skimage.draw.ellipse",
+      "parameters": {
+        "r": {
+          "type": "type",
+          "default": null
+        },
+        "c": {
+          "type": "type",
+          "default": null
+        },
+        "r_radius": {
+          "type": "type",
+          "default": null
+        },
+        "c_radius": {
+          "type": "type",
+          "default": null
+        },
+        "shape": {
+          "type": "NoneType",
+          "default": null
+        },
+        "rotation": {
+          "type": "float",
+          "default": 0.0
+        }
+      }
+    },
+    "ellipse_perimeter": {
+      "name": "ellipse_perimeter",
+      "function_name": "ellipse_perimeter",
+      "type": "function",
+      "inputs": {},
+      "outputs": null,
+      "function": "draw.ellipse_perimeter",
+      "help": "https://scikit-image.org/docs/stable/api/skimage.draw.html#skimage.draw.ellipse_perimeter",
+      "parameters": {
+        "r": {
+          "type": "type",
+          "default": null
+        },
+        "c": {
+          "type": "type",
+          "default": null
+        },
+        "r_radius": {
+          "type": "type",
+          "default": null
+        },
+        "c_radius": {
+          "type": "type",
+          "default": null
+        },
+        "orientation": {
+          "type": "int",
+          "default": 0
+        },
+        "shape": {
+          "type": "NoneType",
+          "default": null
+        }
+      }
+    },
+    "ellipsoid": {
+      "name": "ellipsoid",
+      "function_name": "ellipsoid",
+      "type": "function",
+      "inputs": {},
+      "outputs": null,
+      "function": "draw.ellipsoid",
+      "help": "https://scikit-image.org/docs/stable/api/skimage.draw.html#skimage.draw.ellipsoid",
+      "parameters": {
+        "a": {
+          "type": "type",
+          "default": null
+        },
+        "b": {
+          "type": "type",
+          "default": null
+        },
+        "c": {
+          "type": "type",
+          "default": null
+        },
+        "spacing": {
+          "type": "tuple",
+          "default": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "levelset": {
+          "type": "bool",
+          "default": false
+        }
+      }
+    },
+    "ellipsoid_stats": {
+      "name": "ellipsoid_stats",
+      "function_name": "ellipsoid_stats",
+      "type": "function",
+      "inputs": {},
+      "outputs": null,
+      "function": "draw.ellipsoid_stats",
+      "help": "https://scikit-image.org/docs/stable/api/skimage.draw.html#skimage.draw.ellipsoid_stats",
+      "parameters": {
+        "a": {
+          "type": "type",
+          "default": null
+        },
+        "b": {
+          "type": "type",
+          "default": null
+        },
+        "c": {
+          "type": "type",
+          "default": null
+        }
+      }
+    },
+    "line": {
+      "name": "line",
+      "function_name": "line",
+      "type": "function",
+      "inputs": {},
+      "outputs": null,
+      "function": "draw.line",
+      "help": "https://scikit-image.org/docs/stable/api/skimage.draw.html#skimage.draw.line",
+      "parameters": {
+        "r0": {
+          "type": "type",
+          "default": null
+        },
+        "c0": {
+          "type": "type",
+          "default": null
+        },
+        "r1": {
+          "type": "type",
+          "default": null
+        },
+        "c1": {
+          "type": "type",
+          "default": null
+        }
+      }
+    },
+    "line_aa": {
+      "name": "line_aa",
+      "function_name": "line_aa",
+      "type": "function",
+      "inputs": {},
+      "outputs": null,
+      "function": "draw.line_aa",
+      "help": "https://scikit-image.org/docs/stable/api/skimage.draw.html#skimage.draw.line_aa",
+      "parameters": {
+        "r0": {
+          "type": "type",
+          "default": null
+        },
+        "c0": {
+          "type": "type",
+          "default": null
+        },
+        "r1": {
+          "type": "type",
+          "default": null
+        },
+        "c1": {
+          "type": "type",
+          "default": null
+        }
+      }
+    },
+    "line_nd": {
+      "name": "line_nd",
+      "function_name": "line_nd",
+      "type": "function",
+      "inputs": {},
+      "outputs": null,
+      "function": "draw.line_nd",
+      "help": "https://scikit-image.org/docs/stable/api/skimage.draw.html#skimage.draw.line_nd",
+      "parameters": {
+        "start": {
+          "type": "type",
+          "default": null
+        },
+        "stop": {
+          "type": "type",
+          "default": null
+        },
+        "endpoint": {
+          "type": "bool",
+          "default": false
+        },
+        "integer": {
+          "type": "bool",
+          "default": true
+        }
+      }
+    },
+    "polygon": {
+      "name": "polygon",
+      "function_name": "polygon",
+      "type": "function",
+      "inputs": {},
+      "outputs": null,
+      "function": "draw.polygon",
+      "help": "https://scikit-image.org/docs/stable/api/skimage.draw.html#skimage.draw.polygon",
+      "parameters": {
+        "r": {
+          "type": "type",
+          "default": null
+        },
+        "c": {
+          "type": "type",
+          "default": null
+        },
+        "shape": {
+          "type": "NoneType",
+          "default": null
+        }
+      }
+    },
+    "polygon2mask": {
+      "name": "polygon2mask",
+      "function_name": "polygon2mask",
+      "type": "function",
+      "inputs": {},
+      "outputs": null,
+      "function": "draw.polygon2mask",
+      "help": "https://scikit-image.org/docs/stable/api/skimage.draw.html#skimage.draw.polygon2mask",
+      "parameters": {
+        "image_shape": {
+          "type": "type",
+          "default": null
+        },
+        "polygon": {
+          "type": "type",
+          "default": null
+        }
+      }
+    },
+    "polygon_perimeter": {
+      "name": "polygon_perimeter",
+      "function_name": "polygon_perimeter",
+      "type": "function",
+      "inputs": {},
+      "outputs": null,
+      "function": "draw.polygon_perimeter",
+      "help": "https://scikit-image.org/docs/stable/api/skimage.draw.html#skimage.draw.polygon_perimeter",
+      "parameters": {
+        "r": {
+          "type": "type",
+          "default": null
+        },
+        "c": {
+          "type": "type",
+          "default": null
+        },
+        "shape": {
+          "type": "NoneType",
+          "default": null
+        },
+        "clip": {
+          "type": "bool",
+          "default": false
+        }
+      }
+    },
+    "random_shapes": {
+      "name": "random_shapes",
+      "function_name": "random_shapes",
+      "type": "function",
+      "inputs": {},
+      "outputs": null,
+      "function": "draw.random_shapes",
+      "help": "https://scikit-image.org/docs/stable/api/skimage.draw.html#skimage.draw.random_shapes",
+      "parameters": {
+        "image_shape": {
+          "type": "type",
+          "default": null
+        },
+        "max_shapes": {
+          "type": "type",
+          "default": null
+        },
+        "min_shapes": {
+          "type": "int",
+          "default": 1
+        },
+        "min_size": {
+          "type": "int",
+          "default": 2
+        },
+        "max_size": {
+          "type": "NoneType",
+          "default": null
+        },
+        "num_channels": {
+          "type": "int",
+          "default": 3
+        },
+        "shape": {
+          "type": "NoneType",
+          "default": null
+        },
+        "intensity_range": {
+          "type": "NoneType",
+          "default": null
+        },
+        "allow_overlap": {
+          "type": "bool",
+          "default": false
+        },
+        "num_trials": {
+          "type": "int",
+          "default": 100
+        },
+        "rng": {
+          "type": "NoneType",
+          "default": null
+        },
+        "channel_axis": {
+          "type": "int",
+          "default": -1
+        }
+      }
+    },
+    "rectangle": {
+      "name": "rectangle",
+      "function_name": "rectangle",
+      "type": "function",
+      "inputs": {},
+      "outputs": null,
+      "function": "draw.rectangle",
+      "help": "https://scikit-image.org/docs/stable/api/skimage.draw.html#skimage.draw.rectangle",
+      "parameters": {
+        "start": {
+          "type": "type",
+          "default": null
+        },
+        "end": {
+          "type": "NoneType",
+          "default": null
+        },
+        "extent": {
+          "type": "NoneType",
+          "default": null
+        },
+        "shape": {
+          "type": "NoneType",
+          "default": null
+        }
+      }
+    },
+    "rectangle_perimeter": {
+      "name": "rectangle_perimeter",
+      "function_name": "rectangle_perimeter",
+      "type": "function",
+      "inputs": {},
+      "outputs": null,
+      "function": "draw.rectangle_perimeter",
+      "help": "https://scikit-image.org/docs/stable/api/skimage.draw.html#skimage.draw.rectangle_perimeter",
+      "parameters": {
+        "start": {
+          "type": "type",
+          "default": null
+        },
+        "end": {
+          "type": "NoneType",
+          "default": null
+        },
+        "extent": {
+          "type": "NoneType",
+          "default": null
+        },
+        "shape": {
+          "type": "NoneType",
+          "default": null
+        },
+        "clip": {
+          "type": "bool",
+          "default": false
+        }
+      }
+    },
+    "set_color": {
+      "name": "set_color",
+      "function_name": "set_color",
+      "type": "function",
+      "inputs": {},
+      "outputs": null,
+      "function": "draw.set_color",
+      "help": "https://scikit-image.org/docs/stable/api/skimage.draw.html#skimage.draw.set_color",
+      "parameters": {
+        "image": {
+          "type": "type",
+          "default": null
+        },
+        "coords": {
+          "type": "type",
+          "default": null
+        },
+        "color": {
+          "type": "type",
+          "default": null
+        },
+        "alpha": {
+          "type": "int",
+          "default": 1
+        }
+      }
+    }
+  }
+}
