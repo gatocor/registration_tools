@@ -966,7 +966,12 @@ class Registration:
             raise ValueError("The registration object has not been fitted. Please fit the registration object before applying it.")
             
         # Check inputs
-        mesh = np.meshgrid(*[np.linspace(0, i, n_points) for i in self._box])
+        if isinstance(n_points, int):
+            mesh = np.meshgrid(*[np.linspace(0, i, n_points) for i in self._box])
+        elif isinstance(n_points, tuple) and len(n_points) == self._n_spatial:
+            mesh = np.meshgrid(*[np.linspace(0, i, j) for i,j in zip(self._box, n_points)])
+        else:
+            raise ValueError("n_points must be an integer or a tuple with the same length as the number of spatial dimensions.")
         points = np.vstack([i.ravel() for i in mesh]).T
 
         if mask is not None:
