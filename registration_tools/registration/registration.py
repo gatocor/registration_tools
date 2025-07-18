@@ -985,8 +985,9 @@ class Registration:
             keep_points = points
 
         if out is None:
-            store = zarr.storage.MemoryStore()
-            data = zarr.create_array(store=store, shape=(0,2,self._n_spatial+1), dtype=float, **kwargs)
+            data = np.zeros((0,2,self._n_spatial+1), dtype=float)
+            # store = zarr.storage.MemoryStore()
+            # data = zarr.create_array(store=store, shape=(0,2,self._n_spatial+1), dtype=float, **kwargs)
         elif isinstance(out, str) and out.endswith(".zarr"):
             data = zarr.create_array(
                 store=out,
@@ -1025,7 +1026,10 @@ class Registration:
             data_add[:,0,1:] = keep_points
             data_add[:,1,1:] = vectorfield
 
-            data.append(data_add, axis=0)
+            if out is None:
+                data = np.concatenate([data, data_add], axis=0)
+            else:
+                data.append(data_add, axis=0)
 
         # Return data
         if out is None:
