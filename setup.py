@@ -16,7 +16,7 @@ setup(
     ],
     extras_require={
         'vt-python': ['vt-python'],
-        'napari': ['napari'],
+        'napari': ['napari>=0.6.1'],
         'pyqt': ['pyqt5'],
     },
     test_suite='tests',
