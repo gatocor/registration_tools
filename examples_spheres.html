@@ -10,8 +10,8 @@
     <link rel="stylesheet" type="text/css" href="_static/basic.css?v=b08954a9" />
     <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=27fed22d" />
     <script src="_static/documentation_options.js?v=2709fde1"></script>
-    <script src="_static/doctools.js?v=9bcbadda"></script>
-    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
     <link rel="next" title="Non-linear registration of growing spheres" href="examples_spheres_growing.html" />
@@ -86,13 +86,13 @@
     <span class="n">jump</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
     <span class="n">stride</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
 <span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Type: &quot;</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">dataset</span><span class="p">))</span>
-<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Shape: &quot;</span><span class="p">,</span> <span class="n">dataset</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">&quot;axis&quot;</span><span class="p">])</span>
-<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Scale: &quot;</span><span class="p">,</span> <span class="n">dataset</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">&quot;scale&quot;</span><span class="p">])</span>
-<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Shape: &quot;</span><span class="p">,</span> <span class="n">dataset</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"Type: "</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">dataset</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"Shape: "</span><span class="p">,</span> <span class="n">dataset</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"axis"</span><span class="p">])</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"Scale: "</span><span class="p">,</span> <span class="n">dataset</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"scale"</span><span class="p">])</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"Shape: "</span><span class="p">,</span> <span class="n">dataset</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
 </pre></div>
 </div>
-<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>Type:  &lt;class &#39;zarr.core.array.Array&#39;&gt;
+<div class="highlight-none notranslate"><div class="highlight"><pre><span></span>Type:  &lt;class 'zarr.core.array.Array'&gt;
 Shape:  TCZYX
 Scale:  (1, 1, 1)
 Shape:  (10, 3, 50, 50, 50)
@@ -110,7 +110,7 @@ Shape:  (10, 3, 50, 50, 50)
 <span class="n">viewer</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span> <span class="c1">#Clear the viewer of other layers that may be present</span>
 <span class="n">rt_vis</span><span class="o">.</span><span class="n">add_image_difference</span><span class="p">(</span><span class="n">viewer</span><span class="p">,</span> <span class="n">dataset</span><span class="p">)</span>
 <span class="n">rt_vis</span><span class="o">.</span><span class="n">add_image_difference</span><span class="p">(</span><span class="n">viewer</span><span class="p">,</span> <span class="n">dataset</span><span class="p">)</span>
-<span class="c1"># viewer.add_image(dataset, scale=dataset.attrs[&quot;scale&quot;]) #This would have been equivalent to the above line.</span>
+<span class="c1"># viewer.add_image(dataset, scale=dataset.attrs["scale"]) #This would have been equivalent to the above line.</span>
 <span class="n">viewer</span><span class="o">.</span><span class="n">dims</span><span class="o">.</span><span class="n">ndisplay</span> <span class="o">=</span> <span class="mi">3</span>
 </pre></div>
 </div>
@@ -121,7 +121,7 @@ Shape:  (10, 3, 50, 50, 50)
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Make video</span>
 <span class="n">rt_vis</span><span class="o">.</span><span class="n">make_video</span><span class="p">(</span>
     <span class="n">viewer</span><span class="o">=</span><span class="n">viewer</span><span class="p">,</span>
-    <span class="n">save_file</span><span class="o">=</span><span class="s1">&#39;sphere_dataset.gif&#39;</span><span class="p">,</span>
+    <span class="n">save_file</span><span class="o">=</span><span class="s1">'sphere_dataset.gif'</span><span class="p">,</span>
     <span class="n">fps</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
 <span class="p">)</span>
 </pre></div>
@@ -143,8 +143,8 @@ Shape:  (10, 3, 50, 50, 50)
 <span class="n">registration</span> <span class="o">=</span> <span class="n">rt_reg</span><span class="o">.</span><span class="n">Registration</span><span class="p">(</span>
     <span class="n">pyramid_highest_level</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>           <span class="c1">#Higher pyramid level</span>
     <span class="n">pyramid_lowest_level</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>            <span class="c1">#Lower pyramid level</span>
-    <span class="n">registration_type</span><span class="o">=</span><span class="s1">&#39;translation&#39;</span><span class="p">,</span>   <span class="c1">#Type of registration</span>
-    <span class="n">registration_direction</span><span class="o">=</span><span class="s1">&#39;backward&#39;</span><span class="p">,</span> <span class="c1">#Direction of registration</span>
+    <span class="n">registration_type</span><span class="o">=</span><span class="s1">'translation'</span><span class="p">,</span>   <span class="c1">#Type of registration</span>
+    <span class="n">registration_direction</span><span class="o">=</span><span class="s1">'backward'</span><span class="p">,</span> <span class="c1">#Direction of registration</span>
     <span class="n">perfom_global_trnsf</span><span class="o">=</span><span class="kc">True</span>           <span class="c1">#Whether to perform global transformation</span>
 <span class="p">)</span>
 </pre></div>
@@ -171,9 +171,9 @@ Applying registration to images: 100%|██████████| 9/9 [00:00
 <p>For that, we plot the original dataset and the registered one.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Make video projections</span>
 <span class="n">viewer</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span> <span class="c1"># Clear the viewer from past images</span>
-<span class="n">rt_vis</span><span class="o">.</span><span class="n">add_image</span><span class="p">(</span><span class="n">viewer</span><span class="p">,</span> <span class="n">dataset</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;t0&quot;</span><span class="p">)</span>
-<span class="n">rt_vis</span><span class="o">.</span><span class="n">add_image</span><span class="p">(</span><span class="n">viewer</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;dataset&quot;</span><span class="p">,</span> <span class="n">colormap</span><span class="o">=</span><span class="s2">&quot;red&quot;</span><span class="p">)</span>
-<span class="n">rt_vis</span><span class="o">.</span><span class="n">add_image</span><span class="p">(</span><span class="n">viewer</span><span class="p">,</span> <span class="n">dataset_registered</span><span class="p">,</span> <span class="n">opacity</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">colormap</span><span class="o">=</span><span class="s1">&#39;green&#39;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;dataset_registered&quot;</span><span class="p">)</span>
+<span class="n">rt_vis</span><span class="o">.</span><span class="n">add_image</span><span class="p">(</span><span class="n">viewer</span><span class="p">,</span> <span class="n">dataset</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">name</span><span class="o">=</span><span class="s2">"t0"</span><span class="p">)</span>
+<span class="n">rt_vis</span><span class="o">.</span><span class="n">add_image</span><span class="p">(</span><span class="n">viewer</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"dataset"</span><span class="p">,</span> <span class="n">colormap</span><span class="o">=</span><span class="s2">"red"</span><span class="p">)</span>
+<span class="n">rt_vis</span><span class="o">.</span><span class="n">add_image</span><span class="p">(</span><span class="n">viewer</span><span class="p">,</span> <span class="n">dataset_registered</span><span class="p">,</span> <span class="n">opacity</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">colormap</span><span class="o">=</span><span class="s1">'green'</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"dataset_registered"</span><span class="p">)</span>
 <span class="n">viewer</span><span class="o">.</span><span class="n">dims</span><span class="o">.</span><span class="n">ndisplay</span> <span class="o">=</span> <span class="mi">3</span>
 </pre></div>
 </div>
@@ -184,7 +184,7 @@ Applying registration to images: 100%|██████████| 9/9 [00:00
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Make video registered</span>
 <span class="n">rt_vis</span><span class="o">.</span><span class="n">make_video</span><span class="p">(</span>
     <span class="n">viewer</span><span class="o">=</span><span class="n">viewer</span><span class="p">,</span>
-    <span class="n">save_file</span><span class="o">=</span><span class="s1">&#39;sphere_dataset_registered.gif&#39;</span><span class="p">,</span>
+    <span class="n">save_file</span><span class="o">=</span><span class="s1">'sphere_dataset_registered.gif'</span><span class="p">,</span>
     <span class="n">fps</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
 <span class="p">)</span>
 </pre></div>
@@ -259,7 +259,7 @@ Applying registration to images: 100%|██████████| 9/9 [00:00
       &#169;.
       
       |
-      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 8.2.3</a>
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.0.4</a>
       &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
       
       |

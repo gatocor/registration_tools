@@ -10,8 +10,8 @@
     <link rel="stylesheet" type="text/css" href="_static/basic.css?v=b08954a9" />
     <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=27fed22d" />
     <script src="_static/documentation_options.js?v=2709fde1"></script>
-    <script src="_static/doctools.js?v=9bcbadda"></script>
-    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
     <link rel="next" title="API Reference" href="API.html" />
@@ -108,7 +108,7 @@
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Make video</span>
 <span class="n">rt_vis</span><span class="o">.</span><span class="n">make_video</span><span class="p">(</span>
     <span class="n">viewer</span><span class="o">=</span><span class="n">viewer</span><span class="p">,</span>
-    <span class="n">save_file</span><span class="o">=</span><span class="s1">&#39;sphere_growing_dataset.gif&#39;</span><span class="p">,</span>
+    <span class="n">save_file</span><span class="o">=</span><span class="s1">'sphere_growing_dataset.gif'</span><span class="p">,</span>
     <span class="n">fps</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
 <span class="p">)</span>
 </pre></div>
@@ -123,8 +123,8 @@
 <span class="n">registration</span> <span class="o">=</span> <span class="n">rt_reg</span><span class="o">.</span><span class="n">Registration</span><span class="p">(</span>
     <span class="n">pyramid_highest_level</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
     <span class="n">pyramid_lowest_level</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
-    <span class="n">registration_type</span><span class="o">=</span><span class="s1">&#39;vectorfield&#39;</span><span class="p">,</span>
-    <span class="n">registration_direction</span><span class="o">=</span><span class="s1">&#39;forward&#39;</span><span class="p">,</span>
+    <span class="n">registration_type</span><span class="o">=</span><span class="s1">'vectorfield'</span><span class="p">,</span>
+    <span class="n">registration_direction</span><span class="o">=</span><span class="s1">'forward'</span><span class="p">,</span>
 <span class="p">)</span>
 </pre></div>
 </div>
@@ -141,7 +141,7 @@
 <h3>Plot the vector field and make videos<a class="headerlink" href="#plot-the-vector-field-and-make-videos" title="Link to this heading">¶</a></h3>
 <p>Now we can check the deformation field by plotting the vectorfield along with the images to see the deformation.</p>
 <p>In order to represent the vectorfield around the region of interest, we will provide a mask around the ball. We provide handy functions to process in batch large datasets without loading all in memory.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">mask</span> <span class="o">=</span> <span class="n">rt_utils</span><span class="o">.</span><span class="n">apply_function_in_time</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="n">new_axis</span><span class="o">=</span><span class="s2">&quot;TXYZ&quot;</span><span class="p">)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">mask</span> <span class="o">=</span> <span class="n">rt_utils</span><span class="o">.</span><span class="n">apply_function_in_time</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="n">new_axis</span><span class="o">=</span><span class="s2">"TXYZ"</span><span class="p">)</span>
 </pre></div>
 </div>
 <div class="highlight-none notranslate"><div class="highlight"><pre><span></span>Applying function: 100%|██████████| 10/10 [00:00&lt;00:00, 93.09it/s]
@@ -162,7 +162,7 @@
 </div>
 <p>Finally we add it to the viewer,</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">viewer</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span> <span class="c1"># Clear the viewer from other images</span>
-<span class="n">rt_vis</span><span class="o">.</span><span class="n">add_image</span><span class="p">(</span><span class="n">viewer</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;dataset&quot;</span><span class="p">,</span> <span class="n">channel_axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">rt_vis</span><span class="o">.</span><span class="n">add_image</span><span class="p">(</span><span class="n">viewer</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"dataset"</span><span class="p">,</span> <span class="n">channel_axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
 <span class="n">viewer</span><span class="o">.</span><span class="n">add_vectors</span><span class="p">(</span><span class="n">vect</span><span class="p">)</span>
 <span class="n">viewer</span><span class="o">.</span><span class="n">dims</span><span class="o">.</span><span class="n">ndisplay</span> <span class="o">=</span> <span class="mi">3</span>
 </pre></div>
@@ -170,7 +170,7 @@
 <p>and make a video.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">rt_vis</span><span class="o">.</span><span class="n">make_video</span><span class="p">(</span>
     <span class="n">viewer</span><span class="o">=</span><span class="n">viewer</span><span class="p">,</span>
-    <span class="n">save_file</span><span class="o">=</span><span class="s1">&#39;sphere_registered_vectorfield.gif&#39;</span><span class="p">,</span>
+    <span class="n">save_file</span><span class="o">=</span><span class="s1">'sphere_registered_vectorfield.gif'</span><span class="p">,</span>
     <span class="n">fps</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
 <span class="p">)</span>
 </pre></div>
@@ -186,7 +186,7 @@
 </pre></div>
 </div>
 <p>And with the mask, we compute the tracks.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">tracks</span> <span class="o">=</span> <span class="n">registration</span><span class="o">.</span><span class="n">trajectories</span><span class="p">(</span><span class="n">mask</span><span class="p">,</span> <span class="n">n_points</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="s2">&quot;XYZ&quot;</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="n">dataset</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">&quot;scale&quot;</span><span class="p">])</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">tracks</span> <span class="o">=</span> <span class="n">registration</span><span class="o">.</span><span class="n">trajectories</span><span class="p">(</span><span class="n">mask</span><span class="p">,</span> <span class="n">n_points</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="s2">"XYZ"</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="n">dataset</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"scale"</span><span class="p">])</span>
 </pre></div>
 </div>
 <div class="highlight-none notranslate"><div class="highlight"><pre><span></span>Computing trajectories: 100%|██████████| 9/9 [00:00&lt;00:00, 14.98/s]
@@ -194,7 +194,7 @@
 </div>
 <p>Finally, we upload the images in napari,</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">viewer</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span> <span class="c1"># Clear the viewer from other images</span>
-<span class="n">rt_vis</span><span class="o">.</span><span class="n">add_image</span><span class="p">(</span><span class="n">viewer</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;dataset&quot;</span><span class="p">,</span> <span class="n">channel_axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">opacity</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+<span class="n">rt_vis</span><span class="o">.</span><span class="n">add_image</span><span class="p">(</span><span class="n">viewer</span><span class="p">,</span> <span class="n">dataset</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">"dataset"</span><span class="p">,</span> <span class="n">channel_axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">opacity</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
 <span class="n">viewer</span><span class="o">.</span><span class="n">add_tracks</span><span class="p">(</span><span class="n">tracks</span><span class="p">)</span>
 <span class="n">viewer</span><span class="o">.</span><span class="n">dims</span><span class="o">.</span><span class="n">ndisplay</span> <span class="o">=</span> <span class="mi">3</span>
 <span class="n">viewer</span><span class="o">.</span><span class="n">camera</span><span class="o">.</span><span class="n">angles</span> <span class="o">=</span> <span class="p">(</span><span class="o">-</span><span class="mf">0.5812613950187316</span><span class="p">,</span> <span class="mf">21.01903309215726</span><span class="p">,</span> <span class="o">-</span><span class="mf">7.504582808602566</span><span class="p">)</span> <span class="c1"># Set camera angles to make the video look better</span>
@@ -203,7 +203,7 @@
 <p>and make the video</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">rt_vis</span><span class="o">.</span><span class="n">make_video</span><span class="p">(</span>
     <span class="n">viewer</span><span class="o">=</span><span class="n">viewer</span><span class="p">,</span>
-    <span class="n">save_file</span><span class="o">=</span><span class="s1">&#39;sphere_registered_trajectories.gif&#39;</span><span class="p">,</span>
+    <span class="n">save_file</span><span class="o">=</span><span class="s1">'sphere_registered_trajectories.gif'</span><span class="p">,</span>
     <span class="n">fps</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
 <span class="p">)</span>
 </pre></div>
@@ -278,7 +278,7 @@
       &#169;.
       
       |
-      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 8.2.3</a>
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.0.4</a>
       &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
       
       |

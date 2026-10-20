@@ -10,8 +10,8 @@
     <link rel="stylesheet" type="text/css" href="_static/basic.css?v=b08954a9" />
     <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=27fed22d" />
     <script src="_static/documentation_options.js?v=2709fde1"></script>
-    <script src="_static/doctools.js?v=9bcbadda"></script>
-    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
     <link rel="next" title="Rigid Registration of Spheres" href="examples_spheres.html" />
@@ -70,7 +70,7 @@
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1">#Generate a random dataset with 4 timepoints, 3 channels, and 10x10x10 images</span>
 <span class="n">dataset</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">rand</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span><span class="mi">3</span><span class="p">,</span><span class="mi">10</span><span class="p">,</span><span class="mi">10</span><span class="p">,</span><span class="mi">10</span><span class="p">)</span>
 <span class="c1">#Save the dataset to a file</span>
-<span class="n">np</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="s1">&#39;dataset.npy&#39;</span><span class="p">,</span> <span class="n">dataset</span><span class="p">)</span>
+<span class="n">np</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="s1">'dataset.npy'</span><span class="p">,</span> <span class="n">dataset</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>Check the dataset structure and ensure that necessary attributes are present.</p>
@@ -84,8 +84,8 @@ Attributes not found.
 <p>You can upload with load dataset instead to make sure all necessary attributes for many functions are found.</p>
 <p><strong>Note: This does not mean that you cannot work with this data. Simnply that mostly sure this data will be asked later on for some function.</strong></p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">dataset</span> <span class="o">=</span> <span class="n">rt_dataset</span><span class="o">.</span><span class="n">load_dataset</span><span class="p">(</span>
-    <span class="s1">&#39;dataset.npy&#39;</span><span class="p">,</span>
-    <span class="n">axis</span><span class="o">=</span><span class="s2">&quot;TCZYX&quot;</span><span class="p">,</span>
+    <span class="s1">'dataset.npy'</span><span class="p">,</span>
+    <span class="n">axis</span><span class="o">=</span><span class="s2">"TCZYX"</span><span class="p">,</span>
     <span class="n">scale</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">),</span>
 <span class="p">)</span>
 
@@ -126,7 +126,7 @@ Scale:  (1, 1, 1)
 </div>
 <p>If we provide a folder, the dataset will generate a folder structure in separated files.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">dataset</span> <span class="o">=</span> <span class="n">rt_data</span><span class="o">.</span><span class="n">sphere</span><span class="p">(</span>
-    <span class="n">out</span><span class="o">=</span><span class="s1">&#39;dataset_sphere&#39;</span><span class="p">,</span>
+    <span class="n">out</span><span class="o">=</span><span class="s1">'dataset_sphere'</span><span class="p">,</span>
     <span class="n">num_channels</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
     <span class="n">image_size</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>  <span class="c1">#This indicates to make an image of size image_size x image_size x image_size</span>
     <span class="n">stride</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">),</span>  <span class="c1">#This to downsample the image by a factor of stride per dimension</span>
@@ -134,7 +134,7 @@ Scale:  (1, 1, 1)
 </pre></div>
 </div>
 <p>We can visualize the structure of our dataset:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">rt_dataset</span><span class="o">.</span><span class="n">show_dataset_structure</span><span class="p">(</span><span class="s1">&#39;dataset_sphere&#39;</span><span class="p">)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">rt_dataset</span><span class="o">.</span><span class="n">show_dataset_structure</span><span class="p">(</span><span class="s1">'dataset_sphere'</span><span class="p">)</span>
 </pre></div>
 </div>
 <div class="highlight-none notranslate"><div class="highlight"><pre><span></span>|-- channel_0
@@ -169,12 +169,12 @@ Scale:  (1, 1, 1)
 <p>Now we can load this folder structure as an object Dataset.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">dataset</span> <span class="o">=</span> <span class="n">rt_dataset</span><span class="o">.</span><span class="n">Dataset</span><span class="p">(</span>
     <span class="p">[</span>
-        <span class="s2">&quot;dataset_sphere/channel_0/sphere_</span><span class="si">{:02d}</span><span class="s2">.tiff&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;dataset_sphere/channel_1/sphere_</span><span class="si">{:02d}</span><span class="s2">.tiff&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;dataset_sphere/channel_2/sphere_</span><span class="si">{:02d}</span><span class="s2">.tiff&quot;</span><span class="p">,</span>
+        <span class="s2">"dataset_sphere/channel_0/sphere_</span><span class="si">{:02d}</span><span class="s2">.tiff"</span><span class="p">,</span>
+        <span class="s2">"dataset_sphere/channel_1/sphere_</span><span class="si">{:02d}</span><span class="s2">.tiff"</span><span class="p">,</span>
+        <span class="s2">"dataset_sphere/channel_2/sphere_</span><span class="si">{:02d}</span><span class="s2">.tiff"</span><span class="p">,</span>
     <span class="p">],</span>
-    <span class="n">axis_data</span><span class="o">=</span><span class="s2">&quot;CT&quot;</span><span class="p">,</span>
-    <span class="n">axis_files</span><span class="o">=</span><span class="s2">&quot;XYZ&quot;</span><span class="p">,</span>
+    <span class="n">axis_data</span><span class="o">=</span><span class="s2">"CT"</span><span class="p">,</span>
+    <span class="n">axis_files</span><span class="o">=</span><span class="s2">"XYZ"</span><span class="p">,</span>
     <span class="n">scale</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">)</span>      <span class="c1"># Scale of the dataset, is the same as the stride in the generation</span>
 <span class="p">)</span>
 
@@ -188,7 +188,7 @@ Scale:  (1, 1, 1)
 <section id="converting-to-zarr">
 <h3>Converting to zarr<a class="headerlink" href="#converting-to-zarr" title="Link to this heading">¶</a></h3>
 <p>You can work with this Dataset for most of the functions afterwards. However you may be interested in converting it to a zarr array.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">dataset</span><span class="o">.</span><span class="n">to_zarr</span><span class="p">(</span><span class="s2">&quot;dataset_spheres.zarr&quot;</span><span class="p">)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">dataset</span><span class="o">.</span><span class="n">to_zarr</span><span class="p">(</span><span class="s2">"dataset_spheres.zarr"</span><span class="p">)</span>
 </pre></div>
 </div>
 <div class="highlight-none notranslate"><div class="highlight"><pre><span></span>Saving to Zarr: 100%|██████████| 30/30 [00:00&lt;00:00, 74.52images/s]
@@ -263,7 +263,7 @@ Scale:  (1, 1, 1)
       &#169;.
       
       |
-      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 8.2.3</a>
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 9.0.4</a>
       &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
       
       |
