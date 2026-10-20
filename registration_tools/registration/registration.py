@@ -1772,6 +1772,7 @@ class RegistrationSITK(Registration):
             R.SetInitialTransform(sitk.BSplineTransform(dims))
         elif self._registration_type == "DisplacementFieldTransform":
             displacementField = sitk.Image(img_ref.GetSize(), sitk.sitkVectorFloat64)
+            displacementField.CopyInformation(img_ref)
             displacementTx = sitk.DisplacementFieldTransform(displacementField)
             displacementTx.SetSmoothingGaussianOnUpdate(
                 varianceForUpdateField=0.0, varianceForTotalField=self._displacement_field_smoothing_sigmas

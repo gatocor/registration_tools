@@ -1,0 +1,509 @@
+{
+ "schema_version": "0.1",
+ "macro_groups": [],
+ "nodes": [
+  {
+   "id": "begin",
+   "type": "begin",
+   "label": "Begin",
+   "position": {
+    "x": 0.0,
+    "y": 0.0
+   },
+   "parameters": {},
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {},
+   "exec_connections": []
+  },
+  {
+   "id": "src",
+   "type": "sample_image",
+   "label": "Camera",
+   "position": {
+    "x": 0.0,
+    "y": 180.0
+   },
+   "parameters": {
+    "dataset": "camera"
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {},
+   "exec_connections": [],
+   "display_config": {
+    "image": {
+     "enabled": true,
+     "layer_type": "image",
+     "add_to_viewer": false
+    }
+   }
+  },
+  {
+   "id": "ref",
+   "type": "rescale_intensity",
+   "label": "Reference",
+   "position": {
+    "x": 300.0,
+    "y": 0.0
+   },
+   "parameters": {
+    "in_min": 0.0,
+    "in_max": 1.0,
+    "out_min": 0.0,
+    "out_max": 1.0,
+    "input_from_image": true
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "image": "src.image"
+   },
+   "exec_connections": [
+    "begin.exec_out"
+   ],
+   "display_config": {
+    "adjusted": {
+     "enabled": true,
+     "layer_type": "image",
+     "visible": true,
+     "colormap": "magenta",
+     "blending": "additive"
+    }
+   }
+  },
+  {
+   "id": "rot",
+   "type": "rotate_image",
+   "label": "Rotated",
+   "position": {
+    "x": 600.0,
+    "y": 0.0
+   },
+   "parameters": {
+    "angle": 6.0,
+    "resize": false
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "image": "ref.adjusted"
+   },
+   "exec_connections": [
+    "ref.exec_out"
+   ],
+   "display_config": {
+    "rotated": {
+     "enabled": true,
+     "layer_type": "image",
+     "add_to_viewer": false
+    }
+   }
+  },
+  {
+   "id": "mov",
+   "type": "shift_image",
+   "label": "Moving",
+   "position": {
+    "x": 900.0,
+    "y": 0.0
+   },
+   "parameters": {
+    "shift_y": 15.0,
+    "shift_x": -10.0,
+    "method": "spline"
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "image": "rot.rotated"
+   },
+   "exec_connections": [
+    "rot.exec_out"
+   ],
+   "display_config": {
+    "shifted": {
+     "enabled": true,
+     "layer_type": "image",
+     "visible": false,
+     "colormap": "green",
+     "blending": "additive"
+    }
+   }
+  },
+  {
+   "id": "reg_vt",
+   "type": "registration_tools:register_pair",
+   "label": "Register Pair (vt)",
+   "position": {
+    "x": 1200.0,
+    "y": -180.0
+   },
+   "parameters": {
+    "transformation": "rigid",
+    "backend": "vt",
+    "pyramid_levels": 3,
+    "grid_spacing": 1,
+    "use_layer_scale": true,
+    "extra_args": ""
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "reference": "ref.adjusted",
+    "moving": "mov.shifted"
+   },
+   "exec_connections": [
+    "mov.exec_out"
+   ]
+  },
+  {
+   "id": "app_vt",
+   "type": "registration_tools:apply_registration",
+   "label": "Registered (vt)",
+   "position": {
+    "x": 1500.0,
+    "y": -180.0
+   },
+   "parameters": {
+    "order": 1,
+    "boundary": "constant",
+    "fill_value": 0.0
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "registration": "reg_vt.vectors_out",
+    "image": "mov.shifted"
+   },
+   "exec_connections": [
+    "reg_vt.exec_out"
+   ],
+   "display_config": {
+    "image_out": {
+     "enabled": true,
+     "layer_type": "image",
+     "visible": true,
+     "colormap": "green",
+     "blending": "additive"
+    }
+   }
+  },
+  {
+   "id": "arr_vt",
+   "type": "registration_tools:registration_to_vectors",
+   "label": "Motion (vt)",
+   "position": {
+    "x": 1500.0,
+    "y": -360.0
+   },
+   "parameters": {
+    "spacing": 48
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "registration": "reg_vt.vectors_out"
+   },
+   "exec_connections": [
+    "app_vt.exec_out"
+   ],
+   "display_config": {
+    "vectors_out": {
+     "enabled": true,
+     "layer_type": "vectors",
+     "edge_color": "#FFD166",
+     "edge_width": 1.5,
+     "visible": true
+    }
+   }
+  },
+  {
+   "id": "reg_sitk",
+   "type": "registration_tools:register_pair",
+   "label": "Register Pair (sitk)",
+   "position": {
+    "x": 1200.0,
+    "y": 180.0
+   },
+   "parameters": {
+    "transformation": "rigid",
+    "backend": "sitk",
+    "pyramid_levels": 3,
+    "grid_spacing": 1,
+    "use_layer_scale": true,
+    "extra_args": ""
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "reference": "ref.adjusted",
+    "moving": "mov.shifted"
+   },
+   "exec_connections": [
+    "arr_vt.exec_out"
+   ]
+  },
+  {
+   "id": "app_sitk",
+   "type": "registration_tools:apply_registration",
+   "label": "Registered (sitk)",
+   "position": {
+    "x": 1500.0,
+    "y": 180.0
+   },
+   "parameters": {
+    "order": 1,
+    "boundary": "constant",
+    "fill_value": 0.0
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "registration": "reg_sitk.vectors_out",
+    "image": "mov.shifted"
+   },
+   "exec_connections": [
+    "reg_sitk.exec_out"
+   ],
+   "display_config": {
+    "image_out": {
+     "enabled": true,
+     "layer_type": "image",
+     "visible": false,
+     "colormap": "green",
+     "blending": "additive"
+    }
+   }
+  },
+  {
+   "id": "cmp_mov",
+   "type": "compare_images",
+   "label": "Compare: moving",
+   "position": {
+    "x": 1800.0,
+    "y": -270.0
+   },
+   "parameters": {
+    "data_range": 0.0
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "reference": "ref.adjusted",
+    "image": "mov.shifted"
+   },
+   "exec_connections": [
+    "app_sitk.exec_out"
+   ],
+   "display_config": {
+    "difference": {
+     "enabled": true,
+     "layer_type": "image",
+     "add_to_viewer": false
+    },
+    "ssim_map": {
+     "enabled": true,
+     "layer_type": "image",
+     "add_to_viewer": false
+    }
+   }
+  },
+  {
+   "id": "cmp_vt",
+   "type": "compare_images",
+   "label": "Compare: vt",
+   "position": {
+    "x": 1800.0,
+    "y": -90.0
+   },
+   "parameters": {
+    "data_range": 0.0
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "reference": "ref.adjusted",
+    "image": "app_vt.image_out"
+   },
+   "exec_connections": [
+    "cmp_mov.exec_out"
+   ],
+   "display_config": {
+    "difference": {
+     "enabled": true,
+     "layer_type": "image",
+     "add_to_viewer": false
+    },
+    "ssim_map": {
+     "enabled": true,
+     "layer_type": "image",
+     "add_to_viewer": false
+    }
+   }
+  },
+  {
+   "id": "cmp_sitk",
+   "type": "compare_images",
+   "label": "Compare: sitk",
+   "position": {
+    "x": 1800.0,
+    "y": 90.0
+   },
+   "parameters": {
+    "data_range": 0.0
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "reference": "ref.adjusted",
+    "image": "app_sitk.image_out"
+   },
+   "exec_connections": [
+    "cmp_vt.exec_out"
+   ],
+   "display_config": {
+    "difference": {
+     "enabled": true,
+     "layer_type": "image",
+     "add_to_viewer": false
+    },
+    "ssim_map": {
+     "enabled": true,
+     "layer_type": "image",
+     "add_to_viewer": false
+    }
+   }
+  }
+ ]
+}

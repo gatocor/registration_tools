@@ -1,0 +1,392 @@
+{
+ "schema_version": "0.1",
+ "macro_groups": [],
+ "nodes": [
+  {
+   "id": "begin",
+   "type": "begin",
+   "label": "Begin",
+   "position": {
+    "x": 0.0,
+    "y": 0.0
+   },
+   "parameters": {},
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {},
+   "exec_connections": []
+  },
+  {
+   "id": "jit",
+   "type": "get_layer",
+   "label": "zstack_jitter",
+   "position": {
+    "x": 0.0,
+    "y": 180.0
+   },
+   "parameters": {
+    "layer_name": "zstack_jitter",
+    "axis_map": [
+     {
+      "d0": "Z",
+      "d1": "Y",
+      "d2": "X",
+      "d3": "-",
+      "d4": "-"
+     }
+    ],
+    "rechunk_enabled": false,
+    "target_chunks": "auto",
+    "pixel_size": "1.0, 0.5, 0.5"
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {},
+   "exec_connections": [],
+   "display_config": {
+    "data_out": {
+     "enabled": true,
+     "layer_type": "image",
+     "add_to_viewer": false
+    }
+   }
+  },
+  {
+   "id": "clean",
+   "type": "get_layer",
+   "label": "zstack_clean",
+   "position": {
+    "x": 0.0,
+    "y": 360.0
+   },
+   "parameters": {
+    "layer_name": "zstack_clean",
+    "axis_map": [
+     {
+      "d0": "Z",
+      "d1": "Y",
+      "d2": "X",
+      "d3": "-",
+      "d4": "-"
+     }
+    ],
+    "rechunk_enabled": false,
+    "target_chunks": "auto",
+    "pixel_size": "1.0, 0.5, 0.5"
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {},
+   "exec_connections": [],
+   "display_config": {
+    "data_out": {
+     "enabled": true,
+     "layer_type": "image",
+     "add_to_viewer": false
+    }
+   }
+  },
+  {
+   "id": "reg",
+   "type": "registration_tools:register_stack",
+   "label": "Register slices",
+   "position": {
+    "x": 300.0,
+    "y": 0.0
+   },
+   "parameters": {
+    "mode": "consecutive",
+    "reference_index": 20,
+    "accumulate": true,
+    "transformation": "translation",
+    "backend": "vt",
+    "pyramid_levels": 3,
+    "grid_spacing": 1,
+    "use_layer_scale": true,
+    "extra_args": ""
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "stack": "jit.data_out"
+   },
+   "exec_connections": [
+    "begin.exec_out"
+   ]
+  },
+  {
+   "id": "app",
+   "type": "registration_tools:apply_registration",
+   "label": "Aligned stack",
+   "position": {
+    "x": 600.0,
+    "y": 0.0
+   },
+   "parameters": {
+    "order": 1,
+    "boundary": "constant",
+    "fill_value": 0.0
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "registration": "reg.vectors_out",
+    "image": "jit.data_out"
+   },
+   "exec_connections": [
+    "reg.exec_out"
+   ],
+   "display_config": {
+    "image_out": {
+     "enabled": true,
+     "layer_type": "image",
+     "visible": true
+    }
+   }
+  },
+  {
+   "id": "cmp_before",
+   "type": "compare_images",
+   "label": "Compare: jittered",
+   "position": {
+    "x": 900.0,
+    "y": -90.0
+   },
+   "parameters": {
+    "data_range": 0.0
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "reference": "clean.data_out",
+    "image": "jit.data_out"
+   },
+   "exec_connections": [
+    "app.exec_out"
+   ],
+   "display_config": {
+    "difference": {
+     "enabled": true,
+     "layer_type": "image",
+     "add_to_viewer": false
+    },
+    "ssim_map": {
+     "enabled": true,
+     "layer_type": "image",
+     "add_to_viewer": false
+    }
+   }
+  },
+  {
+   "id": "cmp_after",
+   "type": "compare_images",
+   "label": "Compare: aligned",
+   "position": {
+    "x": 900.0,
+    "y": 90.0
+   },
+   "parameters": {
+    "data_range": 0.0
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "reference": "clean.data_out",
+    "image": "app.image_out"
+   },
+   "exec_connections": [
+    "cmp_before.exec_out"
+   ],
+   "display_config": {
+    "difference": {
+     "enabled": true,
+     "layer_type": "image",
+     "add_to_viewer": false
+    },
+    "ssim_map": {
+     "enabled": true,
+     "layer_type": "image",
+     "add_to_viewer": false
+    }
+   }
+  },
+  {
+   "id": "truth",
+   "type": "registration_tools:load_registration",
+   "label": "Ground truth",
+   "position": {
+    "x": 300.0,
+    "y": 360.0
+   },
+   "parameters": {
+    "path": "data/zstack_jitter_truth.npz"
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "image": "jit.data_out"
+   },
+   "exec_connections": [
+    "cmp_after.exec_out"
+   ]
+  },
+  {
+   "id": "arr_est",
+   "type": "registration_tools:registration_to_vectors",
+   "label": "Slice shifts (estimated)",
+   "position": {
+    "x": 600.0,
+    "y": 270.0
+   },
+   "parameters": {
+    "spacing": 64
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "registration": "reg.vectors_out"
+   },
+   "exec_connections": [
+    "truth.exec_out"
+   ],
+   "display_config": {
+    "vectors_out": {
+     "enabled": true,
+     "layer_type": "vectors",
+     "edge_color": "#FFD166",
+     "edge_width": 1.5,
+     "visible": true
+    }
+   }
+  },
+  {
+   "id": "arr_truth",
+   "type": "registration_tools:registration_to_vectors",
+   "label": "Slice shifts (truth)",
+   "position": {
+    "x": 600.0,
+    "y": 450.0
+   },
+   "parameters": {
+    "spacing": 64
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "registration": "truth.vectors_out"
+   },
+   "exec_connections": [
+    "arr_est.exec_out"
+   ],
+   "display_config": {
+    "vectors_out": {
+     "enabled": true,
+     "layer_type": "vectors",
+     "edge_color": "#4CC9F0",
+     "edge_width": 1.5,
+     "visible": true
+    }
+   }
+  }
+ ]
+}

@@ -1,0 +1,504 @@
+{
+ "schema_version": "0.1",
+ "macro_groups": [],
+ "nodes": [
+  {
+   "id": "begin",
+   "type": "begin",
+   "label": "Begin",
+   "position": {
+    "x": 0.0,
+    "y": 0.0
+   },
+   "parameters": {},
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {},
+   "exec_connections": []
+  },
+  {
+   "id": "vol",
+   "type": "get_layer",
+   "label": "drift_3d",
+   "position": {
+    "x": 0.0,
+    "y": 180.0
+   },
+   "parameters": {
+    "layer_name": "drift_3d",
+    "axis_map": [
+     {
+      "d0": "T",
+      "d1": "Z",
+      "d2": "Y",
+      "d3": "X",
+      "d4": "-"
+     }
+    ],
+    "rechunk_enabled": false,
+    "target_chunks": "auto",
+    "pixel_size": "2.0, 0.5, 0.5"
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {},
+   "exec_connections": [],
+   "display_config": {
+    "data_out": {
+     "enabled": true,
+     "layer_type": "image",
+     "add_to_viewer": false
+    }
+   }
+  },
+  {
+   "id": "reg_um",
+   "type": "registration_tools:register_stack",
+   "label": "Register (voxel size)",
+   "position": {
+    "x": 300.0,
+    "y": -90.0
+   },
+   "parameters": {
+    "mode": "reference",
+    "reference_index": 0,
+    "accumulate": true,
+    "transformation": "rigid",
+    "backend": "vt",
+    "pyramid_levels": 3,
+    "grid_spacing": 1,
+    "use_layer_scale": true,
+    "extra_args": ""
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "stack": "vol.data_out"
+   },
+   "exec_connections": [
+    "begin.exec_out"
+   ]
+  },
+  {
+   "id": "reg_px",
+   "type": "registration_tools:register_stack",
+   "label": "Register (pixels)",
+   "position": {
+    "x": 300.0,
+    "y": 180.0
+   },
+   "parameters": {
+    "mode": "reference",
+    "reference_index": 0,
+    "accumulate": true,
+    "transformation": "rigid",
+    "backend": "vt",
+    "pyramid_levels": 3,
+    "grid_spacing": 1,
+    "use_layer_scale": false,
+    "extra_args": ""
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "stack": "vol.data_out"
+   },
+   "exec_connections": [
+    "reg_um.exec_out"
+   ]
+  },
+  {
+   "id": "app_um",
+   "type": "registration_tools:apply_registration",
+   "label": "Registered (voxel size)",
+   "position": {
+    "x": 600.0,
+    "y": -90.0
+   },
+   "parameters": {
+    "order": 1,
+    "boundary": "constant",
+    "fill_value": 0.0
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "registration": "reg_um.vectors_out",
+    "image": "vol.data_out"
+   },
+   "exec_connections": [
+    "reg_px.exec_out"
+   ],
+   "display_config": {
+    "image_out": {
+     "enabled": true,
+     "layer_type": "image",
+     "visible": true
+    }
+   }
+  },
+  {
+   "id": "app_px",
+   "type": "registration_tools:apply_registration",
+   "label": "Registered (pixels)",
+   "position": {
+    "x": 600.0,
+    "y": 180.0
+   },
+   "parameters": {
+    "order": 1,
+    "boundary": "constant",
+    "fill_value": 0.0
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "registration": "reg_px.vectors_out",
+    "image": "vol.data_out"
+   },
+   "exec_connections": [
+    "app_um.exec_out"
+   ],
+   "display_config": {
+    "image_out": {
+     "enabled": true,
+     "layer_type": "image",
+     "visible": false
+    }
+   }
+  },
+  {
+   "id": "truth",
+   "type": "registration_tools:load_registration",
+   "label": "Ground truth",
+   "position": {
+    "x": 300.0,
+    "y": 450.0
+   },
+   "parameters": {
+    "path": "data/drift_3d_truth.npz"
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "image": "vol.data_out"
+   },
+   "exec_connections": [
+    "app_px.exec_out"
+   ]
+  },
+  {
+   "id": "app_truth",
+   "type": "registration_tools:apply_registration",
+   "label": "Registered (truth)",
+   "position": {
+    "x": 600.0,
+    "y": 450.0
+   },
+   "parameters": {
+    "order": 1,
+    "boundary": "constant",
+    "fill_value": 0.0
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "registration": "truth.vectors_out",
+    "image": "vol.data_out"
+   },
+   "exec_connections": [
+    "truth.exec_out"
+   ],
+   "display_config": {
+    "image_out": {
+     "enabled": true,
+     "layer_type": "image",
+     "add_to_viewer": false
+    }
+   }
+  },
+  {
+   "id": "last_truth",
+   "type": "select_channel",
+   "label": "Last time point (truth)",
+   "position": {
+    "x": 900.0,
+    "y": 450.0
+   },
+   "parameters": {
+    "axis": 0,
+    "index": 5
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "image": "app_truth.image_out"
+   },
+   "exec_connections": [
+    "app_truth.exec_out"
+   ],
+   "display_config": {
+    "channel": {
+     "enabled": true,
+     "layer_type": "image",
+     "add_to_viewer": false
+    }
+   }
+  },
+  {
+   "id": "last_um",
+   "type": "select_channel",
+   "label": "Last time point (voxel size)",
+   "position": {
+    "x": 900.0,
+    "y": -90.0
+   },
+   "parameters": {
+    "axis": 0,
+    "index": 5
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "image": "app_um.image_out"
+   },
+   "exec_connections": [
+    "last_truth.exec_out"
+   ],
+   "display_config": {
+    "channel": {
+     "enabled": true,
+     "layer_type": "image",
+     "add_to_viewer": false
+    }
+   }
+  },
+  {
+   "id": "last_px",
+   "type": "select_channel",
+   "label": "Last time point (pixels)",
+   "position": {
+    "x": 900.0,
+    "y": 180.0
+   },
+   "parameters": {
+    "axis": 0,
+    "index": 5
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "image": "app_px.image_out"
+   },
+   "exec_connections": [
+    "last_um.exec_out"
+   ],
+   "display_config": {
+    "channel": {
+     "enabled": true,
+     "layer_type": "image",
+     "add_to_viewer": false
+    }
+   }
+  },
+  {
+   "id": "cmp_um",
+   "type": "compare_images",
+   "label": "Compare: voxel size",
+   "position": {
+    "x": 1200.0,
+    "y": 0.0
+   },
+   "parameters": {
+    "data_range": 0.0
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "reference": "last_truth.channel",
+    "image": "last_um.channel"
+   },
+   "exec_connections": [
+    "last_px.exec_out"
+   ],
+   "display_config": {
+    "difference": {
+     "enabled": true,
+     "layer_type": "image",
+     "add_to_viewer": false
+    },
+    "ssim_map": {
+     "enabled": true,
+     "layer_type": "image",
+     "add_to_viewer": false
+    }
+   }
+  },
+  {
+   "id": "cmp_px",
+   "type": "compare_images",
+   "label": "Compare: pixels",
+   "position": {
+    "x": 1200.0,
+    "y": 270.0
+   },
+   "parameters": {
+    "data_range": 0.0
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "reference": "last_truth.channel",
+    "image": "last_px.channel"
+   },
+   "exec_connections": [
+    "cmp_um.exec_out"
+   ],
+   "display_config": {
+    "difference": {
+     "enabled": true,
+     "layer_type": "image",
+     "add_to_viewer": false
+    },
+    "ssim_map": {
+     "enabled": true,
+     "layer_type": "image",
+     "add_to_viewer": false
+    }
+   }
+  }
+ ],
+ "viewer": {
+  "ndisplay": 3
+ }
+}

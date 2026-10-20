@@ -1,0 +1,386 @@
+{
+ "schema_version": "0.1",
+ "macro_groups": [],
+ "nodes": [
+  {
+   "id": "begin",
+   "type": "begin",
+   "label": "Begin",
+   "position": {
+    "x": 0.0,
+    "y": 0.0
+   },
+   "parameters": {},
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {},
+   "exec_connections": []
+  },
+  {
+   "id": "nuc",
+   "type": "get_layer",
+   "label": "drift_2d_nuclei",
+   "position": {
+    "x": 0.0,
+    "y": 180.0
+   },
+   "parameters": {
+    "layer_name": "drift_2d_nuclei",
+    "axis_map": [
+     {
+      "d0": "T",
+      "d1": "Y",
+      "d2": "X",
+      "d3": "-",
+      "d4": "-"
+     }
+    ],
+    "rechunk_enabled": false,
+    "target_chunks": "auto",
+    "pixel_size": "0.5, 0.5"
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {},
+   "exec_connections": [],
+   "display_config": {
+    "data_out": {
+     "enabled": true,
+     "layer_type": "image",
+     "add_to_viewer": false
+    }
+   }
+  },
+  {
+   "id": "reg_first",
+   "type": "registration_tools:register_stack",
+   "label": "Onto frame 0",
+   "position": {
+    "x": 300.0,
+    "y": -180.0
+   },
+   "parameters": {
+    "mode": "reference",
+    "reference_index": 0,
+    "accumulate": true,
+    "transformation": "rigid",
+    "backend": "vt",
+    "pyramid_levels": 3,
+    "grid_spacing": 1,
+    "use_layer_scale": true,
+    "extra_args": ""
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "stack": "nuc.data_out"
+   },
+   "exec_connections": [
+    "begin.exec_out"
+   ]
+  },
+  {
+   "id": "reg_last",
+   "type": "registration_tools:register_stack",
+   "label": "Chained onto the last frame",
+   "position": {
+    "x": 300.0,
+    "y": 90.0
+   },
+   "parameters": {
+    "mode": "consecutive",
+    "reference_index": -1,
+    "accumulate": true,
+    "transformation": "rigid",
+    "backend": "vt",
+    "pyramid_levels": 3,
+    "grid_spacing": 1,
+    "use_layer_scale": true,
+    "extra_args": ""
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "stack": "nuc.data_out"
+   },
+   "exec_connections": [
+    "reg_first.exec_out"
+   ]
+  },
+  {
+   "id": "reg_steps",
+   "type": "registration_tools:register_stack",
+   "label": "Frame to frame",
+   "position": {
+    "x": 300.0,
+    "y": 360.0
+   },
+   "parameters": {
+    "mode": "consecutive",
+    "reference_index": 0,
+    "accumulate": false,
+    "transformation": "rigid",
+    "backend": "vt",
+    "pyramid_levels": 3,
+    "grid_spacing": 1,
+    "use_layer_scale": true,
+    "extra_args": ""
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "stack": "nuc.data_out"
+   },
+   "exec_connections": [
+    "reg_last.exec_out"
+   ]
+  },
+  {
+   "id": "app_first",
+   "type": "registration_tools:apply_registration",
+   "label": "Aligned to frame 0",
+   "position": {
+    "x": 600.0,
+    "y": -270.0
+   },
+   "parameters": {
+    "order": 1,
+    "boundary": "constant",
+    "fill_value": 0.0
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "registration": "reg_first.vectors_out",
+    "image": "nuc.data_out"
+   },
+   "exec_connections": [
+    "reg_steps.exec_out"
+   ],
+   "display_config": {
+    "image_out": {
+     "enabled": true,
+     "layer_type": "image",
+     "visible": true
+    }
+   }
+  },
+  {
+   "id": "arr_first",
+   "type": "registration_tools:registration_to_vectors",
+   "label": "Arrows: onto frame 0",
+   "position": {
+    "x": 600.0,
+    "y": -90.0
+   },
+   "parameters": {
+    "spacing": 32
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "registration": "reg_first.vectors_out"
+   },
+   "exec_connections": [
+    "app_first.exec_out"
+   ],
+   "display_config": {
+    "vectors_out": {
+     "enabled": true,
+     "layer_type": "vectors",
+     "edge_color": "#FFD166",
+     "edge_width": 1.5,
+     "visible": true
+    }
+   }
+  },
+  {
+   "id": "app_last",
+   "type": "registration_tools:apply_registration",
+   "label": "Aligned to the last frame",
+   "position": {
+    "x": 600.0,
+    "y": 90.0
+   },
+   "parameters": {
+    "order": 1,
+    "boundary": "constant",
+    "fill_value": 0.0
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "registration": "reg_last.vectors_out",
+    "image": "nuc.data_out"
+   },
+   "exec_connections": [
+    "arr_first.exec_out"
+   ],
+   "display_config": {
+    "image_out": {
+     "enabled": true,
+     "layer_type": "image",
+     "visible": false
+    }
+   }
+  },
+  {
+   "id": "arr_last",
+   "type": "registration_tools:registration_to_vectors",
+   "label": "Arrows: onto the last frame",
+   "position": {
+    "x": 600.0,
+    "y": 270.0
+   },
+   "parameters": {
+    "spacing": 32
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "registration": "reg_last.vectors_out"
+   },
+   "exec_connections": [
+    "app_last.exec_out"
+   ],
+   "display_config": {
+    "vectors_out": {
+     "enabled": true,
+     "layer_type": "vectors",
+     "edge_color": "#F72585",
+     "edge_width": 1.5,
+     "visible": false
+    }
+   }
+  },
+  {
+   "id": "arr_steps",
+   "type": "registration_tools:registration_to_vectors",
+   "label": "Arrows: frame to frame",
+   "position": {
+    "x": 600.0,
+    "y": 450.0
+   },
+   "parameters": {
+    "spacing": 32
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "registration": "reg_steps.vectors_out"
+   },
+   "exec_connections": [
+    "arr_last.exec_out"
+   ],
+   "display_config": {
+    "vectors_out": {
+     "enabled": true,
+     "layer_type": "vectors",
+     "edge_color": "#4CC9F0",
+     "edge_width": 1.5,
+     "visible": false
+    }
+   }
+  }
+ ]
+}

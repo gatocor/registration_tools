@@ -1,0 +1,140 @@
+{
+ "schema_version": "0.1",
+ "macro_groups": [],
+ "nodes": [
+  {
+   "id": "begin",
+   "type": "begin",
+   "label": "Begin",
+   "position": {
+    "x": 0.0,
+    "y": 0.0
+   },
+   "parameters": {},
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {},
+   "exec_connections": []
+  },
+  {
+   "id": "src",
+   "type": "sample_image",
+   "label": "Moving nuclei",
+   "position": {
+    "x": 0.0,
+    "y": 180.0
+   },
+   "parameters": {
+    "dataset": "moving_nuclei"
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {},
+   "exec_connections": [],
+   "display_config": {
+    "image": {
+     "enabled": true,
+     "layer_type": "image",
+     "visible": true
+    }
+   }
+  },
+  {
+   "id": "reg",
+   "type": "registration_tools:register_stack",
+   "label": "Frame-to-frame motion",
+   "position": {
+    "x": 300.0,
+    "y": 0.0
+   },
+   "parameters": {
+    "mode": "consecutive",
+    "reference_index": 0,
+    "accumulate": false,
+    "transformation": "vectorfield",
+    "backend": "vt",
+    "pyramid_levels": 3,
+    "grid_spacing": 8,
+    "use_layer_scale": true,
+    "extra_args": ""
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "stack": "src.image"
+   },
+   "exec_connections": [
+    "begin.exec_out"
+   ]
+  },
+  {
+   "id": "arr",
+   "type": "registration_tools:registration_to_vectors",
+   "label": "Motion",
+   "position": {
+    "x": 600.0,
+    "y": 0.0
+   },
+   "parameters": {
+    "spacing": 16
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "registration": "reg.vectors_out"
+   },
+   "exec_connections": [
+    "reg.exec_out"
+   ],
+   "display_config": {
+    "vectors_out": {
+     "enabled": true,
+     "layer_type": "vectors",
+     "edge_color": "#FFD166",
+     "edge_width": 1.5,
+     "visible": true
+    }
+   }
+  }
+ ]
+}

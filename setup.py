@@ -6,6 +6,7 @@ setup(
     packages=find_packages(),
     install_requires=[
         'scikit-image',
+        'scipy',
         'zarr>=3.0.3',
         'h5py>=3',
         'dask[distributed]>=2025',
@@ -18,10 +19,15 @@ setup(
         'pyqt': ['pyqt5'],
     },
     test_suite='tests',
+    package_data={'registration_tools': ['napari.yaml']},
     entry_points={
         'console_scripts': [
             # Add command line scripts here
             # e.g., 'my-tool=my_package.module:main_function'
+        ],
+        # Napari_Flow reads the node functions from this entry point (see registration_tools/nodes.py).
+        'napari.manifest': [
+            'registration_tools = registration_tools:napari.yaml',
         ],
     },
     author='Gabriel Torregrosa Cortés',

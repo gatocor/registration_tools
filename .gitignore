@@ -154,3 +154,10 @@ tests/*
 examples/*
 !examples/*.py
 !examples/*.ipynb
+# Napari_Flow examples: the pipelines and scripts, not the generated data/ and registrations/
+!examples/napari_flow/
+examples/napari_flow/*
+!examples/napari_flow/*.json
+!examples/napari_flow/*.md
+!examples/napari_flow/*.py
+!examples/napari_flow/*.csv

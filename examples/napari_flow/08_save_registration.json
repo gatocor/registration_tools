@@ -1,0 +1,184 @@
+{
+ "schema_version": "0.1",
+ "macro_groups": [],
+ "nodes": [
+  {
+   "id": "begin",
+   "type": "begin",
+   "label": "Begin",
+   "position": {
+    "x": 0.0,
+    "y": 0.0
+   },
+   "parameters": {},
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {},
+   "exec_connections": []
+  },
+  {
+   "id": "nuc",
+   "type": "get_layer",
+   "label": "drift_2d_nuclei",
+   "position": {
+    "x": 0.0,
+    "y": 180.0
+   },
+   "parameters": {
+    "layer_name": "drift_2d_nuclei",
+    "axis_map": [
+     {
+      "d0": "T",
+      "d1": "Y",
+      "d2": "X",
+      "d3": "-",
+      "d4": "-"
+     }
+    ],
+    "rechunk_enabled": false,
+    "target_chunks": "auto",
+    "pixel_size": "0.5, 0.5"
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {},
+   "exec_connections": [],
+   "display_config": {
+    "data_out": {
+     "enabled": true,
+     "layer_type": "image",
+     "add_to_viewer": false
+    }
+   }
+  },
+  {
+   "id": "reg",
+   "type": "registration_tools:register_stack",
+   "label": "Register Stack",
+   "position": {
+    "x": 300.0,
+    "y": 0.0
+   },
+   "parameters": {
+    "mode": "consecutive",
+    "reference_index": 0,
+    "accumulate": true,
+    "transformation": "rigid",
+    "backend": "vt",
+    "pyramid_levels": 3,
+    "grid_spacing": 1,
+    "use_layer_scale": true,
+    "extra_args": ""
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "stack": "nuc.data_out"
+   },
+   "exec_connections": [
+    "begin.exec_out"
+   ]
+  },
+  {
+   "id": "save",
+   "type": "registration_tools:save_registration",
+   "label": "Save Registration",
+   "position": {
+    "x": 600.0,
+    "y": 0.0
+   },
+   "parameters": {
+    "path": "registrations/drift_2d.npz",
+    "overwrite": true
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "registration": "reg.vectors_out"
+   },
+   "exec_connections": [
+    "reg.exec_out"
+   ]
+  },
+  {
+   "id": "app",
+   "type": "registration_tools:apply_registration",
+   "label": "Nuclei (registered)",
+   "position": {
+    "x": 900.0,
+    "y": 0.0
+   },
+   "parameters": {
+    "order": 1,
+    "boundary": "constant",
+    "fill_value": 0.0
+   },
+   "checkpoint_config": {
+    "enabled": false,
+    "folder": "",
+    "name": "",
+    "pyramid_levels": 1,
+    "pyramid_downsample": "xy",
+    "chunks": "auto",
+    "overwrite": true,
+    "continue_from_checkpoint": true
+   },
+   "dynamic_param_bindings": {},
+   "environment": null,
+   "input_connections": {
+    "registration": "save.vectors_out",
+    "image": "nuc.data_out"
+   },
+   "exec_connections": [
+    "save.exec_out"
+   ],
+   "display_config": {
+    "image_out": {
+     "enabled": true,
+     "layer_type": "image",
+     "visible": true
+    }
+   }
+  }
+ ]
+}

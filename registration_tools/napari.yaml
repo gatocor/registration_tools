@@ -1,0 +1,5 @@
+# Declares registration_tools to napari's plugin system. It contributes nothing to
+# napari itself; the entry point lets Napari_Flow find the node functions through
+# `napari_experimental_provide_function` in registration_tools/__init__.py.
+name: registration_tools
+display_name: Registration Tools
