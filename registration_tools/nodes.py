@@ -3,39 +3,45 @@ Napari_Flow nodes for the function-based registration API.
 
 Napari_Flow (napari_flow_editor) turns the functions in NODES into nodes through the
 napari function hook `napari_experimental_provide_function` of this package. After
-installing registration_tools, run `nfe plugins --refresh` and reopen the editor: the
-nodes appear under Plugins > registration-tools.
+installing registration_tools, run `nfe plugins --refresh` (or, from an editor in
+another environment, `nfe plugins --refresh --env <this environment>`) and reopen the
+editor: the nodes appear under Plugins > registration-tools.
 
 That route builds a node from the signature, so these wrappers follow its rules:
 
 - napari layer annotations (strings, so napari is not imported) are input sockets,
-  float/int/bool/str arguments are parameters and the return annotation is the only
-  output;
-- there are no dropdowns, so choices are checked by the functions, whose errors list
-  the valid values;
+  float/int/bool/str arguments are parameters, `Literal` choices are dropdowns and
+  the return annotation is the only output;
 - a registration travels as (dict, metadata). The editor does not draw dicts, and its
   per-node environments can carry them;
 - the image socket of the apply nodes comes last: Napari_Flow merges the inputs'
   metadata in socket order, so the image's name, scale and contrast win over the
   registration's.
 
-Nothing heavy is imported here: the editor imports this module even for nodes that it
-runs in another environment (e.g. one with vt-python).
+Nothing heavy is imported here; vt-python and SimpleITK are imported when a
+registration runs.
 """
 
 import os
 import string
 import sys
 import warnings
+from typing import Literal
 
 from . import functional
+
+# The choices of the functional API (functional.TRANSFORMATIONS, ...), as dropdowns.
+Transformation = Literal["translation", "rigid", "affine", "vectorfield"]
+Backend = Literal["vt", "sitk"]
+StackMode = Literal["reference", "consecutive"]
+Boundary = Literal["constant", "nearest", "reflect", "mirror", "wrap"]
 
 
 def register_pair(
     reference: "napari.types.ImageData",
     moving: "napari.types.ImageData",
-    transformation: str = "rigid",
-    backend: str = "vt",
+    transformation: Transformation = "rigid",
+    backend: Backend = "vt",
     pyramid_levels: int = 3,
     grid_spacing: int = 1,
     use_layer_scale: bool = True,
@@ -68,11 +74,11 @@ def register_pair(
 def register_stack(
     stack: "napari.types.ImageData",
     reference: "napari.types.ImageData" = None,
-    mode: str = "reference",
+    mode: StackMode = "reference",
     reference_index: int = 0,
     accumulate: bool = True,
-    transformation: str = "rigid",
-    backend: str = "vt",
+    transformation: Transformation = "rigid",
+    backend: Backend = "vt",
     pyramid_levels: int = 3,
     grid_spacing: int = 1,
     use_layer_scale: bool = True,
@@ -110,7 +116,7 @@ def apply_registration(
     registration: "napari.types.VectorsData",
     image: "napari.types.ImageData",
     order: int = 1,
-    boundary: str = "constant",
+    boundary: Boundary = "constant",
     fill_value: float = 0.0,
 ) -> "napari.types.ImageData":
     """

@@ -4,13 +4,15 @@ Pipelines that exercise the registration_tools nodes in [Napari_Flow](https://gi
 
 ## Setup
 
-In an environment with Napari_Flow and registration_tools (e.g. `napari_flow-registration`):
+registration_tools lives in its own environment (e.g. `napari_flow-registration`, see the main README):
 
 ```bash
-nfe plugins --refresh            # once: lists the registration_tools nodes in Napari_Flow
+nfe plugins --refresh --env napari_flow-registration   # once, from the editor's environment
 cd examples/napari_flow
-python make_example_data.py      # writes data/ (about 20 MB, a few seconds)
+conda run -n napari_flow-registration python make_example_data.py   # writes data/ (about 20 MB)
 ```
+
+The registration nodes then run in `napari_flow-registration` and everything else in the editor's environment. Everything also works with the editor running in `napari_flow-registration` itself (after `nfe plugins --refresh` there), and a little faster: no node then has to start a separate process.
 
 `make_example_data.py` writes TIFFs of a synthetic tissue (nuclei and membranes) moved by a known motion. Each comes with that motion as a registration (`data/*_truth.npz`), the format Save Registration writes. You can load it with Load Registration (or `registration_tools.load_registration`) to compare against what the nodes find.
 
@@ -24,7 +26,7 @@ In napari (`napari`, then **Plugins › Napari Flow**):
 Without the GUI:
 
 ```bash
-python run_examples.py            # all of them
+python run_examples.py            # all of them, with the editor's environment's Python
 python run_examples.py 03 08 09   # some, by number
 ```
 

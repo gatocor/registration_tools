@@ -79,12 +79,16 @@ class TestNapariFlowContract(unittest.TestCase):
                 self.assertEqual(definition["category"], "Plugin: registration-tools")
 
         parameters = discovery.nodes["registration_tools:register_stack"]["parameters"]
-        self.assertEqual(parameters["mode"], {"type": "string", "default": "reference"})
+        self.assertEqual(parameters["mode"],
+                         {"type": "enum", "default": "reference", "options": ["reference", "consecutive"]})
+        self.assertEqual(parameters["transformation"]["options"], list(rt.functional.TRANSFORMATIONS))
+        self.assertEqual(parameters["backend"], {"type": "enum", "default": "vt", "options": ["vt", "sitk"]})
         self.assertEqual(parameters["reference_index"], {"type": "int", "default": 0})
         self.assertEqual(parameters["accumulate"], {"type": "bool", "default": True})
         self.assertEqual(parameters["grid_spacing"], {"type": "int", "default": 1})
-        self.assertEqual(discovery.nodes["registration_tools:apply_registration"]["parameters"]["fill_value"],
-                         {"type": "float", "default": 0.0})
+        apply_parameters = discovery.nodes["registration_tools:apply_registration"]["parameters"]
+        self.assertEqual(apply_parameters["fill_value"], {"type": "float", "default": 0.0})
+        self.assertEqual(apply_parameters["boundary"]["type"], "enum")
 
     def test_registration_survives_the_transport(self):
         field = stack_registration()
@@ -113,6 +117,15 @@ class TestNodes(unittest.TestCase):
 
     def tearDown(self):
         shutil.rmtree(self.folder, ignore_errors=True)
+
+    def test_dropdowns_offer_the_choices_of_the_functions(self):
+        import typing
+
+        for choices, accepted in ((nodes.Transformation, rt.functional.TRANSFORMATIONS),
+                                  (nodes.Backend, rt.functional.BACKENDS),
+                                  (nodes.StackMode, rt.functional.STACK_MODES),
+                                  (nodes.Boundary, rt.functional.BOUNDARY_MODES)):
+            self.assertEqual(typing.get_args(choices), accepted)
 
     def test_apply_nodes(self):
         registration = stack_registration()

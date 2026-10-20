@@ -83,13 +83,22 @@ A registration is a plain dict. Translation, rigid and affine registrations stor
 
 `registration_tools` provides nodes for [Napari_Flow](https://git.embl.org/grp-torres-sanchez/Napari_Flow): Register Pair, Register Stack, Apply Registration, Apply Registration Labels, Registration To Vectors, Save Registration and Load Registration (`registration_tools/nodes.py`).
 
+registration_tools does not have to be installed where Napari_Flow runs. vt-python is conda-only, so the usual setup is an environment of its own with registration_tools, its backends and Napari_Flow:
+
 ```bash
-# In the environment that runs Napari_Flow
+conda create -n napari_flow-registration -c conda-forge -c morpheme python=3.12 "morpheme::vt-python" simpleitk napari pyqt
+conda activate napari_flow-registration
+pip install -e /path/to/Napari_Flow
 pip install -e /path/to/registration_tools
-nfe plugins --refresh        # then reopen the editor: Plugins > registration-tools
 ```
 
-vt-python is only available from conda. When the Napari_Flow environment does not have it, either use `backend="sitk"` or run the register nodes in an environment that has vt (set the node's environment, or an `[envs.<name>]` block in `~/.napari_flow/profiles.toml`); that environment needs `napari_flow_editor` installed with `pip install -e /path/to/Napari_Flow --no-deps`.
+Then, from the environment you run the editor in:
+
+```bash
+nfe plugins --refresh --env napari_flow-registration   # then reopen the editor: Plugins > registration-tools
+```
+
+The nodes run in `napari_flow-registration` (their **Environment** row says so), and the rest of the pipeline runs where it always does. This needs a Napari_Flow with the `plugin_nodes_in_other_environments` changes. You can also run the editor from `napari_flow-registration` itself, after `nfe plugins --refresh` there.
 
 Example pipelines for every node, with synthetic data whose true motion is known, are in [`examples/napari_flow`](examples/napari_flow/README.md).
 
